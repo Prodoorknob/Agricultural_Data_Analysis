@@ -1,0 +1,1451 @@
+"""
+visuals.py - Plotly Visualization Functions for USDA Agricultural Dashboard
+
+This module provides reusable Plotly figure generator functions for:
+- Hex-tile map of US states
+- State crop summary bar charts
+- Time series / trend charts
+- Diagnostic comparison charts
+
+All functions return Plotly Figure objects that work both in Dash and Jupyter notebooks.
+"""
+
+import numpy as np
+import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+from typing import Dict, List, Optional, Tuple, Union
+
+# ============================================================================
+# HEX TILE MAP LAYOUT
+# ============================================================================
+
+# Hex tile layout for US states - positions each state in a grid
+# Modeled after common tilegram layouts
+HEX_LAYOUT = pd.DataFrame([
+    # Row 0 (top)
+    {'state_alpha': 'AK', 'state_name': 'Alaska', 'row': 0, 'col': 0},
+    {'state_alpha': 'ME', 'state_name': 'Maine', 'row': 0, 'col': 10},
+    
+    # Row 1
+    {'state_alpha': 'WA', 'state_name': 'Washington', 'row': 1, 'col': 1},
+    {'state_alpha': 'MT', 'state_name': 'Montana', 'row': 1, 'col': 2},
+    {'state_alpha': 'ND', 'state_name': 'North Dakota', 'row': 1, 'col': 3},
+    {'state_alpha': 'MN', 'state_name': 'Minnesota', 'row': 1, 'col': 4},
+    {'state_alpha': 'WI', 'state_name': 'Wisconsin', 'row': 1, 'col': 5},
+    {'state_alpha': 'MI', 'state_name': 'Michigan', 'row': 1, 'col': 7},
+    {'state_alpha': 'VT', 'state_name': 'Vermont', 'row': 1, 'col': 9},
+    {'state_alpha': 'NH', 'state_name': 'New Hampshire', 'row': 1, 'col': 10},
+    
+    # Row 2
+    {'state_alpha': 'OR', 'state_name': 'Oregon', 'row': 2, 'col': 1},
+    {'state_alpha': 'ID', 'state_name': 'Idaho', 'row': 2, 'col': 2},
+    {'state_alpha': 'WY', 'state_name': 'Wyoming', 'row': 2, 'col': 3},
+    {'state_alpha': 'SD', 'state_name': 'South Dakota', 'row': 2, 'col': 4},
+    {'state_alpha': 'IA', 'state_name': 'Iowa', 'row': 2, 'col': 5},
+    {'state_alpha': 'IL', 'state_name': 'Illinois', 'row': 2, 'col': 6},
+    {'state_alpha': 'IN', 'state_name': 'Indiana', 'row': 2, 'col': 7},
+    {'state_alpha': 'OH', 'state_name': 'Ohio', 'row': 2, 'col': 8},
+    {'state_alpha': 'NY', 'state_name': 'New York', 'row': 2, 'col': 9},
+    {'state_alpha': 'MA', 'state_name': 'Massachusetts', 'row': 2, 'col': 10},
+    
+    # Row 3
+    {'state_alpha': 'NV', 'state_name': 'Nevada', 'row': 3, 'col': 1},
+    {'state_alpha': 'UT', 'state_name': 'Utah', 'row': 3, 'col': 2},
+    {'state_alpha': 'CO', 'state_name': 'Colorado', 'row': 3, 'col': 3},
+    {'state_alpha': 'NE', 'state_name': 'Nebraska', 'row': 3, 'col': 4},
+    {'state_alpha': 'MO', 'state_name': 'Missouri', 'row': 3, 'col': 5},
+    {'state_alpha': 'KY', 'state_name': 'Kentucky', 'row': 3, 'col': 6},
+    {'state_alpha': 'WV', 'state_name': 'West Virginia', 'row': 3, 'col': 7},
+    {'state_alpha': 'PA', 'state_name': 'Pennsylvania', 'row': 3, 'col': 8},
+    {'state_alpha': 'NJ', 'state_name': 'New Jersey', 'row': 3, 'col': 9},
+    {'state_alpha': 'CT', 'state_name': 'Connecticut', 'row': 3, 'col': 10},
+    {'state_alpha': 'RI', 'state_name': 'Rhode Island', 'row': 3, 'col': 11},
+    
+    # Row 4
+    {'state_alpha': 'CA', 'state_name': 'California', 'row': 4, 'col': 1},
+    {'state_alpha': 'AZ', 'state_name': 'Arizona', 'row': 4, 'col': 2},
+    {'state_alpha': 'NM', 'state_name': 'New Mexico', 'row': 4, 'col': 3},
+    {'state_alpha': 'KS', 'state_name': 'Kansas', 'row': 4, 'col': 4},
+    {'state_alpha': 'AR', 'state_name': 'Arkansas', 'row': 4, 'col': 5},
+    {'state_alpha': 'TN', 'state_name': 'Tennessee', 'row': 4, 'col': 6},
+    {'state_alpha': 'VA', 'state_name': 'Virginia', 'row': 4, 'col': 7},
+    {'state_alpha': 'MD', 'state_name': 'Maryland', 'row': 4, 'col': 8},
+    {'state_alpha': 'DE', 'state_name': 'Delaware', 'row': 4, 'col': 9},
+    
+    # Row 5
+    {'state_alpha': 'HI', 'state_name': 'Hawaii', 'row': 5, 'col': 0},
+    {'state_alpha': 'OK', 'state_name': 'Oklahoma', 'row': 5, 'col': 4},
+    {'state_alpha': 'LA', 'state_name': 'Louisiana', 'row': 5, 'col': 5},
+    {'state_alpha': 'MS', 'state_name': 'Mississippi', 'row': 5, 'col': 6},
+    {'state_alpha': 'AL', 'state_name': 'Alabama', 'row': 5, 'col': 7},
+    {'state_alpha': 'NC', 'state_name': 'North Carolina', 'row': 5, 'col': 8},
+    {'state_alpha': 'SC', 'state_name': 'South Carolina', 'row': 5, 'col': 9},
+    {'state_alpha': 'DC', 'state_name': 'District of Columbia', 'row': 5, 'col': 10},
+    
+    # Row 6 (bottom)
+    {'state_alpha': 'TX', 'state_name': 'Texas', 'row': 6, 'col': 4},
+    {'state_alpha': 'GA', 'state_name': 'Georgia', 'row': 6, 'col': 8},
+    {'state_alpha': 'FL', 'state_name': 'Florida', 'row': 6, 'col': 9},
+])
+
+# Color scales for different measures
+COLOR_SCALES = {
+    'area': 'Tealgrn',
+    'revenue': 'Viridis',
+    'yield': 'Plasma',
+    'operations': 'Blues',
+    'urban': 'Oranges',
+    'biotech': 'Purples',
+    'default': 'Viridis'
+}
+
+# ============================================================================
+# THEME AND STYLING
+# ============================================================================
+
+LAYOUT_TEMPLATE = {
+    'plot_bgcolor': 'white',
+    'paper_bgcolor': 'white',
+    'font': {'family': 'Arial, sans-serif', 'size': 12, 'color': '#333'},
+    'margin': {'l': 60, 'r': 30, 't': 50, 'b': 50},
+}
+
+# Title font style (applied separately to avoid conflicts)
+TITLE_FONT = {'size': 16, 'color': '#333'}
+
+
+def apply_theme(fig: go.Figure) -> go.Figure:
+    """Apply consistent theme to a figure."""
+    fig.update_layout(**LAYOUT_TEMPLATE)
+    return fig
+
+
+# ============================================================================
+# HEX MAP VISUALIZATION
+# ============================================================================
+
+def hex_map_figure(
+    data_df: pd.DataFrame,
+    value_col: str,
+    year: Optional[int] = None,
+    selected_state: Optional[str] = None,
+    color_scale: str = 'default',
+    title: Optional[str] = None
+) -> go.Figure:
+    """
+    Create a hex-tile map of US states colored by a metric.
+    
+    Args:
+        data_df: DataFrame with 'state_alpha' and the value column
+        value_col: Column name to use for coloring
+        year: If specified, filter to this year
+        selected_state: State alpha code to highlight
+        color_scale: Key for COLOR_SCALES or a Plotly colorscale name
+        title: Optional title for the figure
+        
+    Returns:
+        Plotly Figure object
+    """
+    # Start with hex layout
+    hex_df = HEX_LAYOUT.copy()
+    
+    # Prepare data for merging
+    if year is not None and 'year' in data_df.columns:
+        merge_data = data_df[data_df['year'] == year].copy()
+    else:
+        merge_data = data_df.copy()
+    
+    # Aggregate if there are duplicates
+    if value_col in merge_data.columns:
+        merge_data = merge_data.groupby('state_alpha').agg({
+            value_col: 'sum'
+        }).reset_index()
+    
+    # Merge with hex layout
+    hex_df = hex_df.merge(merge_data[['state_alpha', value_col]], 
+                          on='state_alpha', how='left')
+    
+    # Get colorscale
+    cscale = COLOR_SCALES.get(color_scale, color_scale)
+    
+    # Create figure
+    fig = go.Figure()
+    
+    # Add hexagon markers for each state
+    fig.add_trace(go.Scatter(
+        x=hex_df['col'],
+        y=-hex_df['row'],  # Invert y so row 0 is at top
+        mode='markers+text',
+        marker=dict(
+            symbol='hexagon',
+            size=45,
+            color=hex_df[value_col],
+            colorscale=cscale,
+            colorbar=dict(
+                title=value_col.replace('_', ' ').title(),
+                thickness=15,
+                len=0.8
+            ),
+            line=dict(color='white', width=2),
+            showscale=True
+        ),
+        text=hex_df['state_alpha'],
+        textposition='middle center',
+        textfont=dict(color='white', size=10, family='Arial Black'),
+        hovertemplate=(
+            '<b>%{customdata[0]}</b><br>' +
+            f'{value_col}: ' + '%{customdata[1]:,.0f}<extra></extra>'
+        ),
+        customdata=np.stack([hex_df['state_name'], hex_df[value_col]], axis=-1),
+        name=''
+    ))
+    
+    # Highlight selected state
+    if selected_state:
+        selected = hex_df[hex_df['state_alpha'] == selected_state]
+        if not selected.empty:
+            fig.add_trace(go.Scatter(
+                x=selected['col'],
+                y=-selected['row'],
+                mode='markers',
+                marker=dict(
+                    symbol='hexagon',
+                    size=50,
+                    color='rgba(0,0,0,0)',
+                    line=dict(color='#FF6B6B', width=4)
+                ),
+                hoverinfo='skip',
+                name='Selected'
+            ))
+    
+    # Update layout
+    fig.update_layout(
+        title=dict(
+            text=title or f'US States by {value_col.replace("_", " ").title()}',
+            font=TITLE_FONT
+        ),
+        showlegend=False,
+        xaxis=dict(
+            showgrid=False, zeroline=False, showticklabels=False,
+            range=[-1, 13], scaleanchor='y', scaleratio=1
+        ),
+        yaxis=dict(
+            showgrid=False, zeroline=False, showticklabels=False,
+            range=[-8, 1]
+        ),
+        height=400,
+        **LAYOUT_TEMPLATE
+    )
+    
+    return fig
+
+
+# ============================================================================
+# CHART 1: STATE CROP SUMMARY BAR CHART
+# ============================================================================
+
+def state_crop_bar_chart(
+    data_df: pd.DataFrame,
+    state_alpha: str,
+    value_col: str = 'area_harvested_acres',
+    year: Optional[int] = None,
+    top_n: int = 15,
+    title: Optional[str] = None,
+    color_scale: str = 'Tealgrn'
+) -> go.Figure:
+    """
+    Create a horizontal bar chart of top crops for a selected state.
+    
+    Args:
+        data_df: DataFrame with state_alpha, commodity_desc, and value column
+        state_alpha: State to filter to
+        value_col: Column to use for bar values
+        year: If specified, filter to this year
+        top_n: Number of top crops to show
+        title: Optional title
+        color_scale: Plotly colorscale name
+        
+    Returns:
+        Plotly Figure object
+    """
+    # Filter data
+    df = data_df[data_df['state_alpha'] == state_alpha].copy()
+    
+    if year is not None and 'year' in df.columns:
+        df = df[df['year'] == year]
+    
+    if df.empty or value_col not in df.columns:
+        return _empty_figure(f"No data available for {state_alpha}")
+    
+    # Aggregate by commodity
+    agg_df = df.groupby('commodity_desc').agg({
+        value_col: 'sum'
+    }).reset_index()
+    
+    # Get top N
+    agg_df = agg_df.nlargest(top_n, value_col)
+    agg_df = agg_df.sort_values(value_col, ascending=True)
+    
+    # Compute percentage of total
+    total = agg_df[value_col].sum()
+    agg_df['pct_of_total'] = (agg_df[value_col] / total * 100).round(1)
+    
+    # Create figure
+    fig = go.Figure()
+    
+    # Format values - show in thousands for area columns
+    is_area_col = 'area' in value_col.lower() or 'acres' in value_col.lower()
+    
+    if is_area_col:
+        # Show in thousands with 'K' suffix
+        text_labels = [f'{v/1000:,.1f}K ({p:.1f}%)' for v, p in zip(agg_df[value_col], agg_df['pct_of_total'])]
+        hover_template = '<b>%{y}</b><br>' + f'{value_col}: ' + '%{customdata:,.0f} acres<extra></extra>'
+    else:
+        text_labels = [f'{v:,.0f} ({p:.1f}%)' for v, p in zip(agg_df[value_col], agg_df['pct_of_total'])]
+        hover_template = '<b>%{y}</b><br>' + f'{value_col}: ' + '%{x:,.0f}<extra></extra>'
+    
+    fig.add_trace(go.Bar(
+        y=agg_df['commodity_desc'],
+        x=agg_df[value_col],
+        orientation='h',
+        marker=dict(
+            color=agg_df[value_col],
+            colorscale=color_scale,
+            showscale=False
+        ),
+        text=text_labels,
+        textposition='outside',
+        hovertemplate=hover_template,
+        customdata=agg_df[value_col],
+        name=''
+    ))
+    
+    # Get state name for title
+    state_name = HEX_LAYOUT[HEX_LAYOUT['state_alpha'] == state_alpha]['state_name'].iloc[0] \
+                 if state_alpha in HEX_LAYOUT['state_alpha'].values else state_alpha
+    
+    year_str = f' ({year})' if year else ''
+    
+    # Adjust x-axis title for area columns to show thousands
+    if is_area_col:
+        x_title = f'{value_col.replace("_", " ").title()} (thousands)'
+    else:
+        x_title = value_col.replace('_', ' ').title()
+    
+    fig.update_layout(
+        title=dict(
+            text=title or f'Top {top_n} Crops in {state_name} by {value_col.replace("_", " ").title()}{year_str}',
+            font=TITLE_FONT
+        ),
+        xaxis_title=x_title,
+        yaxis_title='',
+        height=max(300, top_n * 25 + 100),
+        **LAYOUT_TEMPLATE
+    )
+    
+    return fig
+
+
+# ============================================================================
+# CHART 2: TIME SERIES / TREND CHARTS
+# ============================================================================
+
+def area_trend_chart(
+    data_df: pd.DataFrame,
+    state_alpha: str,
+    crops: Optional[List[str]] = None,
+    top_n: int = 5,
+    title: Optional[str] = None
+) -> go.Figure:
+    """
+    Create a line chart showing area harvested over time for top crops.
+    
+    Args:
+        data_df: DataFrame with state_alpha, commodity_desc, year, area_harvested_acres
+        state_alpha: State to filter to
+        crops: List of specific crops to show (if None, uses top N)
+        top_n: Number of top crops to show if crops is None
+        title: Optional title
+        
+    Returns:
+        Plotly Figure object
+    """
+    df = data_df[data_df['state_alpha'] == state_alpha].copy()
+    
+    if df.empty or 'area_harvested_acres' not in df.columns:
+        return _empty_figure(f"No area data available for {state_alpha}")
+    
+    # Determine which crops to show
+    if crops is None:
+        # Get top N crops by total area
+        top_crops = df.groupby('commodity_desc')['area_harvested_acres'].sum() \
+                      .nlargest(top_n).index.tolist()
+    else:
+        top_crops = crops
+    
+    df = df[df['commodity_desc'].isin(top_crops)]
+    
+    # Create figure
+    fig = px.line(
+        df,
+        x='year',
+        y='area_harvested_acres',
+        color='commodity_desc',
+        markers=True,
+        labels={
+            'year': 'Year',
+            'area_harvested_acres': 'Area Harvested (acres)',
+            'commodity_desc': 'Crop'
+        }
+    )
+    
+    state_name = HEX_LAYOUT[HEX_LAYOUT['state_alpha'] == state_alpha]['state_name'].iloc[0] \
+                 if state_alpha in HEX_LAYOUT['state_alpha'].values else state_alpha
+    
+    fig.update_layout(
+        title=dict(
+            text=title or f'Area Harvested Over Time - {state_name}',
+            font=TITLE_FONT
+        ),
+        legend_title='Crop',
+        height=400,
+        **LAYOUT_TEMPLATE
+    )
+    
+    return fig
+
+
+# Land use category mappings for aggregation into 4 main categories
+LAND_USE_CATEGORIES = {
+    'total_cropland': 'Cropland',
+    'cropland_used_for_crops': 'Cropland',
+    'cropland_used_for_pasture': 'Cropland',
+    'cropland_idled': 'Cropland',
+    'land_in_urban_areas': 'Urban Land',
+    'forest_use_land_(all)': 'Forest Land',
+    'grazed_forest_use_land_grazed': 'Forest Land',
+    'ungrazed_forest_use_land': 'Forest Land',
+    'grassland_pasture_and_range': 'Misc Land',
+    'all_special_uses_of_land': 'Misc Land',
+    'land_in_rural_transportation_facilities': 'Misc Land',
+    'land_in_rural_parks_and_wildlife_areas': 'Misc Land',
+    'land_in_defense_and_industrial_areas': 'Misc Land',
+    'farmsteads,_roads,_and_miscellaneous_farmland': 'Misc Land',
+    'miscellaneous_other_land': 'Misc Land',
+}
+
+# Color scheme for the 4 land use categories
+LAND_USE_COLORS = {
+    'Cropland': '#2E7D32',      # Green
+    'Urban Land': '#E65100',     # Orange
+    'Forest Land': '#1565C0',    # Blue
+    'Misc Land': '#757575',      # Gray
+}
+
+
+def land_use_trend_chart(
+    landuse_df: pd.DataFrame,
+    state_alpha: str,
+    title: Optional[str] = None
+) -> go.Figure:
+    """
+    Create a stacked area chart showing land use composition over time.
+    Categorizes land into 4 main types: Cropland, Urban Land, Forest Land, Misc Land.
+    
+    Args:
+        landuse_df: Pivoted land use DataFrame
+        state_alpha: State to filter to
+        title: Optional title
+        
+    Returns:
+        Plotly Figure object
+    """
+    df = landuse_df[landuse_df['state_alpha'] == state_alpha].copy()
+    
+    if df.empty:
+        return _empty_figure(f"No land use data available for {state_alpha}")
+    
+    # Identify land use columns (exclude metadata and computed columns)
+    exclude_cols = ['state_alpha', 'state_name', 'year', 'urban_share', 'cropland_share', 'total_land']
+    land_cols = [c for c in df.columns if c not in exclude_cols]
+    
+    if not land_cols:
+        return _empty_figure("No land use categories found")
+    
+    # Melt for grouping
+    df_long = df.melt(
+        id_vars=['year'],
+        value_vars=land_cols,
+        var_name='land_type_raw',
+        value_name='acres'
+    )
+    
+    # Map to 4 main categories
+    df_long['land_category'] = df_long['land_type_raw'].map(LAND_USE_CATEGORIES)
+    # Default unmapped to Misc Land
+    df_long['land_category'] = df_long['land_category'].fillna('Misc Land')
+    
+    # Aggregate by year and category
+    agg_df = df_long.groupby(['year', 'land_category'])['acres'].sum().reset_index()
+    
+    # Sort categories for consistent stacking order
+    category_order = ['Cropland', 'Forest Land', 'Urban Land', 'Misc Land']
+    agg_df['land_category'] = pd.Categorical(agg_df['land_category'], categories=category_order, ordered=True)
+    agg_df = agg_df.sort_values(['year', 'land_category'])
+    
+    # Create area chart with custom colors
+    fig = px.area(
+        agg_df,
+        x='year',
+        y='acres',
+        color='land_category',
+        color_discrete_map=LAND_USE_COLORS,
+        category_orders={'land_category': category_order},
+        labels={'year': 'Year', 'acres': 'Acres (thousands)', 'land_category': 'Land Use Type'}
+    )
+    
+    # Convert y-axis to thousands for readability
+    fig.update_traces(hovertemplate='%{x}<br>%{y:,.0f} acres<extra>%{fullData.name}</extra>')
+    
+    state_name = HEX_LAYOUT[HEX_LAYOUT['state_alpha'] == state_alpha]['state_name'].iloc[0] \
+                 if state_alpha in HEX_LAYOUT['state_alpha'].values else state_alpha
+    
+    fig.update_layout(
+        title=dict(
+            text=title or f'Land Use Over Time - {state_name}',
+            font=TITLE_FONT
+        ),
+        legend_title='Land Type',
+        height=400,
+        **LAYOUT_TEMPLATE
+    )
+    
+    return fig
+
+
+def operations_trend_chart(
+    data_df: pd.DataFrame,
+    state_alpha: str,
+    crops: Optional[List[str]] = None,
+    top_n: int = 5,
+    title: Optional[str] = None,
+    farm_ops_df: Optional[pd.DataFrame] = None
+) -> go.Figure:
+    """
+    Create a chart showing farm operations over time.
+    Uses crop-level operations if available, otherwise shows total farm operations.
+    
+    Args:
+        data_df: DataFrame with operations and ops_per_1k_acres columns
+        state_alpha: State to filter to
+        crops: List of specific crops
+        top_n: Number of top crops if crops is None
+        title: Optional title
+        farm_ops_df: Optional DataFrame with total farm operations by state/year
+        
+    Returns:
+        Plotly Figure object
+    """
+    df = data_df[data_df['state_alpha'] == state_alpha].copy()
+    
+    # Check if crop-level operations data exists
+    has_crop_ops = 'operations' in df.columns and df['operations'].notna().sum() > 0
+    
+    # If no crop-level ops, try to use farm_ops_df for total operations
+    if not has_crop_ops and farm_ops_df is not None and not farm_ops_df.empty:
+        ops_state = farm_ops_df[farm_ops_df['state_alpha'] == state_alpha].copy()
+        
+        if not ops_state.empty:
+            ops_state = ops_state.sort_values('year')
+            
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(
+                x=ops_state['year'],
+                y=ops_state['total_operations'],
+                mode='lines+markers',
+                name='Total Farm Operations',
+                line=dict(color='#2E86AB', width=3),
+                marker=dict(size=8)
+            ))
+            
+            state_name = HEX_LAYOUT[HEX_LAYOUT['state_alpha'] == state_alpha]['state_name'].iloc[0] \
+                         if state_alpha in HEX_LAYOUT['state_alpha'].values else state_alpha
+            
+            fig.update_layout(
+                title=dict(
+                    text=title or f'Total Farm Operations - {state_name}',
+                    font=TITLE_FONT
+                ),
+                xaxis_title='Year',
+                yaxis_title='Number of Farm Operations',
+                height=400,
+                **LAYOUT_TEMPLATE
+            )
+            return fig
+    
+    # If still no data available
+    if df.empty:
+        return _empty_figure(f"No data available for {state_alpha}")
+    
+    if not has_crop_ops:
+        return _empty_figure(
+            "No operations data available for this state.\n"
+            "Crop-level operations data is not present in\n"
+            "the loaded NASS datasets."
+        )
+    
+    # Use crop-level operations data
+    if crops is None:
+        top_crops = df.groupby('commodity_desc')['operations'].sum() \
+                      .nlargest(top_n).index.tolist()
+    else:
+        top_crops = crops
+    
+    df = df[df['commodity_desc'].isin(top_crops)]
+    
+    fig = make_subplots(specs=[[{"secondary_y": True}]])
+    
+    colors = px.colors.qualitative.Set2
+    
+    for i, crop in enumerate(top_crops):
+        crop_df = df[df['commodity_desc'] == crop].sort_values('year')
+        color = colors[i % len(colors)]
+        
+        fig.add_trace(
+            go.Scatter(
+                x=crop_df['year'],
+                y=crop_df['operations'],
+                name=f'{crop} (Operations)',
+                line=dict(color=color),
+                mode='lines+markers'
+            ),
+            secondary_y=False
+        )
+        
+        if 'ops_per_1k_acres' in crop_df.columns:
+            fig.add_trace(
+                go.Scatter(
+                    x=crop_df['year'],
+                    y=crop_df['ops_per_1k_acres'],
+                    name=f'{crop} (Ops/1k acres)',
+                    line=dict(color=color, dash='dash'),
+                    mode='lines'
+                ),
+                secondary_y=True
+            )
+    
+    state_name = HEX_LAYOUT[HEX_LAYOUT['state_alpha'] == state_alpha]['state_name'].iloc[0] \
+                 if state_alpha in HEX_LAYOUT['state_alpha'].values else state_alpha
+    
+    fig.update_layout(
+        title=dict(
+            text=title or f'Farm Operations Over Time - {state_name}',
+            font=TITLE_FONT
+        ),
+        height=400,
+        **LAYOUT_TEMPLATE
+    )
+    fig.update_yaxes(title_text="Operations", secondary_y=False)
+    fig.update_yaxes(title_text="Ops per 1,000 Acres", secondary_y=True)
+    
+    return fig
+
+
+def yield_biotech_trend_chart(
+    data_df: pd.DataFrame,
+    biotech_df: pd.DataFrame,
+    state_alpha: str,
+    crop: str = 'CORN',
+    title: Optional[str] = None
+) -> go.Figure:
+    """
+    Create a chart showing yield over time with biotech adoption overlay.
+    
+    Args:
+        data_df: DataFrame with yield data
+        biotech_df: DataFrame with biotech adoption data
+        state_alpha: State to filter to
+        crop: Crop to show (CORN, SOYBEANS, or COTTON)
+        title: Optional title
+        
+    Returns:
+        Plotly Figure object
+    """
+    # Get yield data
+    yield_df = data_df[
+        (data_df['state_alpha'] == state_alpha) & 
+        (data_df['commodity_desc'] == crop)
+    ].copy()
+    
+    # Get biotech data
+    bio_df = biotech_df[
+        (biotech_df['state_alpha'] == state_alpha) & 
+        (biotech_df['crop'] == crop)
+    ].copy()
+    
+    if yield_df.empty:
+        return _empty_figure(f"No yield data available for {crop} in {state_alpha}")
+    
+    fig = make_subplots(specs=[[{"secondary_y": True}]])
+    
+    # Yield line
+    yield_df = yield_df.sort_values('year')
+    if 'yield_per_acre' in yield_df.columns:
+        fig.add_trace(
+            go.Scatter(
+                x=yield_df['year'],
+                y=yield_df['yield_per_acre'],
+                name='Yield per Acre',
+                line=dict(color='#2E86AB', width=3),
+                mode='lines+markers'
+            ),
+            secondary_y=False
+        )
+    
+    # Biotech adoption
+    if not bio_df.empty:
+        bio_df = bio_df.sort_values('year')
+        if 'pct_all_ge' in bio_df.columns:
+            fig.add_trace(
+                go.Scatter(
+                    x=bio_df['year'],
+                    y=bio_df['pct_all_ge'],
+                    name='GE Adoption %',
+                    line=dict(color='#A23B72', width=2, dash='dot'),
+                    fill='tozeroy',
+                    fillcolor='rgba(162, 59, 114, 0.1)',
+                    mode='lines'
+                ),
+                secondary_y=True
+            )
+    
+    state_name = HEX_LAYOUT[HEX_LAYOUT['state_alpha'] == state_alpha]['state_name'].iloc[0] \
+                 if state_alpha in HEX_LAYOUT['state_alpha'].values else state_alpha
+    
+    fig.update_layout(
+        title=dict(
+            text=title or f'{crop} Yield vs. Biotech Adoption - {state_name}',
+            font=TITLE_FONT
+        ),
+        height=400,
+        **LAYOUT_TEMPLATE
+    )
+    fig.update_yaxes(title_text="Yield per Acre", secondary_y=False)
+    fig.update_yaxes(title_text="GE Adoption (%)", secondary_y=True, range=[0, 100])
+    
+    return fig
+
+
+def revenue_trend_chart(
+    data_df: pd.DataFrame,
+    state_alpha: str,
+    crops: Optional[List[str]] = None,
+    top_n: int = 5,
+    title: Optional[str] = None
+) -> go.Figure:
+    """
+    Create a line chart showing revenue over time for top crops.
+    
+    Args:
+        data_df: DataFrame with revenue_usd column
+        state_alpha: State to filter to
+        crops: List of specific crops
+        top_n: Number of top crops
+        title: Optional title
+        
+    Returns:
+        Plotly Figure object
+    """
+    df = data_df[data_df['state_alpha'] == state_alpha].copy()
+    
+    if df.empty or 'revenue_usd' not in df.columns:
+        return _empty_figure(f"No revenue data available for {state_alpha}")
+    
+    # Determine crops
+    if crops is None:
+        top_crops = df.groupby('commodity_desc')['revenue_usd'].sum() \
+                      .nlargest(top_n).index.tolist()
+    else:
+        top_crops = crops
+    
+    df = df[df['commodity_desc'].isin(top_crops)]
+    
+    fig = px.line(
+        df,
+        x='year',
+        y='revenue_usd',
+        color='commodity_desc',
+        markers=True,
+        labels={
+            'year': 'Year',
+            'revenue_usd': 'Revenue (USD)',
+            'commodity_desc': 'Crop'
+        }
+    )
+    
+    state_name = HEX_LAYOUT[HEX_LAYOUT['state_alpha'] == state_alpha]['state_name'].iloc[0] \
+                 if state_alpha in HEX_LAYOUT['state_alpha'].values else state_alpha
+    
+    fig.update_layout(
+        title=dict(
+            text=title or f'Revenue Over Time - {state_name}',
+            font=TITLE_FONT
+        ),
+        legend_title='Crop',
+        height=400,
+        **LAYOUT_TEMPLATE
+    )
+    
+    return fig
+
+
+# ============================================================================
+# CHART 3: DIAGNOSTIC / COMPARISON CHARTS
+# ============================================================================
+
+def area_vs_urban_scatter(
+    crop_df: pd.DataFrame,
+    landuse_df: pd.DataFrame,
+    state_alpha: Optional[str] = None,
+    title: Optional[str] = None
+) -> go.Figure:
+    """
+    Create a scatter plot comparing change in cropland vs change in urban land.
+    
+    Args:
+        crop_df: Crop data with area_harvested_acres
+        landuse_df: Land use data with cropland and urban land
+        state_alpha: If specified, highlight this state
+        title: Optional title
+        
+    Returns:
+        Plotly Figure object
+    """
+    if landuse_df.empty:
+        return _empty_figure("No land use data available")
+    
+    # Compute changes between earliest and latest year for each state
+    years = landuse_df['year'].unique()
+    if len(years) < 2:
+        return _empty_figure("Need at least 2 years of data for comparison")
+    
+    early_year = min(years)
+    late_year = max(years)
+    
+    early = landuse_df[landuse_df['year'] == early_year].set_index('state_alpha')
+    late = landuse_df[landuse_df['year'] == late_year].set_index('state_alpha')
+    
+    # Calculate changes
+    changes = pd.DataFrame()
+    
+    if 'total_cropland' in early.columns:
+        changes['cropland_change'] = (late['total_cropland'] - early['total_cropland']) / early['total_cropland'] * 100
+    
+    if 'land_in_urban_areas' in early.columns:
+        changes['urban_change'] = (late['land_in_urban_areas'] - early['land_in_urban_areas']) / early['land_in_urban_areas'] * 100
+    
+    changes = changes.reset_index()
+    changes = changes.merge(HEX_LAYOUT[['state_alpha', 'state_name']], on='state_alpha')
+    
+    if 'cropland_change' not in changes.columns or 'urban_change' not in changes.columns:
+        return _empty_figure("Missing cropland or urban data")
+    
+    # Create scatter - no text labels, only hover
+    fig = px.scatter(
+        changes,
+        x='urban_change',
+        y='cropland_change',
+        hover_name='state_name',
+        hover_data={'state_alpha': True, 'cropland_change': ':.1f', 'urban_change': ':.1f'},
+        labels={
+            'urban_change': f'Urban Land Change % ({early_year}-{late_year})',
+            'cropland_change': f'Cropland Change % ({early_year}-{late_year})'
+        }
+    )
+    
+    fig.update_traces(
+        marker=dict(size=12, color='#2E86AB')
+    )
+    
+    # Highlight selected state with larger marker
+    if state_alpha and state_alpha in changes['state_alpha'].values:
+        selected = changes[changes['state_alpha'] == state_alpha]
+        fig.add_trace(go.Scatter(
+            x=selected['urban_change'],
+            y=selected['cropland_change'],
+            mode='markers+text',
+            marker=dict(size=20, color='#FF6B6B', symbol='circle-open', line=dict(width=3)),
+            text=selected['state_alpha'],
+            textposition='top center',
+            textfont=dict(size=12, color='#FF6B6B', family='Arial Black'),
+            name='Selected State',
+            hoverinfo='skip'
+        ))
+    
+    # Add shaded rectangle for area with highest cropland loss (negative change)
+    # This highlights states where cropland shifted significantly
+    cropland_min = changes['cropland_change'].min()
+    if cropland_min < -5:  # Only add if there's significant loss
+        # Find the threshold for bottom 20% of cropland change
+        threshold = changes['cropland_change'].quantile(0.2)
+        # Rectangle covering high urban growth + high cropland loss quadrant
+        fig.add_shape(
+            type='rect',
+            x0=changes['urban_change'].quantile(0.6),  # High urban growth
+            x1=changes['urban_change'].max() * 1.1,
+            y0=threshold,
+            y1=cropland_min * 1.1,
+            fillcolor='rgba(255, 107, 107, 0.15)',
+            line=dict(color='rgba(255, 107, 107, 0.5)', width=1, dash='dash'),
+            layer='below'
+        )
+        # Add annotation for the shaded area
+        fig.add_annotation(
+            x=changes['urban_change'].quantile(0.8),
+            y=threshold,
+            text='High Shift Zone',
+            showarrow=False,
+            font=dict(size=10, color='#FF6B6B'),
+            bgcolor='rgba(255,255,255,0.7)'
+        )
+    
+    # Add reference lines
+    fig.add_hline(y=0, line_dash="dash", line_color="gray", opacity=0.5)
+    fig.add_vline(x=0, line_dash="dash", line_color="gray", opacity=0.5)
+    
+    fig.update_layout(
+        title=dict(
+            text=title or f'Cropland vs Urban Land Change ({early_year}-{late_year})',
+            font=TITLE_FONT
+        ),
+        height=450,
+        **LAYOUT_TEMPLATE
+    )
+    
+    return fig
+
+
+def revenue_vs_area_bubble(
+    data_df: pd.DataFrame,
+    state_alpha: str,
+    year: Optional[int] = None,
+    title: Optional[str] = None
+) -> go.Figure:
+    """
+    Create a bubble chart of revenue vs area for crops in a state.
+    Bubble size represents yield or operations.
+    
+    Args:
+        data_df: DataFrame with revenue, area, yield/ops data
+        state_alpha: State to filter to
+        year: If specified, filter to this year
+        title: Optional title
+        
+    Returns:
+        Plotly Figure object
+    """
+    df = data_df[data_df['state_alpha'] == state_alpha].copy()
+    
+    if year is not None and 'year' in df.columns:
+        df = df[df['year'] == year]
+    
+    if df.empty:
+        return _empty_figure(f"No data available for {state_alpha}")
+    
+    # Aggregate by commodity
+    agg_cols = {}
+    for col in ['revenue_usd', 'area_harvested_acres', 'yield_per_acre', 'ops_per_1k_acres']:
+        if col in df.columns:
+            agg_cols[col] = 'sum' if col != 'yield_per_acre' else 'mean'
+    
+    if not agg_cols:
+        return _empty_figure("Missing required columns")
+    
+    agg_df = df.groupby('commodity_desc').agg(agg_cols).reset_index()
+    agg_df = agg_df.dropna(subset=['revenue_usd', 'area_harvested_acres'])
+    
+    # Determine size column - handle NaN values by dropping or using fallback
+    size_col = None
+    if 'yield_per_acre' in agg_df.columns:
+        # Drop rows with NaN in yield_per_acre for bubble sizing
+        agg_df = agg_df.dropna(subset=['yield_per_acre'])
+        if not agg_df.empty and agg_df['yield_per_acre'].notna().any():
+            size_col = 'yield_per_acre'
+    
+    if agg_df.empty:
+        return _empty_figure(f"No valid data for bubble chart - {state_alpha}")
+    
+    fig = px.scatter(
+        agg_df,
+        x='area_harvested_acres',
+        y='revenue_usd',
+        size=size_col,
+        color='commodity_desc',
+        hover_data=['commodity_desc'],
+        labels={
+            'area_harvested_acres': 'Area Harvested (acres)',
+            'revenue_usd': 'Revenue (USD)',
+            'commodity_desc': 'Crop'
+        }
+    )
+    
+    state_name = HEX_LAYOUT[HEX_LAYOUT['state_alpha'] == state_alpha]['state_name'].iloc[0] \
+                 if state_alpha in HEX_LAYOUT['state_alpha'].values else state_alpha
+    
+    year_str = f' ({year})' if year else ''
+    fig.update_layout(
+        title=dict(
+            text=title or f'Revenue vs Area by Crop - {state_name}{year_str}',
+            font=TITLE_FONT
+        ),
+        showlegend=False,
+        height=450,
+        **LAYOUT_TEMPLATE
+    )
+    
+    return fig
+
+
+def labor_intensity_scatter(
+    data_df: pd.DataFrame,
+    labor_df: pd.DataFrame,
+    state_alpha: Optional[str] = None,
+    year: Optional[int] = None,
+    title: Optional[str] = None
+) -> go.Figure:
+    """
+    Create a scatter plot showing labor statistics across states.
+    Uses wage rates vs workers or shows state-level labor data.
+    
+    Args:
+        data_df: Crop data (for context)
+        labor_df: Labor data with wage_rate, workers, hours_per_week
+        state_alpha: If specified, highlight this state
+        year: If specified, filter to this year
+        title: Optional title
+        
+    Returns:
+        Plotly Figure object
+    """
+    # Check if labor data is available
+    if labor_df is None or labor_df.empty:
+        return _empty_figure(
+            "Labor data not available.\n"
+            "Please ensure the Economics dataset is loaded\n"
+            "with LABOR commodity data."
+        )
+    
+    df = labor_df.copy()
+    
+    # Filter by year if specified
+    if year is not None and 'year' in df.columns:
+        df = df[df['year'] == year]
+    else:
+        # Use most recent year if not specified
+        if 'year' in df.columns and not df.empty:
+            latest_year = df['year'].max()
+            df = df[df['year'] == latest_year]
+            year = latest_year
+    
+    if df.empty:
+        return _empty_figure(f"No labor data available for year {year}")
+    
+    # Check for required columns
+    if 'wage_rate' not in df.columns or 'workers' not in df.columns:
+        return _empty_figure(
+            "Labor data missing required fields.\n"
+            "Expected: wage_rate, workers"
+        )
+    
+    # Clean data - remove rows with NaN in key columns
+    df = df.dropna(subset=['wage_rate', 'workers'])
+    
+    if df.empty:
+        return _empty_figure("No valid labor data after filtering")
+    
+    # Merge with state names if not already present
+    if 'state_name' not in df.columns:
+        df = df.merge(HEX_LAYOUT[['state_alpha', 'state_name']], on='state_alpha', how='left')
+    
+    # Create scatter: wage rate vs workers, with hours as size if available
+    size_col = 'hours_per_week' if 'hours_per_week' in df.columns and df['hours_per_week'].notna().any() else None
+    
+    fig = px.scatter(
+        df,
+        x='workers',
+        y='wage_rate',
+        size=size_col,
+        hover_name='state_name',
+        hover_data={'state_alpha': True, 'wage_rate': ':.2f', 'workers': ':,.0f'},
+        color='wage_rate',
+        color_continuous_scale='Blues',
+        labels={
+            'workers': 'Number of Workers',
+            'wage_rate': 'Wage Rate ($/hour)',
+            'hours_per_week': 'Hours per Week'
+        }
+    )
+    
+    fig.update_traces(marker=dict(sizemin=5))
+    
+    # Highlight selected state
+    if state_alpha and state_alpha in df['state_alpha'].values:
+        selected = df[df['state_alpha'] == state_alpha]
+        fig.add_trace(go.Scatter(
+            x=selected['workers'],
+            y=selected['wage_rate'],
+            mode='markers+text',
+            marker=dict(size=20, color='#FF6B6B', symbol='circle-open', line=dict(width=3)),
+            text=selected['state_alpha'],
+            textposition='top center',
+            textfont=dict(size=12, color='#FF6B6B', family='Arial Black'),
+            name='Selected State',
+            hoverinfo='skip'
+        ))
+    
+    year_str = f' ({year})' if year else ''
+    fig.update_layout(
+        title=dict(
+            text=title or f'Labor Statistics by State{year_str}',
+            font=TITLE_FONT
+        ),
+        height=450,
+        **LAYOUT_TEMPLATE
+    )
+    
+    return fig
+    
+    return fig
+
+
+def yield_vs_biotech_scatter(
+    data_df: pd.DataFrame,
+    biotech_df: pd.DataFrame,
+    crop: str = 'CORN',
+    title: Optional[str] = None
+) -> go.Figure:
+    """
+    Create a scatter plot of yield vs biotech adoption across states.
+    
+    Args:
+        data_df: Crop data with yield info
+        biotech_df: Biotech adoption data
+        crop: Crop to analyze
+        title: Optional title
+        
+    Returns:
+        Plotly Figure object
+    """
+    # Get latest year with both yield and biotech data
+    yield_df = data_df[data_df['commodity_desc'] == crop].copy()
+    bio_df = biotech_df[biotech_df['crop'] == crop].copy()
+    
+    if yield_df.empty or bio_df.empty:
+        return _empty_figure(f"No data available for {crop}")
+    
+    # Find common years
+    common_years = set(yield_df['year'].unique()) & set(bio_df['year'].unique())
+    if not common_years:
+        return _empty_figure(f"No overlapping years between yield and biotech data")
+    
+    latest_year = max(common_years)
+    
+    yield_df = yield_df[yield_df['year'] == latest_year]
+    bio_df = bio_df[bio_df['year'] == latest_year]
+    
+    # Merge
+    merged = yield_df.merge(bio_df[['state_alpha', 'pct_all_ge']], on='state_alpha', how='inner')
+    
+    if 'yield_per_acre' not in merged.columns:
+        return _empty_figure("No yield data available")
+    
+    merged = merged.dropna(subset=['yield_per_acre', 'pct_all_ge'])
+    
+    fig = px.scatter(
+        merged,
+        x='pct_all_ge',
+        y='yield_per_acre',
+        text='state_alpha',
+        hover_data=['state_name'],
+        trendline='ols',
+        labels={
+            'pct_all_ge': 'GE Adoption (%)',
+            'yield_per_acre': 'Yield per Acre'
+        }
+    )
+    
+    fig.update_traces(textposition='top center', marker=dict(size=12))
+    
+    fig.update_layout(
+        title=dict(
+            text=title or f'{crop} Yield vs. GE Adoption ({latest_year})',
+            font=TITLE_FONT
+        ),
+        height=450,
+        **LAYOUT_TEMPLATE
+    )
+    
+    return fig
+
+
+def sector_comparison_chart(
+    data_df: pd.DataFrame,
+    year: Optional[int] = None,
+    metric: str = 'area_harvested_acres',
+    title: Optional[str] = None
+) -> go.Figure:
+    """
+    Create a bar chart comparing crops vs livestock sectors.
+    
+    Args:
+        data_df: DataFrame with sector_desc column
+        year: If specified, filter to this year
+        metric: Metric to compare
+        title: Optional title
+        
+    Returns:
+        Plotly Figure object
+    """
+    df = data_df.copy()
+    
+    if year is not None and 'year' in df.columns:
+        df = df[df['year'] == year]
+    
+    if df.empty or 'sector_desc' not in df.columns:
+        return _empty_figure("No sector data available")
+    
+    # Aggregate by sector
+    agg_df = df.groupby('sector_desc').agg({
+        metric: 'sum'
+    }).reset_index()
+    
+    agg_df = agg_df.sort_values(metric, ascending=True)
+    
+    fig = go.Figure()
+    
+    fig.add_trace(go.Bar(
+        x=agg_df[metric],
+        y=agg_df['sector_desc'],
+        orientation='h',
+        marker=dict(
+            color=['#2E86AB', '#A23B72', '#F18F01', '#C73E1D'][:len(agg_df)],
+        ),
+        text=[f'{v:,.0f}' for v in agg_df[metric]],
+        textposition='outside'
+    ))
+    
+    year_str = f' ({year})' if year else ''
+    fig.update_layout(
+        title=dict(
+            text=title or f'{metric.replace("_", " ").title()} by Sector{year_str}',
+            font=TITLE_FONT
+        ),
+        xaxis_title=metric.replace('_', ' ').title(),
+        yaxis_title='',
+        height=300,
+        **LAYOUT_TEMPLATE
+    )
+    
+    return fig
+
+
+def boom_crops_chart(
+    data_df: pd.DataFrame,
+    metric: str = 'area_harvested_acres',
+    top_n: int = 10,
+    title: Optional[str] = None
+) -> go.Figure:
+    """
+    Identify and show crops that have grown the most over time.
+    
+    Args:
+        data_df: Crop data
+        metric: Metric to use for measuring growth
+        top_n: Number of top "boom" crops to show
+        title: Optional title
+        
+    Returns:
+        Plotly Figure object
+    """
+    if metric not in data_df.columns:
+        return _empty_figure(f"Metric {metric} not available")
+    
+    # Get early and late periods
+    years = sorted(data_df['year'].dropna().unique())
+    if len(years) < 5:
+        return _empty_figure("Need at least 5 years of data")
+    
+    early_years = years[:3]
+    late_years = years[-3:]
+    
+    # Calculate average for each period
+    early = data_df[data_df['year'].isin(early_years)].groupby('commodity_desc')[metric].mean()
+    late = data_df[data_df['year'].isin(late_years)].groupby('commodity_desc')[metric].mean()
+    
+    # Calculate growth
+    growth = pd.DataFrame({
+        'early': early,
+        'late': late
+    })
+    growth['pct_change'] = (growth['late'] - growth['early']) / growth['early'] * 100
+    growth = growth.dropna()
+    growth = growth[growth['early'] > 0]  # Avoid division issues
+    
+    # Get top gainers
+    top_gainers = growth.nlargest(top_n, 'pct_change').reset_index()
+    top_gainers = top_gainers.sort_values('pct_change', ascending=True)
+    
+    fig = go.Figure()
+    
+    colors = ['#2ECC71' if x > 0 else '#E74C3C' for x in top_gainers['pct_change']]
+    
+    fig.add_trace(go.Bar(
+        x=top_gainers['pct_change'],
+        y=top_gainers['commodity_desc'],
+        orientation='h',
+        marker=dict(color=colors),
+        text=[f'{v:+.1f}%' for v in top_gainers['pct_change']],
+        textposition='outside'
+    ))
+    
+    fig.add_vline(x=0, line_dash="solid", line_color="gray")
+    
+    period = f"{min(early_years)}-{max(early_years)} to {min(late_years)}-{max(late_years)}"
+    fig.update_layout(
+        title=dict(
+            text=title or f'Top {top_n} "Boom" Crops by {metric.replace("_", " ").title()} Growth ({period})',
+            font=TITLE_FONT
+        ),
+        xaxis_title='Percent Change',
+        yaxis_title='',
+        height=max(300, top_n * 30 + 100),
+        **LAYOUT_TEMPLATE
+    )
+    
+    return fig
+
+
+# ============================================================================
+# HELPER FUNCTIONS
+# ============================================================================
+
+def _empty_figure(message: str = "No data available") -> go.Figure:
+    """Create an empty figure with a message."""
+    fig = go.Figure()
+    fig.add_annotation(
+        text=message,
+        xref="paper", yref="paper",
+        x=0.5, y=0.5,
+        showarrow=False,
+        font=dict(size=16, color="gray")
+    )
+    fig.update_layout(
+        xaxis=dict(showgrid=False, showticklabels=False, zeroline=False),
+        yaxis=dict(showgrid=False, showticklabels=False, zeroline=False),
+        height=300,
+        **LAYOUT_TEMPLATE
+    )
+    return fig
+
+
+def get_chart_for_view(
+    view_mode: str,
+    chart_position: int,
+    data: dict,
+    state_alpha: Optional[str] = None,
+    crop: Optional[str] = None,
+    year: Optional[int] = None,
+    measure: Optional[str] = None
+) -> go.Figure:
+    """
+    Get the appropriate chart based on view mode and position.
+    
+    Args:
+        view_mode: One of 'Overview', 'Land & Area', 'Labor & Operations', 
+                   'Economics & Profitability', 'Yield & Technology'
+        chart_position: 1, 2, or 3
+        data: Dictionary of DataFrames from data_prep
+        state_alpha: Selected state
+        crop: Selected crop
+        year: Selected year
+        measure: Selected measure
+        
+    Returns:
+        Plotly Figure object
+    """
+    state_crop_df = data.get('state_crop_year', pd.DataFrame())
+    landuse_df = data.get('landuse', pd.DataFrame())
+    biotech_df = data.get('biotech', pd.DataFrame())
+    
+    if state_alpha is None:
+        state_alpha = 'IA'  # Default to Iowa
+    
+    if view_mode == 'Overview':
+        if chart_position == 1:
+            return state_crop_bar_chart(state_crop_df, state_alpha, 'area_harvested_acres', year)
+        elif chart_position == 2:
+            return area_trend_chart(state_crop_df, state_alpha)
+        else:
+            return boom_crops_chart(state_crop_df, 'area_harvested_acres')
+    
+    elif view_mode == 'Land & Area':
+        if chart_position == 1:
+            return state_crop_bar_chart(state_crop_df, state_alpha, 'area_harvested_acres', year)
+        elif chart_position == 2:
+            return land_use_trend_chart(landuse_df, state_alpha)
+        else:
+            return area_vs_urban_scatter(state_crop_df, landuse_df, state_alpha)
+    
+    elif view_mode == 'Labor & Operations':
+        if chart_position == 1:
+            return state_crop_bar_chart(state_crop_df, state_alpha, 'operations', year)
+        elif chart_position == 2:
+            return operations_trend_chart(state_crop_df, state_alpha)
+        else:
+            return labor_intensity_scatter(state_crop_df, pd.DataFrame(), state_alpha, year)
+    
+    elif view_mode == 'Economics & Profitability':
+        if chart_position == 1:
+            return state_crop_bar_chart(state_crop_df, state_alpha, 'revenue_usd', year)
+        elif chart_position == 2:
+            return revenue_trend_chart(state_crop_df, state_alpha)
+        else:
+            return revenue_vs_area_bubble(state_crop_df, state_alpha, year)
+    
+    elif view_mode == 'Yield & Technology':
+        if chart_position == 1:
+            return state_crop_bar_chart(state_crop_df, state_alpha, 'yield_per_acre', year)
+        elif chart_position == 2:
+            crop_for_biotech = crop if crop in ['CORN', 'SOYBEANS', 'COTTON'] else 'CORN'
+            return yield_biotech_trend_chart(state_crop_df, biotech_df, state_alpha, crop_for_biotech)
+        else:
+            return yield_vs_biotech_scatter(state_crop_df, biotech_df, 'CORN')
+    
+    return _empty_figure("Unknown view mode")
+
+
+# ============================================================================
+# MAIN - For testing
+# ============================================================================
+
+if __name__ == "__main__":
+    import sys
+    sys.path.insert(0, '.')
+    from data_prep import load_sample_data
+    
+    print("Loading sample data...")
+    data = load_sample_data()
+    
+    print("\nGenerating sample figures...")
+    
+    # Test hex map
+    if 'state_crop_year' in data and not data['state_crop_year'].empty:
+        state_totals = data['state_crop_year'].groupby(['state_alpha', 'year'])['area_harvested_acres'].sum().reset_index()
+        fig = hex_map_figure(state_totals, 'area_harvested_acres', year=2020, selected_state='IA')
+        fig.show()
+        
+        # Test bar chart
+        fig2 = state_crop_bar_chart(data['state_crop_year'], 'IA', 'area_harvested_acres', 2020)
+        fig2.show()
