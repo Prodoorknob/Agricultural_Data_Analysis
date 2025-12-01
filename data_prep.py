@@ -7,12 +7,13 @@ This module loads and preprocesses USDA agricultural data from multiple CSV sour
 - Biotech adoption data
 
 ASSUMPTIONS AND NOTES:
-- All CSVs are in the `survey_datasets` folder relative to this file
+- Data can be loaded from local `survey_datasets` folder OR from S3 bucket
+- Set USE_S3=True and configure S3_BUCKET_URL to load from cloud
 - NASS QuickStats Value column may contain: commas, (D), (Z), (NA), (X) - cleaned to numeric
 - MajorLandUse.csv has columns: Region or State, Year, Land use, Value, Units
 - BiotechCropsAllTables2024.csv has columns: Attribute, State, Year, Value, Table (encoding='latin-1')
 
-You can edit the DATA_DIR path below to match your file structure.
+You can edit the DATA_DIR path or S3 settings below to match your file structure.
 """
 
 import os
@@ -20,11 +21,55 @@ import re
 import numpy as np
 import pandas as pd
 from typing import Dict, Tuple, Optional, List
+from io import StringIO
 
 # ============================================================================
 # CONFIGURATION - Edit these paths as needed
 # ============================================================================
+
+# S3 Configuration - Set USE_S3=True to load data from S3 bucket
+USE_S3 = True  # Load from S3 by default
+
+# Your S3 bucket URL (public access) - includes survey_datasets folder
+S3_BUCKET_URL = os.environ.get(
+    'S3_BUCKET_URL', 
+    'https://usda-analysis-datasets.s3.us-east-2.amazonaws.com/survey_datasets'
+)
+
+# Local data directory (used when USE_S3=False)
 DATA_DIR = os.path.join(os.path.dirname(__file__), "survey_datasets")
+
+
+def get_file_path(filename: str) -> str:
+    """
+    Get the full path/URL for a data file.
+    Returns S3 URL if USE_S3=True, otherwise local path.
+    """
+    if USE_S3:
+        return f"{S3_BUCKET_URL}/{filename}"
+    else:
+        return os.path.join(DATA_DIR, filename)
+
+
+def read_csv_file(filepath: str, **kwargs) -> pd.DataFrame:
+    """
+    Read a CSV file from either local path or S3 URL.
+    Pandas can read directly from URLs, so this works for both.
+    
+    Args:
+        filepath: Local path or S3 URL
+        **kwargs: Additional arguments to pass to pd.read_csv
+        
+    Returns:
+        DataFrame
+    """
+    try:
+        # pandas can read from URLs directly
+        df = pd.read_csv(filepath, **kwargs)
+        return df
+    except Exception as e:
+        print(f"  Error reading {filepath}: {e}")
+        raise
 
 # File paths - adjust if your file names differ
 NASS_FILES = {
@@ -153,19 +198,30 @@ def load_nass_file(filepath: str, sample_frac: Optional[float] = None) -> pd.Dat
     Load a single NASS QuickStats CSV file with cleaning.
     
     Args:
-        filepath: Path to the CSV file
+        filepath: Path to the CSV file (local or S3 URL)
         sample_frac: If set, randomly sample this fraction of rows (for large files)
         
     Returns:
         Cleaned DataFrame
     """
-    print(f"Loading: {os.path.basename(filepath)}...")
+    filename = os.path.basename(filepath) if not filepath.startswith('http') else filepath.split('/')[-1]
+    print(f"Loading: {filename}...")
     
-    # Read only columns we need for efficiency
-    available_cols = pd.read_csv(filepath, nrows=0).columns.tolist()
+    # First read just headers to determine available columns
+    try:
+        if USE_S3:
+            # For S3, read small sample to get columns
+            header_df = read_csv_file(filepath, nrows=0)
+        else:
+            header_df = pd.read_csv(filepath, nrows=0)
+        available_cols = header_df.columns.tolist()
+    except Exception as e:
+        print(f"  Error reading headers: {e}")
+        return pd.DataFrame()
+    
     use_cols = [c for c in NASS_KEEP_COLS if c in available_cols]
     
-    df = pd.read_csv(filepath, usecols=use_cols, low_memory=False)
+    df = read_csv_file(filepath, usecols=use_cols, low_memory=False)
     
     if sample_frac is not None and sample_frac < 1.0:
         df = df.sample(frac=sample_frac, random_state=42)
@@ -212,9 +268,15 @@ def load_all_nass_data(sample_frac: Optional[float] = None,
         if key not in NASS_FILES:
             print(f"Warning: Unknown file key '{key}', skipping")
             continue
-            
-        filepath = os.path.join(DATA_DIR, NASS_FILES[key])
-        if os.path.exists(filepath):
+        
+        filepath = get_file_path(NASS_FILES[key])
+        
+        # Check if file exists (only for local files)
+        if not USE_S3 and not os.path.exists(filepath):
+            print(f"Warning: File not found: {filepath}")
+            continue
+        
+        try:
             df = load_nass_file(filepath, sample_frac)
             df['data_source'] = key
             
@@ -225,8 +287,9 @@ def load_all_nass_data(sample_frac: Optional[float] = None,
                 print(f"    Filtered to SURVEY only: {before_count:,} -> {len(df):,} rows")
             
             dfs.append(df)
-        else:
-            print(f"Warning: File not found: {filepath}")
+        except Exception as e:
+            print(f"Warning: Error loading {key}: {e}")
+            continue
     
     if not dfs:
         return pd.DataFrame()
@@ -243,10 +306,10 @@ def load_major_land_use() -> pd.DataFrame:
     Returns:
         DataFrame with columns: state_name, state_alpha, year, land_use_type, acres
     """
-    filepath = os.path.join(DATA_DIR, MLU_FILE)
+    filepath = get_file_path(MLU_FILE)
     print(f"Loading: {MLU_FILE}...")
     
-    df = pd.read_csv(filepath)
+    df = read_csv_file(filepath)
     
     # Rename columns for consistency
     df = df.rename(columns={
@@ -280,10 +343,10 @@ def load_biotech_data() -> pd.DataFrame:
     Returns:
         DataFrame with columns: state_name, state_alpha, year, crop, attribute, pct_adopted
     """
-    filepath = os.path.join(DATA_DIR, BIOTECH_FILE)
+    filepath = get_file_path(BIOTECH_FILE)
     print(f"Loading: {BIOTECH_FILE}...")
     
-    df = pd.read_csv(filepath, encoding='latin-1')
+    df = read_csv_file(filepath, encoding='latin-1')
     
     # Rename columns
     df = df.rename(columns={
@@ -343,16 +406,17 @@ def load_labor_data() -> pd.DataFrame:
     Returns:
         DataFrame with columns: state_alpha, state_name, year, wage_rate, workers
     """
-    filepath = os.path.join(DATA_DIR, NASS_FILES.get('economics', 'nass_quickstats_data_Economics.csv'))
+    filepath = get_file_path(NASS_FILES.get('economics', 'nass_quickstats_data_Economics.csv'))
     print(f"Loading LABOR data from Economics file (SURVEY only)...")
     
-    if not os.path.exists(filepath):
+    # Check if file exists (only for local files)
+    if not USE_S3 and not os.path.exists(filepath):
         print(f"  Warning: Economics file not found at {filepath}")
         return pd.DataFrame()
     
     # Read only necessary columns for efficiency
     try:
-        df = pd.read_csv(filepath, low_memory=False)
+        df = read_csv_file(filepath, low_memory=False)
     except Exception as e:
         print(f"  Error reading file: {e}")
         return pd.DataFrame()
@@ -414,16 +478,17 @@ def load_bls_wage_data() -> pd.DataFrame:
     Returns:
         DataFrame with columns: state_alpha, state_name, year, wage_rate, data_source
     """
-    filepath = os.path.join(DATA_DIR, 'bls_agricultural_wages.csv')
+    filepath = get_file_path('bls_agricultural_wages.csv')
     print(f"Loading BLS agricultural wage data...")
     
-    if not os.path.exists(filepath):
+    # Check if file exists (only for local files)
+    if not USE_S3 and not os.path.exists(filepath):
         print(f"  Warning: BLS data file not found at {filepath}")
         print(f"  Run 'python stitch_bls_files.py' to extract BLS data from zip files")
         return pd.DataFrame()
     
     try:
-        df = pd.read_csv(filepath)
+        df = read_csv_file(filepath)
         
         # If we have multiple occupation codes, focus on the primary farmworker occupation
         # 45-2092: Farmworkers and Laborers, Crop, Nursery, and Greenhouse
@@ -537,15 +602,16 @@ def load_farm_operations_data() -> pd.DataFrame:
     Returns:
         DataFrame with columns: state_alpha, state_name, year, total_operations
     """
-    filepath = os.path.join(DATA_DIR, NASS_FILES.get('economics', 'nass_quickstats_data_Economics.csv'))
+    filepath = get_file_path(NASS_FILES.get('economics', 'nass_quickstats_data_Economics.csv'))
     print(f"Loading FARM OPERATIONS data from Economics file (SURVEY only)...")
     
-    if not os.path.exists(filepath):
+    # Check if file exists (only for local files)
+    if not USE_S3 and not os.path.exists(filepath):
         print(f"  Warning: Economics file not found at {filepath}")
         return pd.DataFrame()
     
     try:
-        df = pd.read_csv(filepath, low_memory=False)
+        df = read_csv_file(filepath, low_memory=False)
     except Exception as e:
         print(f"  Error reading file: {e}")
         return pd.DataFrame()
@@ -787,6 +853,15 @@ def prepare_all_data(sample_frac: Optional[float] = None,
     print("=" * 60)
     print("LOADING AND PREPARING DATA")
     print("=" * 60)
+    
+    # Print data source information
+    if USE_S3:
+        print(f"📡 Data Source: S3 Bucket")
+        print(f"   URL: {S3_BUCKET_URL}")
+    else:
+        print(f"📁 Data Source: Local Files")
+        print(f"   Path: {DATA_DIR}")
+    print()
     
     result = {}
     
