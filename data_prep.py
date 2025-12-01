@@ -187,7 +187,8 @@ def load_nass_file(filepath: str, sample_frac: Optional[float] = None) -> pd.Dat
 
 
 def load_all_nass_data(sample_frac: Optional[float] = None,
-                       files_to_load: Optional[List[str]] = None) -> pd.DataFrame:
+                       files_to_load: Optional[List[str]] = None,
+                       survey_only: bool = True) -> pd.DataFrame:
     """
     Load and combine all NASS QuickStats CSV files.
     
@@ -195,6 +196,9 @@ def load_all_nass_data(sample_frac: Optional[float] = None,
         sample_frac: If set, sample this fraction from each file (for testing)
         files_to_load: List of file keys to load (e.g., ['field_crops', 'vegetables'])
                       If None, loads all files
+        survey_only: If True, filter to source_desc='SURVEY' only to avoid 
+                     double-counting with CENSUS data during census years
+                     (2002, 2007, 2012, 2017, 2022). Default True.
     
     Returns:
         Combined DataFrame with all NASS data
@@ -213,6 +217,13 @@ def load_all_nass_data(sample_frac: Optional[float] = None,
         if os.path.exists(filepath):
             df = load_nass_file(filepath, sample_frac)
             df['data_source'] = key
+            
+            # Filter to SURVEY only if requested and source_desc column exists
+            if survey_only and 'source_desc' in df.columns:
+                before_count = len(df)
+                df = df[df['source_desc'] == 'SURVEY']
+                print(f"    Filtered to SURVEY only: {before_count:,} -> {len(df):,} rows")
+            
             dfs.append(df)
         else:
             print(f"Warning: File not found: {filepath}")
@@ -323,14 +334,17 @@ def load_biotech_data() -> pd.DataFrame:
 
 def load_labor_data() -> pd.DataFrame:
     """
-    Load LABOR data from the Economics dataset.
+    Load LABOR data from the Economics dataset (SURVEY data only).
     Extracts wage rates and worker counts by state and year.
+    
+    NOTE: Filters to source_desc='SURVEY' to avoid double-counting
+    with CENSUS data during census years (2002, 2007, 2012, 2017, 2022).
     
     Returns:
         DataFrame with columns: state_alpha, state_name, year, wage_rate, workers
     """
     filepath = os.path.join(DATA_DIR, NASS_FILES.get('economics', 'nass_quickstats_data_Economics.csv'))
-    print(f"Loading LABOR data from Economics file...")
+    print(f"Loading LABOR data from Economics file (SURVEY only)...")
     
     if not os.path.exists(filepath):
         print(f"  Warning: Economics file not found at {filepath}")
@@ -343,8 +357,9 @@ def load_labor_data() -> pd.DataFrame:
         print(f"  Error reading file: {e}")
         return pd.DataFrame()
     
-    # Filter to LABOR commodity
-    labor_df = df[df['commodity_desc'] == 'LABOR'].copy()
+    # Filter to LABOR commodity and SURVEY source only
+    # This avoids double-counting in census years (2002, 2007, 2012, 2017, 2022)
+    labor_df = df[(df['commodity_desc'] == 'LABOR') & (df['source_desc'] == 'SURVEY')].copy()
     
     if labor_df.empty:
         print("  No LABOR data found")
@@ -382,20 +397,148 @@ def load_labor_data() -> pd.DataFrame:
         result_rows.append(row)
     
     result_df = pd.DataFrame(result_rows)
-    print(f"  Loaded {len(result_df):,} state-year labor records")
+    print(f"  Loaded {len(result_df):,} state-year labor records from USDA NASS")
     return result_df
+
+
+def load_bls_wage_data() -> pd.DataFrame:
+    """
+    Load BLS (Bureau of Labor Statistics) agricultural wage data.
+    
+    This provides comprehensive state-level wage data from 2001-2024 for all 50 states,
+    which supplements the limited USDA NASS data (only CA, FL, HI after 2010).
+    
+    Source: BLS Occupational Employment and Wage Statistics (OEWS)
+    Primary Occupation: 45-2092 - Farmworkers and Laborers, Crop, Nursery, and Greenhouse
+    
+    Returns:
+        DataFrame with columns: state_alpha, state_name, year, wage_rate, data_source
+    """
+    filepath = os.path.join(DATA_DIR, 'bls_agricultural_wages.csv')
+    print(f"Loading BLS agricultural wage data...")
+    
+    if not os.path.exists(filepath):
+        print(f"  Warning: BLS data file not found at {filepath}")
+        print(f"  Run 'python stitch_bls_files.py' to extract BLS data from zip files")
+        return pd.DataFrame()
+    
+    try:
+        df = pd.read_csv(filepath)
+        
+        # If we have multiple occupation codes, focus on the primary farmworker occupation
+        # 45-2092: Farmworkers and Laborers, Crop, Nursery, and Greenhouse
+        if 'occupation_code' in df.columns:
+            primary_occ = df[df['occupation_code'] == '45-2092'].copy()
+            if len(primary_occ) > 0:
+                df = primary_occ
+                print(f"  Filtered to primary occupation (45-2092): {len(df):,} records")
+        
+        # Rename columns to match our standard format
+        df = df.rename(columns={
+            'hourly_wage': 'wage_rate'
+        })
+        
+        # Ensure data_source column exists and is properly marked
+        if 'data_source' not in df.columns:
+            df['data_source'] = 'BLS_OEWS'
+        else:
+            # Standardize to BLS_OEWS (covers both ACTUAL and derived)
+            df['data_source'] = 'BLS_OEWS'
+        
+        print(f"  Loaded {len(df):,} state-year records from BLS")
+        print(f"  Years: {df['year'].min()} - {df['year'].max()}")
+        print(f"  States: {df['state_alpha'].nunique()}")
+        
+        return df
+        
+    except Exception as e:
+        print(f"  Error reading BLS data: {e}")
+        return pd.DataFrame()
+
+
+def load_combined_labor_data() -> pd.DataFrame:
+    """
+    Load and combine labor wage data from multiple sources:
+    1. USDA NASS Farm Labor Survey (limited states after 2010)
+    2. BLS OEWS Agricultural Wages (all states, 2003-2024)
+    
+    The BLS data provides comprehensive coverage where USDA NASS data is limited.
+    
+    Returns:
+        DataFrame with columns: state_alpha, state_name, year, wage_rate, 
+                               workers, hours_per_week, data_source
+    """
+    print("Loading combined labor data from USDA NASS and BLS...")
+    
+    # Load USDA NASS data
+    nass_df = load_labor_data()
+    if not nass_df.empty:
+        nass_df['data_source'] = 'USDA_NASS'
+    
+    # Load BLS data
+    bls_df = load_bls_wage_data()
+    
+    if nass_df.empty and bls_df.empty:
+        print("  Warning: No labor data available from either source")
+        return pd.DataFrame()
+    
+    if bls_df.empty:
+        print("  Using USDA NASS data only")
+        return nass_df
+    
+    if nass_df.empty:
+        print("  Using BLS data only")
+        return bls_df
+    
+    # Combine the datasets
+    # For state-years where both have data, prefer USDA NASS (more specific to farm labor)
+    # For state-years where only BLS has data, use BLS
+    
+    # Create a key for matching
+    nass_df['_key'] = nass_df['state_alpha'] + '_' + nass_df['year'].astype(str)
+    bls_df['_key'] = bls_df['state_alpha'] + '_' + bls_df['year'].astype(str)
+    
+    # Find BLS records that don't have NASS equivalents
+    nass_keys = set(nass_df['_key'])
+    bls_only = bls_df[~bls_df['_key'].isin(nass_keys)].copy()
+    
+    # Add missing columns to BLS data
+    for col in ['workers', 'hours_per_week']:
+        if col not in bls_only.columns:
+            bls_only[col] = np.nan
+    
+    # Combine: NASS data + BLS data for missing state-years
+    combined = pd.concat([
+        nass_df.drop(columns=['_key']),
+        bls_only.drop(columns=['_key', 'occupation_code', 'occupation_title', 'annual_wage'], errors='ignore')
+    ], ignore_index=True)
+    
+    # Sort by state and year
+    combined = combined.sort_values(['state_alpha', 'year']).reset_index(drop=True)
+    
+    nass_count = len(combined[combined['data_source'] == 'USDA_NASS'])
+    bls_count = len(combined[combined['data_source'] == 'BLS_OEWS'])
+    
+    print(f"  Combined: {len(combined):,} total records")
+    print(f"    - USDA NASS: {nass_count:,} records")
+    print(f"    - BLS OEWS:  {bls_count:,} records (supplemental)")
+    
+    return combined
 
 
 def load_farm_operations_data() -> pd.DataFrame:
     """
-    Load FARM OPERATIONS data from the Economics dataset.
+    Load FARM OPERATIONS data from the Economics dataset (SURVEY data only).
     Extracts total farm operations count by state and year.
+    
+    NOTE: Filters to source_desc='SURVEY' to avoid double-counting
+    with CENSUS data during census years (2002, 2007, 2012, 2017, 2022).
     
     Returns:
         DataFrame with columns: state_alpha, state_name, year, total_operations
     """
     filepath = os.path.join(DATA_DIR, NASS_FILES.get('economics', 'nass_quickstats_data_Economics.csv'))
-    print(f"Loading FARM OPERATIONS data from Economics file...")
+    print(f"Loading FARM OPERATIONS data from Economics file (SURVEY only)...")
     
     if not os.path.exists(filepath):
         print(f"  Warning: Economics file not found at {filepath}")
@@ -407,10 +550,12 @@ def load_farm_operations_data() -> pd.DataFrame:
         print(f"  Error reading file: {e}")
         return pd.DataFrame()
     
-    # Filter to FARM OPERATIONS with OPERATIONS statistic
+    # Filter to FARM OPERATIONS with OPERATIONS statistic and SURVEY source only
+    # This avoids double-counting in census years (2002, 2007, 2012, 2017, 2022)
     ops_df = df[
         (df['commodity_desc'] == 'FARM OPERATIONS') & 
-        (df['statisticcat_desc'] == 'OPERATIONS')
+        (df['statisticcat_desc'] == 'OPERATIONS') &
+        (df['source_desc'] == 'SURVEY')
     ].copy()
     
     if ops_df.empty:
@@ -692,9 +837,10 @@ def prepare_all_data(sample_frac: Optional[float] = None,
         merged.loc[~mask, ['pct_bt', 'pct_ht', 'pct_stacked', 'pct_all_ge']] = np.nan
         result['state_crop_biotech'] = merged.drop(columns=['crop', 'state_name_biotech'], errors='ignore')
     
-    # Load labor data (wage rates, workers)
+    # Load combined labor data (USDA NASS + BLS OEWS)
+    # BLS provides comprehensive state-level coverage where USDA is limited
     try:
-        result['labor'] = load_labor_data()
+        result['labor'] = load_combined_labor_data()
     except Exception as e:
         print(f"Warning: Could not load labor data: {e}")
         result['labor'] = pd.DataFrame()

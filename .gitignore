@@ -91,6 +91,12 @@ old_files
 # Census datasets (if not needed in version control)
 census_datasets
 
+# bls zipfiles
+bls_zipfiles 
+
+# junk files
+download_bls_data.py
+stitch_bls_files.py
 # -----------------------------------------------------------------------------
 # Temporary and Cache Files
 # -----------------------------------------------------------------------------

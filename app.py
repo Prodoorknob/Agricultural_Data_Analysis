@@ -45,7 +45,7 @@ from visuals import (
     revenue_trend_chart,
     area_vs_urban_scatter,
     revenue_vs_area_bubble,
-    labor_intensity_scatter,
+    labor_wage_trends,
     yield_vs_biotech_scatter,
     sector_comparison_chart,
     boom_crops_chart,
@@ -491,7 +491,8 @@ def create_app(use_sample: bool = USE_SAMPLE_DATA) -> Dash:
             return area_vs_urban_scatter(df, landuse_df, selected_state)
         
         elif view_mode == 'Labor & Operations':
-            return labor_intensity_scatter(df, labor_df, selected_state, year_val)
+            # Show wage trends over time (more insightful than single-year scatter)
+            return labor_wage_trends(df, labor_df, selected_state, year_val)
         
         elif view_mode == 'Economics & Profitability':
             if selected_state:

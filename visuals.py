@@ -1008,7 +1008,7 @@ def revenue_vs_area_bubble(
     return fig
 
 
-def labor_intensity_scatter(
+def labor_wage_trends(
     data_df: pd.DataFrame,
     labor_df: pd.DataFrame,
     state_alpha: Optional[str] = None,
@@ -1016,14 +1016,19 @@ def labor_intensity_scatter(
     title: Optional[str] = None
 ) -> go.Figure:
     """
-    Create a scatter plot showing labor statistics across states.
-    Uses wage rates vs workers or shows state-level labor data.
+    Create a line chart showing farm labor wage rate trends over time.
+    Shows how agricultural wages have evolved by state, with option to
+    highlight a specific state or compare top/bottom performers.
+    
+    Data Sources:
+    - USDA NASS Farm Labor Survey (limited to CA, FL, HI after 2010)
+    - BLS OEWS Agricultural Wages (all states, 2003-2024) - supplemental
     
     Args:
-        data_df: Crop data (for context)
-        labor_df: Labor data with wage_rate, workers, hours_per_week
-        state_alpha: If specified, highlight this state
-        year: If specified, filter to this year
+        data_df: Crop data (for context, not used directly)
+        labor_df: Labor data with wage_rate, workers, year, data_source
+        state_alpha: If specified, highlight this state and show comparison
+        year: If specified, used for context but shows multi-year trend
         title: Optional title
         
     Returns:
@@ -1039,85 +1044,263 @@ def labor_intensity_scatter(
     
     df = labor_df.copy()
     
-    # Filter by year if specified
-    if year is not None and 'year' in df.columns:
-        df = df[df['year'] == year]
-    else:
-        # Use most recent year if not specified
-        if 'year' in df.columns and not df.empty:
-            latest_year = df['year'].max()
-            df = df[df['year'] == latest_year]
-            year = latest_year
-    
-    if df.empty:
-        return _empty_figure(f"No labor data available for year {year}")
-    
     # Check for required columns
-    if 'wage_rate' not in df.columns or 'workers' not in df.columns:
+    if 'wage_rate' not in df.columns or 'year' not in df.columns:
         return _empty_figure(
             "Labor data missing required fields.\n"
-            "Expected: wage_rate, workers"
+            "Expected: wage_rate, year"
         )
     
     # Clean data - remove rows with NaN in key columns
-    df = df.dropna(subset=['wage_rate', 'workers'])
+    df = df.dropna(subset=['wage_rate', 'state_alpha', 'year'])
     
     if df.empty:
-        return _empty_figure("No valid labor data after filtering")
+        return _empty_figure("No valid labor wage data after filtering")
+    
+    # Check data sources
+    has_bls_data = 'data_source' in df.columns and (df['data_source'] == 'BLS_OEWS').any()
+    has_nass_data = 'data_source' in df.columns and (df['data_source'] == 'USDA_NASS').any()
     
     # Merge with state names if not already present
-    if 'state_name' not in df.columns:
+    if 'state_name' not in df.columns or df['state_name'].isna().all():
         df = df.merge(HEX_LAYOUT[['state_alpha', 'state_name']], on='state_alpha', how='left')
     
-    # Create scatter: wage rate vs workers, with hours as size if available
-    size_col = 'hours_per_week' if 'hours_per_week' in df.columns and df['hours_per_week'].notna().any() else None
+    # Sort by year
+    df = df.sort_values('year')
     
-    fig = px.scatter(
-        df,
-        x='workers',
-        y='wage_rate',
-        size=size_col,
-        hover_name='state_name',
-        hover_data={'state_alpha': True, 'wage_rate': ':.2f', 'workers': ':,.0f'},
-        color='wage_rate',
-        color_continuous_scale='Blues',
-        labels={
-            'workers': 'Number of Workers',
-            'wage_rate': 'Wage Rate ($/hour)',
-            'hours_per_week': 'Hours per Week'
+    # Identify states with good data coverage (5+ years of data)
+    state_year_counts = df.groupby('state_alpha')['year'].nunique()
+    well_covered_states = state_year_counts[state_year_counts >= 5].index.tolist()
+    
+    # With BLS data, most states should have good coverage now
+    # Primary labor states with continuous USDA NASS coverage
+    primary_labor_states = ['CA', 'FL', 'HI']
+    
+    # Calculate average wage by state across all years for ranking
+    state_avg_wage = df.groupby('state_alpha')['wage_rate'].mean().sort_values(ascending=False)
+    
+    fig = go.Figure()
+    subtitle = ""
+    
+    if state_alpha and state_alpha in df['state_alpha'].values:
+        # Mode 1: Show selected state with comparison
+        
+        # Get selected state data
+        selected_df = df[df['state_alpha'] == state_alpha]
+        selected_name = selected_df['state_name'].iloc[0] if 'state_name' in selected_df.columns else state_alpha
+        selected_years = sorted(selected_df['year'].unique())
+        n_years = len(selected_years)
+        
+        # Check data source for selected state
+        state_data_sources = selected_df['data_source'].unique() if 'data_source' in selected_df.columns else []
+        
+        # Check if selected state has limited data (only relevant if no BLS data)
+        if n_years <= 3 and not has_bls_data:
+            # Limited data - show a comparison with CA/FL/HI who have full coverage
+            
+            # Add annotation about limited data
+            fig.add_annotation(
+                text=f"⚠️ {state_alpha} has limited survey data ({selected_years[0]}-{selected_years[-1]})<br>"
+                     f"Showing comparison with primary farm labor states (CA, FL, HI)",
+                xref="paper", yref="paper",
+                x=0.5, y=1.15,
+                showarrow=False,
+                font=dict(size=11, color='#666'),
+                align='center'
+            )
+            
+            # Plot primary labor states (CA, FL, HI) for reference
+            colors = {'CA': '#2E8B57', 'FL': '#4169E1', 'HI': '#9370DB'}
+            for state in primary_labor_states:
+                if state in df['state_alpha'].values:
+                    state_data = df[df['state_alpha'] == state]
+                    state_name_full = state_data['state_name'].iloc[0] if not state_data.empty else state
+                    fig.add_trace(go.Scatter(
+                        x=state_data['year'],
+                        y=state_data['wage_rate'],
+                        mode='lines+markers',
+                        line=dict(color=colors.get(state, '#888'), width=2),
+                        marker=dict(size=5),
+                        name=state,
+                        hovertemplate=f'{state_name_full}<br>Year: %{{x}}<br>Wage: $%{{y:.2f}}/hr<extra></extra>'
+                    ))
+            
+            # Plot selected state
+            fig.add_trace(go.Scatter(
+                x=selected_df['year'],
+                y=selected_df['wage_rate'],
+                mode='lines+markers',
+                line=dict(color='#FF6B6B', width=4),
+                marker=dict(size=12, symbol='circle'),
+                name=f'{state_alpha} (Selected)',
+                hovertemplate=f'{selected_name}<br>Year: %{{x}}<br>Wage: $%{{y:.2f}}/hr<extra></extra>'
+            ))
+            
+            # Calculate average for selected state
+            avg_wage = selected_df['wage_rate'].mean()
+            subtitle = f'{selected_name}: Avg ${avg_wage:.2f}/hr ({selected_years[0]}-{selected_years[-1]}, {n_years} years of data)'
+            chart_title = f'Farm Labor Wages: {selected_name}'
+            
+        else:
+            # Good data coverage - show full comparison
+            
+            # Calculate national average by year (using all data)
+            national_avg = df.groupby('year')['wage_rate'].mean().reset_index()
+            
+            # Plot other primary states faded
+            for state in primary_labor_states:
+                if state != state_alpha and state in df['state_alpha'].values:
+                    state_data = df[df['state_alpha'] == state]
+                    state_name_full = state_data['state_name'].iloc[0] if not state_data.empty else state
+                    fig.add_trace(go.Scatter(
+                        x=state_data['year'],
+                        y=state_data['wage_rate'],
+                        mode='lines+markers',
+                        line=dict(color='rgba(100,149,237,0.5)', width=2, dash='dot'),
+                        marker=dict(size=4),
+                        name=state,
+                        hovertemplate=f'{state_name_full}<br>Year: %{{x}}<br>Wage: $%{{y:.2f}}/hr<extra></extra>'
+                    ))
+            
+            # Plot national average
+            fig.add_trace(go.Scatter(
+                x=national_avg['year'],
+                y=national_avg['wage_rate'],
+                mode='lines+markers',
+                line=dict(color='#4682B4', width=3, dash='dash'),
+                marker=dict(size=6, symbol='diamond'),
+                name='National Avg',
+                hovertemplate='National Average<br>Year: %{x}<br>Wage: $%{y:.2f}/hr<extra></extra>'
+            ))
+            
+            # Plot selected state prominently
+            fig.add_trace(go.Scatter(
+                x=selected_df['year'],
+                y=selected_df['wage_rate'],
+                mode='lines+markers',
+                line=dict(color='#FF6B6B', width=4),
+                marker=dict(size=10, symbol='circle'),
+                name=f'{state_alpha} (Selected)',
+                hovertemplate=f'{selected_name}<br>Year: %{{x}}<br>Wage: $%{{y:.2f}}/hr<extra></extra>'
+            ))
+            
+            # Calculate change for selected state
+            first_year = selected_years[0]
+            last_year = selected_years[-1]
+            first_wage = selected_df[selected_df['year'] == first_year]['wage_rate'].iloc[0]
+            last_wage = selected_df[selected_df['year'] == last_year]['wage_rate'].iloc[0]
+            pct_change = ((last_wage - first_wage) / first_wage) * 100
+            
+            subtitle = f'{selected_name}: ${first_wage:.2f} → ${last_wage:.2f}/hr ({pct_change:+.1f}% since {first_year})'
+            chart_title = f'Farm Labor Wage Trends: {selected_name}'
+        
+    else:
+        # Mode 2: No state selected - show primary labor states comparison
+        chart_title = 'Farm Labor Wage Trends by State'
+        
+        # Focus on states with good data coverage
+        colors = {
+            'CA': '#2E8B57',  # Green - California
+            'FL': '#4169E1',  # Blue - Florida  
+            'HI': '#9370DB',  # Purple - Hawaii
         }
+        
+        # Calculate national average
+        national_avg = df.groupby('year')['wage_rate'].mean().reset_index()
+        
+        # Plot primary states
+        for state in primary_labor_states:
+            if state in df['state_alpha'].values:
+                state_data = df[df['state_alpha'] == state]
+                state_name = state_data['state_name'].iloc[0] if not state_data.empty else state
+                fig.add_trace(go.Scatter(
+                    x=state_data['year'],
+                    y=state_data['wage_rate'],
+                    mode='lines+markers',
+                    line=dict(color=colors.get(state, '#888'), width=3),
+                    marker=dict(size=7),
+                    name=state_name,
+                    hovertemplate=f'{state_name}<br>Year: %{{x}}<br>Wage: $%{{y:.2f}}/hr<extra></extra>'
+                ))
+        
+        # Plot national average
+        fig.add_trace(go.Scatter(
+            x=national_avg['year'],
+            y=national_avg['wage_rate'],
+            mode='lines+markers',
+            line=dict(color='#FF8C00', width=3, dash='dash'),
+            marker=dict(size=6, symbol='diamond'),
+            name='National Avg',
+            hovertemplate='National Average<br>Year: %{x}<br>Wage: $%{y:.2f}/hr<extra></extra>'
+        ))
+        
+        # Calculate overall change
+        if len(national_avg) >= 2:
+            first_wage = national_avg['wage_rate'].iloc[0]
+            last_wage = national_avg['wage_rate'].iloc[-1]
+            first_yr = int(national_avg['year'].iloc[0])
+            last_yr = int(national_avg['year'].iloc[-1])
+            pct_change = ((last_wage - first_wage) / first_wage) * 100
+            subtitle = f'National avg: ${first_wage:.2f} → ${last_wage:.2f}/hr ({pct_change:+.1f}% from {first_yr}-{last_yr})'
+    
+    # Add data source annotation
+    if has_bls_data:
+        source_text = "📊 Data: USDA NASS Farm Labor Survey + BLS Occupational Employment & Wage Statistics (OEWS)"
+    else:
+        source_text = "📊 Data: USDA NASS Farm Labor Survey (limited state coverage after 2010)"
+    
+    fig.add_annotation(
+        text=source_text,
+        xref="paper", yref="paper",
+        x=0.5, y=-0.12,
+        showarrow=False,
+        font=dict(size=9, color='#666'),
+        align='center'
     )
     
-    fig.update_traces(marker=dict(sizemin=5))
-    
-    # Highlight selected state
-    if state_alpha and state_alpha in df['state_alpha'].values:
-        selected = df[df['state_alpha'] == state_alpha]
-        fig.add_trace(go.Scatter(
-            x=selected['workers'],
-            y=selected['wage_rate'],
-            mode='markers+text',
-            marker=dict(size=20, color='#FF6B6B', symbol='circle-open', line=dict(width=3)),
-            text=selected['state_alpha'],
-            textposition='top center',
-            textfont=dict(size=12, color='#FF6B6B', family='Arial Black'),
-            name='Selected State',
-            hoverinfo='skip'
-        ))
-    
-    year_str = f' ({year})' if year else ''
     fig.update_layout(
         title=dict(
-            text=title or f'Labor Statistics by State{year_str}',
+            text=f'{title or chart_title}<br><sub>{subtitle}</sub>' if subtitle else (title or chart_title),
             font=TITLE_FONT
         ),
-        height=450,
-        **LAYOUT_TEMPLATE
+        xaxis=dict(
+            title='Year',
+            tickmode='linear',
+            dtick=2,
+            tickformat='d'
+        ),
+        yaxis=dict(
+            title='Wage Rate ($/hour)',
+            tickprefix='$'
+        ),
+        legend=dict(
+            orientation='v',
+            yanchor='top',
+            y=0.99,
+            xanchor='left',
+            x=1.02,
+            font=dict(size=10)
+        ),
+        height=520,
+        plot_bgcolor='white',
+        paper_bgcolor='white',
+        font={'family': 'Arial, sans-serif', 'size': 12, 'color': '#333'},
+        margin={'l': 60, 'r': 120, 't': 80, 'b': 70}  # Extra margins for legend and annotation
     )
     
     return fig
-    
-    return fig
+
+
+# Keep old function name as alias for backwards compatibility
+def labor_intensity_scatter(
+    data_df: pd.DataFrame,
+    labor_df: pd.DataFrame,
+    state_alpha: Optional[str] = None,
+    year: Optional[int] = None,
+    title: Optional[str] = None
+) -> go.Figure:
+    """Alias for labor_wage_trends for backwards compatibility."""
+    return labor_wage_trends(data_df, labor_df, state_alpha, year, title)
 
 
 def yield_vs_biotech_scatter(
