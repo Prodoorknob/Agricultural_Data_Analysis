@@ -847,8 +847,8 @@ def prepare_all_data(sample_frac: Optional[float] = None,
         - 'state_crop_year': Aggregated state × crop × year
         - 'state_totals': State-level totals
         - 'landuse': Pivoted land use data
-        - 'biotech': Pivoted biotech data
-        - 'state_crop_biotech': State × crop × year with biotech joined
+        - 'labor': Combined labor data (USDA NASS + BLS OEWS)
+        - 'farm_operations': Farm operations data
     """
     print("=" * 60)
     print("LOADING AND PREPARING DATA")
@@ -891,26 +891,9 @@ def prepare_all_data(sample_frac: Optional[float] = None,
         print(f"Warning: Could not load land use data: {e}")
         result['landuse'] = pd.DataFrame()
     
-    # Load and process biotech data
-    try:
-        biotech_df = load_biotech_data()
-        result['biotech'] = aggregate_biotech_state_crop_year(biotech_df)
-    except Exception as e:
-        print(f"Warning: Could not load biotech data: {e}")
-        result['biotech'] = pd.DataFrame()
-    
-    # Join biotech to state × crop × year for relevant crops
-    if 'state_crop_year' in result and not result.get('biotech', pd.DataFrame()).empty:
-        merged = result['state_crop_year'].merge(
-            result['biotech'],
-            on=['state_alpha', 'year'],
-            how='left',
-            suffixes=('', '_biotech')
-        )
-        # Only keep biotech data where crop matches
-        mask = merged['commodity_desc'].str.upper() == merged['crop']
-        merged.loc[~mask, ['pct_bt', 'pct_ht', 'pct_stacked', 'pct_all_ge']] = np.nan
-        result['state_crop_biotech'] = merged.drop(columns=['crop', 'state_name_biotech'], errors='ignore')
+    # NOTE: Biotech data loading removed per B3 requirements (Yield & Technology view removed)
+    # Previously loaded biotech_df and aggregate_biotech_state_crop_year
+    result['biotech'] = pd.DataFrame()
     
     # Load combined labor data (USDA NASS + BLS OEWS)
     # BLS provides comprehensive state-level coverage where USDA is limited

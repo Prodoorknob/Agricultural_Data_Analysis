@@ -1,33 +1,12 @@
-"""
-app.py - Plotly Dash Application for USDA Agricultural Dashboard
-
-This module creates a complete Dash web application with:
-- Hex-tile map of US states
-- Interactive filters (Year, Sector, Measure, View Mode)
-- Drill-down from state to crop level
-- Multiple view modes for different analysis perspectives
-
-To run locally:
-    python app.py
-
-For Jupyter/Colab:
-    from app import create_app
-    app = create_app()
-    app.run_server(mode='inline')  # or mode='external'
-"""
-
 import os
 import sys
 
-# Ensure we can import from the same directory
+from matplotlib import colors
 sys.path.insert(0, os.path.dirname(__file__))
-
-from dash import Dash, html, dcc, callback, Input, Output, State
+from dash import Dash, html, dcc, callback, Input, Output, State, ctx
 import dash_bootstrap_components as dbc
 import plotly.graph_objects as go
 import pandas as pd
-
-# Import our modules
 from data_prep import (
     prepare_all_data, 
     get_available_years, 
@@ -41,31 +20,25 @@ from visuals import (
     area_trend_chart,
     land_use_trend_chart,
     operations_trend_chart,
-    yield_biotech_trend_chart,
     revenue_trend_chart,
     area_vs_urban_scatter,
-    revenue_vs_area_bubble,
     labor_wage_trends,
-    yield_vs_biotech_scatter,
     sector_comparison_chart,
     boom_crops_chart,
     get_chart_for_view,
-    HEX_LAYOUT
+    HEX_LAYOUT,
+    COLOR_SCALES
 )
 
-# ============================================================================
-# CONFIGURATION
-# ============================================================================
 
 # Set to True for faster loading during development
 USE_SAMPLE_DATA = True
-
+# Dropdown Data Options
 # Measure options for dropdown
 MEASURE_OPTIONS = [
     {'label': 'Area Harvested (acres)', 'value': 'area_harvested_acres'},
     {'label': 'Area Planted (acres)', 'value': 'area_planted_acres'},
     {'label': 'Revenue (USD)', 'value': 'revenue_usd'},
-    {'label': 'Yield per Acre', 'value': 'yield_per_acre'},
     {'label': 'Operations', 'value': 'operations'},
     {'label': 'Ops per 1,000 Acres', 'value': 'ops_per_1k_acres'},
 ]
@@ -78,18 +51,15 @@ SECTOR_OPTIONS = [
     {'label': 'Economics', 'value': 'ECONOMICS'},
 ]
 
-# View mode options
+# View mode options - B1: Removed Yield & Technology
 VIEW_MODE_OPTIONS = [
     {'label': 'Overview', 'value': 'Overview'},
     {'label': 'Land & Area', 'value': 'Land & Area'},
     {'label': 'Labor & Operations', 'value': 'Labor & Operations'},
     {'label': 'Economics & Profitability', 'value': 'Economics & Profitability'},
-    {'label': 'Yield & Technology', 'value': 'Yield & Technology'},
 ]
 
-# ============================================================================
-# STYLES
-# ============================================================================
+# App design
 
 SIDEBAR_STYLE = {
     'position': 'fixed',
@@ -119,29 +89,16 @@ DROPDOWN_STYLE = {
     'margin-bottom': '15px'
 }
 
-# ============================================================================
-# APP CREATION
-# ============================================================================
+# App design
 
-def create_app(use_sample: bool = USE_SAMPLE_DATA) -> Dash:
-    """
-    Create and configure the Dash application.
-    
-    Args:
-        use_sample: If True, load only sample data for faster startup
-        
-    Returns:
-        Configured Dash application
-    """
+def create_app(use_sample = USE_SAMPLE_DATA):
     # Initialize Dash app with Bootstrap theme
     app = Dash(
         __name__,
         external_stylesheets=[dbc.themes.BOOTSTRAP],
         suppress_callback_exceptions=True
     )
-    
     # Load data
-    print("Loading data...")
     if use_sample:
         data = load_sample_data()
     else:
@@ -166,20 +123,31 @@ def create_app(use_sample: bool = USE_SAMPLE_DATA) -> Dash:
     # Store data in app for access in callbacks
     app.data = data
     
-    # ========================================================================
-    # LAYOUT
-    # ========================================================================
+    # App layout
     
-    sidebar = html.Div([
-        html.H4("🌾 USDA Dashboard", className="mb-4"),
+    # Merge custom styles with SIDEBAR_STYLE
+    sidebar_style = {**SIDEBAR_STYLE, 'backgroundColor': '#B8D0D9', 'fontFamily': 'Segoe UI SemiBold, sans-serif'}
+    
+    sidebar = html.Div(style=sidebar_style,
+                       children=[html.H4(children="USDA SURVEY STATISTICS", className="mb-4", 
+                                         style={
+                                             'textAlign': 'center',
+                                             'color': '#081E26',
+                                             'fontFamily': 'Segoe UI Semibold, sans-serif'}),
         html.Hr(),
-        
-        # Year filter
+
+        html.Div(children="Understanding farming one stat at a time", style={
+        'textAlign': 'center',
+        'color': '#081E26',
+        'fontFamily': 'Segoe UI, sans-serif'}),
+        html.Hr(),
+
+        # Year dropdown
         html.Label("Year", className="fw-bold"),
         dcc.Dropdown(
             id='year-select',
             options=year_options,
-            value='ALL' if not years else years[-1],
+            value='ALL',  # A2 - Default year = ALL YEARS
             clearable=False,
             style=DROPDOWN_STYLE
         ),
@@ -203,6 +171,8 @@ def create_app(use_sample: bool = USE_SAMPLE_DATA) -> Dash:
             clearable=False,
             style=DROPDOWN_STYLE
         ),
+        # A1 - Measure note div
+        html.Div(id='measure-note', style={'fontSize': '11px', 'color': '#666', 'marginTop': '-10px', 'marginBottom': '10px'}),
         
         html.Hr(),
         
@@ -233,28 +203,42 @@ def create_app(use_sample: bool = USE_SAMPLE_DATA) -> Dash:
         # Selection info
         html.Div(id='selection-info', className="mt-3 p-2 bg-light rounded")
         
-    ], style=SIDEBAR_STYLE)
+    ])
     
     content = html.Div([
-        # Header
+        # Header with data source citations (Issue 3)
         html.Div([
-            html.H3("US Agricultural Overview", id="page-title"),
-            html.P("Click on a state to see detailed crop information", 
-                   className="text-muted", id="page-subtitle")
-        ], className="mb-4"),
+            html.Div([
+                html.H3("US Agricultural Overview", id="page-title", style={'fontFamily': 'Segoe UI Semibold, sans-serif'}),
+                html.P("Click on a state to see detailed crop information", 
+                       className="text-muted", id="page-subtitle")
+            ]),
+            # Data source citations in top right
+            html.Div([
+                html.Small([
+                    html.Strong("Data Sources: "),
+                    html.Br(),
+                    "• USDA NASS Quick Stats",
+                    html.Br(),
+                    "• USDA ERS Major Land Uses",
+                    html.Br(), 
+                    "• BLS OEWS Wage Statistics"
+                ], style={'color': '#666', 'textAlign': 'right', 'fontSize': '11px'})
+            ], style={'position': 'absolute', 'top': '20px', 'right': '30px'})
+        ], className="mb-4", style={'position': 'relative'}),
         
         # Hex Map
         dbc.Card([
             dbc.CardBody([
-                dcc.Graph(id='hex-map', config={'displayModeBar': False})
+                dcc.Graph(id='hex-map', config={'displayModeBar': False}, style={'height': '550px'})
             ])
         ], style=CARD_STYLE),
         
-        # Charts row
+        # Chart 1 - Full width row
         dbc.Row([
             dbc.Col([
                 dbc.Card([
-                    dbc.CardHeader("State Crop Summary", id="chart-1-header"),
+                    dbc.CardHeader(id="chart-1-header", style={'fontFamily': 'Segoe UI Semibold, sans-serif'}),
                     dbc.CardBody([
                         dcc.Graph(id='chart-1', config={'displayModeBar': False})
                     ])
@@ -262,36 +246,58 @@ def create_app(use_sample: bool = USE_SAMPLE_DATA) -> Dash:
             ], width=12)
         ]),
         
+        # Chart 2 - Full width row (Issue 4: stacked layout)
         dbc.Row([
             dbc.Col([
                 dbc.Card([
-                    dbc.CardHeader("Trends Over Time", id="chart-2-header"),
+                    dbc.CardHeader([
+                        html.Span(id="chart-2-header", style={'fontFamily': 'Segoe UI Semibold, sans-serif'}),
+                        # Issue 5: Reset button to show all crops
+                        html.Button("Show All Crops", id="reset-crop-btn", 
+                                    className="btn btn-sm btn-outline-secondary float-end",
+                                    style={'marginLeft': '10px', 'display': 'none'})
+                    ]),
                     dbc.CardBody([
                         dcc.Graph(id='chart-2', config={'displayModeBar': False})
                     ])
                 ], style=CARD_STYLE)
-            ], width=6),
+            ], width=12)
+        ]),
+        
+        # Chart 3 - Full width row (Issue 4: stacked layout)
+        dbc.Row([
             dbc.Col([
                 dbc.Card([
-                    dbc.CardHeader("Diagnostic View", id="chart-3-header"),
+                    dbc.CardHeader(id="chart-3-header", style={'fontFamily': 'Segoe UI Semibold, sans-serif'}),
                     dbc.CardBody([
+                        # D1 - Overview boom toggle
+                        html.Div(id='overview-boom-toggle-container', children=[
+                            dcc.RadioItems(
+                                id='overview-boom-toggle',
+                                options=[
+                                    {"label": "National", "value": "national"},
+                                    {"label": "Selected State", "value": "state"}
+                                ],
+                                value="national",
+                                inline=True,
+                                style={'marginBottom': '10px', 'fontSize': '12px'}
+                            )
+                        ], style={'display': 'none'}),
                         dcc.Graph(id='chart-3', config={'displayModeBar': False})
                     ])
                 ], style=CARD_STYLE)
-            ], width=6)
+            ], width=12)
         ]),
         
-        # Hidden stores for state management
-        dcc.Store(id='selected-state', data=None),
+        # Hidden stores for state management - H1: Default to Indiana
+        dcc.Store(id='selected-state', data='IN'),
         dcc.Store(id='selected-crop', data=None)
         
     ], style=CONTENT_STYLE)
     
     app.layout = html.Div([sidebar, content])
     
-    # ========================================================================
-    # CALLBACKS
-    # ========================================================================
+    # Callbacks
     
     @app.callback(
         Output('hex-map', 'figure'),
@@ -300,31 +306,30 @@ def create_app(use_sample: bool = USE_SAMPLE_DATA) -> Dash:
          Input('measure-select', 'value'),
          Input('selected-state', 'data')]
     )
+
+    # I decided to use a HEX MAP instead of a choropleth map for better visualization of state-level data.
+    # I felt that most dashboards use choropleth maps and wanted to try something different.
+    # The HEX MAP is easier to read when states are small like in the northeast region.
+    # It also helps us identify crops and measures in each state uniformly.
+
     def update_hex_map(year, sector, measure, selected_state):
-        """Update the hex map based on filters."""
+
         df = app.data.get('state_crop_year', pd.DataFrame())
-        
         if df.empty:
             return _empty_fig("No data loaded")
         
-        # Filter by year
+        # filters
         if year != 'ALL':
             df = df[df['year'] == year]
-        
-        # Filter by sector
         if sector != 'ALL' and 'sector_desc' in df.columns:
             df = df[df['sector_desc'] == sector]
-        
-        # Check if measure exists
         if measure not in df.columns:
             measure = 'area_harvested_acres'
         
         # Aggregate to state level
-        state_totals = df.groupby('state_alpha').agg({
-            measure: 'sum'
-        }).reset_index()
+        state_totals = df.groupby('state_alpha').agg({measure: 'sum'}).reset_index()
         
-        # Determine color scale based on measure
+        # Change color scale for different selected filters
         if 'area' in measure:
             cscale = 'Tealgrn'
         elif 'revenue' in measure or 'price' in measure:
@@ -351,49 +356,56 @@ def create_app(use_sample: bool = USE_SAMPLE_DATA) -> Dash:
         [State('selected-state', 'data')]
     )
     def update_selected_state(click_data, current_state):
-        """Update selected state when hex map is clicked."""
         if click_data is None:
             return current_state
-        
-        # Extract state from click data
         try:
             point = click_data['points'][0]
             if 'customdata' in point:
-                # Get state name, look up alpha
                 state_name = point['customdata'][0]
                 state_row = HEX_LAYOUT[HEX_LAYOUT['state_name'] == state_name]
                 if not state_row.empty:
                     return state_row['state_alpha'].iloc[0]
             elif 'text' in point:
-                # Text contains state alpha
                 return point['text']
         except (KeyError, IndexError):
             pass
-        
         return current_state
     
     @app.callback(
         Output('selected-crop', 'data'),
         [Input('chart-1', 'clickData'),
-         Input('crop-search', 'value')],
+         Input('crop-search', 'value'),
+         Input('reset-crop-btn', 'n_clicks')],
         [State('selected-crop', 'data')]
     )
-    def update_selected_crop(click_data, crop_search, current_crop):
+    def update_selected_crop(click_data, crop_search, reset_clicks, current_crop):
         """Update selected crop when bar chart is clicked or crop is searched."""
-        from dash import ctx
-        
+        # https://dash.plotly.com/advanced-callbacks
+
         triggered_id = ctx.triggered_id
         
+        # Issue 5: Reset button clears crop selection
+        if triggered_id == 'reset-crop-btn':
+            return None
+            
         if triggered_id == 'crop-search' and crop_search and crop_search != 'ALL':
             return crop_search
-        
         if triggered_id == 'chart-1' and click_data:
             try:
                 return click_data['points'][0]['y']
             except (KeyError, IndexError):
                 pass
-        
         return current_crop
+    
+    # Issue 5: Show/hide reset button based on crop selection
+    @app.callback(
+        Output('reset-crop-btn', 'style'),
+        [Input('selected-crop', 'data')]
+    )
+    def toggle_reset_button(selected_crop):
+        if selected_crop:
+            return {'marginLeft': '10px'}
+        return {'marginLeft': '10px', 'display': 'none'}
     
     @app.callback(
         Output('chart-1', 'figure'),
@@ -405,67 +417,76 @@ def create_app(use_sample: bool = USE_SAMPLE_DATA) -> Dash:
     )
     def update_chart_1(year, sector, measure, selected_state, view_mode):
         """Update Chart 1 - State crop summary."""
+
         df = app.data.get('state_crop_year', pd.DataFrame())
-        
         if df.empty:
             return _empty_fig("No data loaded")
-        
         if selected_state is None:
             return _empty_fig("Click a state on the map to see details")
-        
-        # Filter by sector
         if sector != 'ALL' and 'sector_desc' in df.columns:
             df = df[df['sector_desc'] == sector]
-        
-        # Determine measure based on view mode
         if view_mode == 'Labor & Operations':
             measure = 'operations'
         elif view_mode == 'Economics & Profitability':
             measure = 'revenue_usd'
         elif view_mode == 'Yield & Technology':
             measure = 'yield_per_acre'
-        
         if measure not in df.columns:
             measure = 'area_harvested_acres'
-        
         year_val = None if year == 'ALL' else year
-        
+
         return state_crop_bar_chart(df, selected_state, measure, year_val)
     
     @app.callback(
         Output('chart-2', 'figure'),
         [Input('selected-state', 'data'),
          Input('selected-crop', 'data'),
-         Input('viewmode-tabs', 'value')]
+         Input('viewmode-tabs', 'value'),
+         Input('year-select', 'value')]
     )
-    def update_chart_2(selected_state, selected_crop, view_mode):
-        """Update Chart 2 - Trend chart."""
+    def update_chart_2(selected_state, selected_crop, view_mode, year_value):
+        """Update Chart 2 - Trend chart with subtitle for year filter."""
+
         df = app.data.get('state_crop_year', pd.DataFrame())
         landuse_df = app.data.get('landuse', pd.DataFrame())
-        biotech_df = app.data.get('biotech', pd.DataFrame())
         farm_ops_df = app.data.get('farm_operations', pd.DataFrame())
         
         if selected_state is None:
             return _empty_fig("Select a state to see trends")
         
-        if view_mode == 'Overview':
-            return area_trend_chart(df, selected_state)
+        # A3 - Generate subtitle for year filter context
+        if year_value and year_value != 'ALL':
+            subtitle = f"Year filter: {year_value}"
+        else:
+            subtitle = "All years"
         
+        if view_mode == 'Overview':
+            # If a crop is selected from chart 1, show only that crop's trend
+            if selected_crop:
+                fig = area_trend_chart(df, selected_state, crops=[selected_crop])
+            else:
+                fig = area_trend_chart(df, selected_state)
+            fig.update_layout(title=dict(text=f"Area Trend<br><sup>{subtitle}</sup>"))
+            return fig
         elif view_mode == 'Land & Area':
             if not landuse_df.empty:
-                return land_use_trend_chart(landuse_df, selected_state)
-            return area_trend_chart(df, selected_state)
-        
+                fig = land_use_trend_chart(landuse_df, selected_state)
+            else:
+                fig = area_trend_chart(df, selected_state)
+            fig.update_layout(title=dict(text=f"Land Use Trend<br><sup>{subtitle}</sup>"))
+            return fig
         elif view_mode == 'Labor & Operations':
-            return operations_trend_chart(df, selected_state, farm_ops_df=farm_ops_df)
-        
+            fig = operations_trend_chart(df, selected_state, farm_ops_df=farm_ops_df)
+            fig.update_layout(title=dict(text=f"Operations Trend<br><sup>{subtitle}</sup>"))
+            return fig
         elif view_mode == 'Economics & Profitability':
-            return revenue_trend_chart(df, selected_state)
-        
-        elif view_mode == 'Yield & Technology':
-            crop = selected_crop if selected_crop in ['CORN', 'SOYBEANS', 'COTTON'] else 'CORN'
-            return yield_biotech_trend_chart(df, biotech_df, selected_state, crop)
-        
+            # If a crop is selected from chart 1, show only that crop's revenue trend
+            if selected_crop:
+                fig = revenue_trend_chart(df, selected_state, crops=[selected_crop])
+            else:
+                fig = revenue_trend_chart(df, selected_state)
+            fig.update_layout(title=dict(text=f"Revenue Trend<br><sup>{subtitle}</sup>"))
+            return fig
         return _empty_fig("Select a view mode")
     
     @app.callback(
@@ -473,19 +494,22 @@ def create_app(use_sample: bool = USE_SAMPLE_DATA) -> Dash:
         [Input('year-select', 'value'),
          Input('selected-state', 'data'),
          Input('selected-crop', 'data'),
-         Input('viewmode-tabs', 'value')]
+         Input('viewmode-tabs', 'value'),
+         Input('overview-boom-toggle', 'value')]
     )
-    def update_chart_3(year, selected_state, selected_crop, view_mode):
+    def update_chart_3(year, selected_state, selected_crop, view_mode, boom_toggle):
         """Update Chart 3 - Diagnostic/comparison chart."""
         df = app.data.get('state_crop_year', pd.DataFrame())
         landuse_df = app.data.get('landuse', pd.DataFrame())
-        biotech_df = app.data.get('biotech', pd.DataFrame())
         labor_df = app.data.get('labor', pd.DataFrame())
         
         year_val = None if year == 'ALL' else year
         
         if view_mode == 'Overview':
-            return boom_crops_chart(df, 'area_harvested_acres')
+            # D2 - Boom toggle: national vs selected state
+            if boom_toggle == 'state' and selected_state:
+                return boom_crops_chart(df, 'area_harvested_acres', state_filter=selected_state, selected_crop=selected_crop)
+            return boom_crops_chart(df, 'area_harvested_acres', selected_crop=selected_crop)
         
         elif view_mode == 'Land & Area':
             return area_vs_urban_scatter(df, landuse_df, selected_state)
@@ -495,12 +519,8 @@ def create_app(use_sample: bool = USE_SAMPLE_DATA) -> Dash:
             return labor_wage_trends(df, labor_df, selected_state, year_val)
         
         elif view_mode == 'Economics & Profitability':
-            if selected_state:
-                return revenue_vs_area_bubble(df, selected_state, year_val)
-            return sector_comparison_chart(df, year_val, 'revenue_usd')
-        
-        elif view_mode == 'Yield & Technology':
-            return yield_vs_biotech_scatter(df, biotech_df, 'CORN')
+            # C2 - Replace bubble chart with boom crops (revenue as measure)
+            return boom_crops_chart(df, 'revenue_usd', selected_crop=selected_crop)
         
         return _empty_fig("Select a view mode")
     
@@ -538,50 +558,76 @@ def create_app(use_sample: bool = USE_SAMPLE_DATA) -> Dash:
          Output('chart-2-header', 'children'),
          Output('chart-3-header', 'children')],
         [Input('viewmode-tabs', 'value'),
-         Input('selected-state', 'data')]
+         Input('selected-state', 'data'),
+         Input('year-select', 'value')]
     )
-    def update_headers(view_mode, selected_state):
-        """Update page and chart headers based on view mode."""
+    def update_headers(view_mode, selected_state, year_value):
+        """Update page and chart headers based on view mode with context."""
+        # G2 - Add state and year context to headers
         state_str = ""
+        year_str = ""
         if selected_state:
             state_row = HEX_LAYOUT[HEX_LAYOUT['state_alpha'] == selected_state]
             if not state_row.empty:
                 state_str = f" - {state_row['state_name'].iloc[0]}"
+        if year_value and year_value != 'ALL':
+            year_str = f" ({year_value})"
         
         headers = {
             'Overview': (
-                f"US Agricultural Overview{state_str}",
-                "Top Crops by Area",
+                f"US Agricultural Overview{state_str}{year_str}",
+                f"Top Crops by Area{state_str}",
                 "Area Trends Over Time",
                 "Fastest Growing Crops"
             ),
             'Land & Area': (
-                f"Land & Area Analysis{state_str}",
-                "Crops by Area Harvested",
+                f"Land & Area Analysis{state_str}{year_str}",
+                f"Crops by Area Harvested{state_str}",
                 "Land Use Composition",
                 "Cropland vs Urban Change"
             ),
             'Labor & Operations': (
-                f"Labor & Operations{state_str}",
-                "Crops by Number of Operations",
+                f"Labor & Operations{state_str}{year_str}",
+                f"Crops by Number of Operations{state_str}",
                 "Operations Trends",
                 "Labor Intensity by Crop"
             ),
             'Economics & Profitability': (
-                f"Economics & Profitability{state_str}",
-                "Crops by Revenue",
+                f"Economics & Profitability{state_str}{year_str}",
+                f"Crops by Revenue{state_str}",
                 "Revenue Trends",
-                "Revenue vs Area"
-            ),
-            'Yield & Technology': (
-                f"Yield & Technology{state_str}",
-                "Crops by Yield",
-                "Yield & Biotech Adoption",
-                "Yield vs GE Adoption (All States)"
+                "Boom Crops (Revenue)"
             )
         }
         
         return headers.get(view_mode, headers['Overview'])
+    
+    # A1 - Callback for measure-note (shows current measure description)
+    @app.callback(
+        Output('measure-note', 'children'),
+        [Input('measure-select', 'value')]
+    )
+    def update_measure_note(measure):
+        """Update the measure note based on selected measure."""
+        measure_notes = {
+            'area_harvested_acres': 'Total harvested area in acres',
+            'production_units': 'Total production in standard units',
+            'yield_per_acre': 'Production per acre harvested',
+            'revenue_usd': 'Estimated revenue in USD',
+            'num_operations': 'Number of farm operations'
+        }
+        return measure_notes.get(measure, '')
+    
+    # D1 - Callback to show/hide overview-boom-toggle based on view mode
+    @app.callback(
+        Output('overview-boom-toggle-container', 'style'),
+        [Input('viewmode-tabs', 'value')]
+    )
+    def toggle_boom_visibility(view_mode):
+        """Show boom toggle only in Overview mode."""
+        if view_mode == 'Overview':
+            return {'display': 'block', 'marginBottom': '10px'}
+        return {'display': 'none'}
     
     return app
 
@@ -653,7 +699,6 @@ def get_figures_for_notebook(
     
     df = data.get('state_crop_year', pd.DataFrame())
     landuse = data.get('landuse', pd.DataFrame())
-    biotech = data.get('biotech', pd.DataFrame())
     
     if df.empty:
         print("Warning: No data loaded")
@@ -675,10 +720,6 @@ def get_figures_for_notebook(
         figures['land_use'] = land_use_trend_chart(landuse, state_alpha)
         figures['urban_scatter'] = area_vs_urban_scatter(df, landuse, state_alpha)
     
-    if not biotech.empty:
-        figures['yield_biotech'] = yield_biotech_trend_chart(df, biotech, state_alpha, 'CORN')
-        figures['biotech_scatter'] = yield_vs_biotech_scatter(df, biotech, 'CORN')
-    
     return figures
 
 
@@ -694,4 +735,4 @@ if __name__ == "__main__":
     print("Open your browser to: http://127.0.0.1:8050")
     print("Press Ctrl+C to stop the server")
     print("=" * 60 + "\n")
-    app.run_server(debug=True)
+    app.run(debug=True)
