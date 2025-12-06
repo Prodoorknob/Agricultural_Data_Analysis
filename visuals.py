@@ -180,7 +180,7 @@ def hex_map_figure(
         mode='markers+text',
         marker=dict(
             symbol='hexagon',
-            size=42,  # Sized to prevent overlap while filling space
+            size=75,  # Sized to prevent overlap while filling space
             color=hex_df[value_col],
             colorscale=cscale,
             colorbar=dict(
@@ -212,7 +212,7 @@ def hex_map_figure(
                 mode='markers',
                 marker=dict(
                     symbol='hexagon',
-                    size=48,  # Slightly larger for highlight
+                    size=80,  # Slightly larger for highlight
                     color='rgba(0,0,0,0)',
                     line=dict(color='#FF6B6B', width=3)
                 ),
@@ -235,7 +235,7 @@ def hex_map_figure(
             showgrid=False, zeroline=False, showticklabels=False,
             range=[-7.5, 0.5]
         ),
-        height=500,
+        height=700,
         **LAYOUT_TEMPLATE
     )
     
@@ -352,7 +352,7 @@ def state_crop_bar_chart(
     
     fig.update_layout(
         title=dict(
-            text=title or f'Top {top_n} Crops in {state_name} by {value_col.replace("_", " ").title()}{year_str}',
+            text=title or f'Top Crops in {state_name} by {value_col.replace("_", " ").title()}{year_str}',
             font=TITLE_FONT
         ),
         xaxis_title=x_title,
@@ -432,6 +432,7 @@ def area_trend_chart(
         height=400,
         **LAYOUT_TEMPLATE
     )
+    fig.update_traces(connectgaps=True)
     
     return fig
 
@@ -450,7 +451,7 @@ LAND_USE_CATEGORIES = {
     'all_special_uses_of_land': 'Misc Land',
     'land_in_rural_transportation_facilities': 'Misc Land',
     'land_in_rural_parks_and_wildlife_areas': 'Misc Land',
-    'land_in_defense_and_industrial_areas': 'Misc Land',
+    'land_in_defense_and_industrial_areas': 'Urban Land',
     'farmsteads,_roads,_and_miscellaneous_farmland': 'Misc Land',
     'miscellaneous_other_land': 'Misc Land',
 }
@@ -689,8 +690,6 @@ def operations_trend_chart(
     return fig
 
 
-# NOTE: yield_biotech_trend_chart removed per B2 requirements (Yield & Technology view removed)
-
 
 def revenue_trend_chart(
     data_df: pd.DataFrame,
@@ -754,7 +753,7 @@ def revenue_trend_chart(
         height=400,
         **LAYOUT_TEMPLATE
     )
-    
+    fig.update_traces(connectgaps=True)
     return fig
 
 
@@ -866,14 +865,14 @@ def area_vs_urban_scatter(
             layer='below'
         )
         # Add annotation for the shaded area
-        fig.add_annotation(
-            x=changes['urban_change'].quantile(0.8),
-            y=threshold,
-            text='High Shift Zone',
-            showarrow=False,
-            font=dict(size=10, color='#FF6B6B'),
-            bgcolor='rgba(255,255,255,0.7)'
-        )
+        # fig.add_annotation(
+        #     x=changes['urban_change'].quantile(0.8),
+        #     y=threshold,
+        #     #text='High Shift Zone',
+        #     showarrow=False,
+        #     font=dict(size=10, color='#FF6B6B'),
+        #     bgcolor='rgba(255,255,255,0.7)'
+        # )
     
     # Add reference lines
     fig.add_hline(y=0, line_dash="dash", line_color="gray", opacity=0.5)
@@ -1146,9 +1145,9 @@ def labor_wage_trends(
     
     # Add data source annotation
     if has_bls_data:
-        source_text = "📊 Data: USDA NASS Farm Labor Survey + BLS Occupational Employment & Wage Statistics (OEWS)"
+        source_text = "Data: USDA NASS Farm Labor Survey + BLS Occupational Employment & Wage Statistics (OEWS)"
     else:
-        source_text = "📊 Data: USDA NASS Farm Labor Survey (limited state coverage after 2010)"
+        source_text = "Data: USDA NASS Farm Labor Survey (limited state coverage after 2010)"
     
     fig.add_annotation(
         text=source_text,
@@ -1203,8 +1202,6 @@ def labor_intensity_scatter(
     """Alias for labor_wage_trends for backwards compatibility."""
     return labor_wage_trends(data_df, labor_df, state_alpha, year, title)
 
-
-# NOTE: yield_vs_biotech_scatter removed per B2 requirements (Yield & Technology view removed)
 
 
 def sector_comparison_chart(
@@ -1339,7 +1336,7 @@ def boom_crops_chart(
     # Issue 6: Highlight selected crop with different color
     if selected_crop:
         colors = [
-            '#FF6B6B' if crop == selected_crop else ('#2ECC71' if x > 0 else '#E74C3C')
+            "#EEC40B" if crop == selected_crop else ('#2ECC71' if x > 0 else '#E74C3C')
             for crop, x in zip(top_gainers['commodity_desc'], top_gainers['pct_change'])
         ]
     else:

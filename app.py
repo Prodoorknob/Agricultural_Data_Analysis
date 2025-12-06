@@ -206,7 +206,6 @@ def create_app(use_sample = USE_SAMPLE_DATA):
     ])
     
     content = html.Div([
-        # Header with data source citations (Issue 3)
         html.Div([
             html.Div([
                 html.H3("US Agricultural Overview", id="page-title", style={'fontFamily': 'Segoe UI Semibold, sans-serif'}),
@@ -219,12 +218,10 @@ def create_app(use_sample = USE_SAMPLE_DATA):
                     html.Strong("Data Sources: "),
                     html.Br(),
                     "• USDA NASS Quick Stats",
-                    html.Br(),
                     "• USDA ERS Major Land Uses",
-                    html.Br(), 
                     "• BLS OEWS Wage Statistics"
                 ], style={'color': '#666', 'textAlign': 'right', 'fontSize': '11px'})
-            ], style={'position': 'absolute', 'top': '20px', 'right': '30px'})
+            ], style={'position': 'absolute', 'top': '10px', 'right': '60px'})
         ], className="mb-4", style={'position': 'relative'}),
         
         # Hex Map
@@ -246,13 +243,12 @@ def create_app(use_sample = USE_SAMPLE_DATA):
             ], width=12)
         ]),
         
-        # Chart 2 - Full width row (Issue 4: stacked layout)
+        # Chart 2
         dbc.Row([
             dbc.Col([
                 dbc.Card([
                     dbc.CardHeader([
                         html.Span(id="chart-2-header", style={'fontFamily': 'Segoe UI Semibold, sans-serif'}),
-                        # Issue 5: Reset button to show all crops
                         html.Button("Show All Crops", id="reset-crop-btn", 
                                     className="btn btn-sm btn-outline-secondary float-end",
                                     style={'marginLeft': '10px', 'display': 'none'})
@@ -264,7 +260,7 @@ def create_app(use_sample = USE_SAMPLE_DATA):
             ], width=12)
         ]),
         
-        # Chart 3 - Full width row (Issue 4: stacked layout)
+        # Chart 3
         dbc.Row([
             dbc.Col([
                 dbc.Card([
@@ -384,7 +380,7 @@ def create_app(use_sample = USE_SAMPLE_DATA):
 
         triggered_id = ctx.triggered_id
         
-        # Issue 5: Reset button clears crop selection
+        # Reset button clears crop selection
         if triggered_id == 'reset-crop-btn':
             return None
             
@@ -397,7 +393,7 @@ def create_app(use_sample = USE_SAMPLE_DATA):
                 pass
         return current_crop
     
-    # Issue 5: Show/hide reset button based on crop selection
+    # Show/hide reset button based on crop selection
     @app.callback(
         Output('reset-crop-btn', 'style'),
         [Input('selected-crop', 'data')]
@@ -506,7 +502,7 @@ def create_app(use_sample = USE_SAMPLE_DATA):
         year_val = None if year == 'ALL' else year
         
         if view_mode == 'Overview':
-            # D2 - Boom toggle: national vs selected state
+            # Boom toggle: national vs selected state
             if boom_toggle == 'state' and selected_state:
                 return boom_crops_chart(df, 'area_harvested_acres', state_filter=selected_state, selected_crop=selected_crop)
             return boom_crops_chart(df, 'area_harvested_acres', selected_crop=selected_crop)
@@ -515,11 +511,9 @@ def create_app(use_sample = USE_SAMPLE_DATA):
             return area_vs_urban_scatter(df, landuse_df, selected_state)
         
         elif view_mode == 'Labor & Operations':
-            # Show wage trends over time (more insightful than single-year scatter)
             return labor_wage_trends(df, labor_df, selected_state, year_val)
         
         elif view_mode == 'Economics & Profitability':
-            # C2 - Replace bubble chart with boom crops (revenue as measure)
             return boom_crops_chart(df, 'revenue_usd', selected_crop=selected_crop)
         
         return _empty_fig("Select a view mode")
