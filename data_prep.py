@@ -28,7 +28,7 @@ from io import StringIO
 # ============================================================================
 
 # S3 Configuration - Set USE_S3=True to load data from S3 bucket
-USE_S3 = False  # Load from S3 by default
+USE_S3 = True  # Load from S3 by default
 
 # Your S3 bucket URL (public access) - includes survey_datasets folder
 S3_BUCKET_URL = os.environ.get(
