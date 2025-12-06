@@ -1,0 +1,22 @@
+# USDA Agricultural Dashboard - Requirements for Render Deployment
+# Python version: 3.9+
+
+# Core web framework
+dash>=2.14.0
+dash-bootstrap-components>=1.5.0
+
+# Data processing
+pandas>=1.5.3
+numpy>=1.24.0
+
+# Visualization
+plotly>=5.17.0
+
+# HTTP requests (for S3 data loading)
+requests>=2.31.0
+
+# Python 3.9+ compatibility
+typing-extensions>=4.7.0
+
+# Optional performance improvements
+gunicorn>=21.2.0
