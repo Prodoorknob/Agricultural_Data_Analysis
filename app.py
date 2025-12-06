@@ -98,6 +98,10 @@ def create_app(use_sample = USE_SAMPLE_DATA):
         external_stylesheets=[dbc.themes.BOOTSTRAP],
         suppress_callback_exceptions=True
     )
+    
+    # Expose server for WSGI (gunicorn)
+    server = app.server
+    
     # Load data
     if use_sample:
         data = load_sample_data()
@@ -718,15 +722,21 @@ def get_figures_for_notebook(
 
 
 # ============================================================================
-# MAIN
+# MAIN - Create app instance at module level for gunicorn
 # ============================================================================
 
+# Create the app instance at module level for gunicorn to import
+app = create_app(use_sample=USE_SAMPLE_DATA)
+
+# Expose the Flask server object for WSGI servers (gunicorn, uwsgi, etc.)
+server = app.server
+
 if __name__ == "__main__":
-    app = create_app(use_sample=USE_SAMPLE_DATA)
+    # For local development with Flask dev server
     print("\n" + "=" * 60)
     print("Starting USDA Agricultural Dashboard")
     print("=" * 60)
     print("Open your browser to: http://127.0.0.1:8050")
     print("Press Ctrl+C to stop the server")
     print("=" * 60 + "\n")
-    app.run(debug=True)
+    app.run(host="0.0.0.0", port=8050, debug=True)

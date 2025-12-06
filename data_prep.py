@@ -28,9 +28,12 @@ from io import StringIO
 # ============================================================================
 
 # S3 Configuration - Set USE_S3=True to load data from S3 bucket
+# IMPORTANT: This uses PUBLIC S3 URLs (HTTPS) - NO AWS CREDENTIALS REQUIRED
+# The S3 bucket must have public read access enabled for these files
 USE_S3 = True  # Load from S3 by default
 
 # Your S3 bucket URL (public access) - includes survey_datasets folder
+# Override via environment variable: export S3_BUCKET_URL="https://your-bucket.s3.region.amazonaws.com/path"
 S3_BUCKET_URL = os.environ.get(
     'S3_BUCKET_URL', 
     'https://usda-analysis-datasets.s3.us-east-2.amazonaws.com/survey_datasets'
@@ -44,6 +47,9 @@ def get_file_path(filename: str) -> str:
     """
     Get the full path/URL for a data file.
     Returns S3 URL if USE_S3=True, otherwise local path.
+    
+    NOTE: When USE_S3=True, this returns public HTTPS URLs that pandas
+    can read directly without any AWS credentials or boto3.
     """
     if USE_S3:
         return f"{S3_BUCKET_URL}/{filename}"
@@ -54,17 +60,22 @@ def get_file_path(filename: str) -> str:
 def read_csv_file(filepath: str, **kwargs) -> pd.DataFrame:
     """
     Read a CSV file from either local path or S3 URL.
-    Pandas can read directly from URLs, so this works for both.
+    
+    MEMORY-CONSCIOUS: Pandas reads from URLs via streaming (chunked HTTP requests),
+    so large files don't need to be fully downloaded before parsing begins.
+    
+    NO AWS CREDENTIALS NEEDED: When filepath is an HTTPS URL to a public S3 object,
+    pandas uses standard HTTP requests - no boto3, no IAM, no access keys required.
     
     Args:
-        filepath: Local path or S3 URL
+        filepath: Local path or S3 HTTPS URL
         **kwargs: Additional arguments to pass to pd.read_csv
         
     Returns:
         DataFrame
     """
     try:
-        # pandas can read from URLs directly
+        # pandas can read from HTTPS URLs directly (public S3 objects work perfectly)
         df = pd.read_csv(filepath, **kwargs)
         return df
     except Exception as e:
