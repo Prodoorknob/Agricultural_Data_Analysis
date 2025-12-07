@@ -1,13 +1,18 @@
 import os
 import sys
 
+# Ensure current directory is first in path to avoid importing from subdirectories
+current_dir = os.path.abspath(os.path.dirname(__file__))
+if current_dir in sys.path:
+    sys.path.remove(current_dir)
+sys.path.insert(0, current_dir)
+
 from matplotlib import colors
-sys.path.insert(0, os.path.dirname(__file__))
 from dash import Dash, html, dcc, callback, Input, Output, State, ctx
 import dash_bootstrap_components as dbc
 import plotly.graph_objects as go
 import pandas as pd
-from Agri_data_backup.data_prep import (
+from data_prep import (
     prepare_all_data, 
     get_available_years, 
     get_available_crops, 

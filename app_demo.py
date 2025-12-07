@@ -10,8 +10,13 @@ import sys
 if 'USE_S3' not in os.environ:
     os.environ['USE_S3'] = 'False'
 
+# Ensure current directory is first in path to avoid importing from subdirectories
+current_dir = os.path.abspath(os.path.dirname(__file__))
+if current_dir in sys.path:
+    sys.path.remove(current_dir)
+sys.path.insert(0, current_dir)
+
 from matplotlib import colors
-sys.path.insert(0, os.path.dirname(__file__))
 from dash import Dash, html, dcc, callback, Input, Output, State, ctx
 import dash_bootstrap_components as dbc
 import plotly.graph_objects as go
