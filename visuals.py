@@ -1537,7 +1537,12 @@ def get_chart_for_view(
         elif chart_position == 2:
             return operations_trend_chart(state_crop_df, state_alpha)
         else:
-            return labor_intensity_scatter(state_crop_df, pd.DataFrame(), state_alpha, year)
+            # Chart 3: Labor wage trends
+            labor_df = data.get('labor', pd.DataFrame())
+            # Load national labor for comparison
+            from Agri_data_backup.data_prep import load_national_labor_summary
+            national_labor = load_national_labor_summary()
+            return labor_wage_trends(state_crop_df, labor_df, state_alpha, year, national_labor)
     
     elif view_mode == 'Economics & Profitability':
         if chart_position == 1:
@@ -1560,7 +1565,7 @@ def get_chart_for_view(
 if __name__ == "__main__":
     import sys
     sys.path.insert(0, '.')
-    from data_prep import load_sample_data
+    from Agri_data_backup.data_prep import load_sample_data
     
     print("Loading sample data...")
     data = load_sample_data()
