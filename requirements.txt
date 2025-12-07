@@ -1,5 +1,6 @@
 # USDA Agricultural Dashboard - Production Requirements
 # Python version: 3.11+
+# Updated: December 6, 2025 - Added fsspec for S3 parquet reading
 
 # Web Framework
 dash>=2.14.0

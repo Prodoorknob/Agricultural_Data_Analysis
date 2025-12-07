@@ -547,6 +547,8 @@ def load_state_data(state_name: str) -> pd.DataFrame:
     try:
         filepath = get_state_file_path(state_name)
         print(f"Loading state data: {state_name}...")
+        print(f"  USE_S3: {USE_S3}")
+        print(f"  File path: {filepath}")
         
         # Read parquet file (works with both local paths and S3 URLs)
         df = pd.read_parquet(filepath)
@@ -572,9 +574,14 @@ def load_state_data(state_name: str) -> pd.DataFrame:
         
     except FileNotFoundError:
         print(f"  Warning: State file not found for {state_name}")
+        print(f"  Attempted path: {filepath}")
         return pd.DataFrame()
     except Exception as e:
         print(f"  Error loading state data for {state_name}: {e}")
+        print(f"  Error type: {type(e).__name__}")
+        print(f"  Attempted path: {filepath}")
+        import traceback
+        traceback.print_exc()
         return pd.DataFrame()
 
 
