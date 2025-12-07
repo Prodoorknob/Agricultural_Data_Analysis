@@ -159,7 +159,7 @@ def create_app():
         [
             html.H5("🎯 DEMO MODE", className="alert-heading"),
             html.P(f"Data limited to {DEMO_START_YEAR}-{DEMO_END_YEAR} for demonstration purposes."),
-            html.P(f"Available states: {', '.join(DEMO_STATE_ALPHAS)}", style={'margin-bottom': '0', 'font-size': '14px'})
+            html.P(f"Available state: {', '.join(DEMO_STATE_ALPHAS)}", style={'margin-bottom': '0', 'font-size': '14px'})
         ],
         color="info",
         style={'margin-bottom': '20px'}
