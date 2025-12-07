@@ -5,15 +5,22 @@ Uses pre-filtered data files from partitioned_states_demo/ for lower memory usag
 """
 
 import os
+import sys
 import pandas as pd
-import Agri_data_backup.data_prep as data_prep
+
+# Ensure we import from current directory
+current_dir = os.path.abspath(os.path.dirname(__file__))
+if current_dir not in sys.path:
+    sys.path.insert(0, current_dir)
+
+import data_prep
 
 # Override the year filter constants
 DEMO_START_YEAR = 2019
 DEMO_END_YEAR = 2024
 
 # Import everything from the original data_prep
-from Agri_data_backup.data_prep import *
+from data_prep import *
 
 # Override directories to use demo versions
 PARTITIONED_STATES_DIR = 'partitioned_states_demo'
