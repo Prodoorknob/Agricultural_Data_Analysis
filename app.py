@@ -360,8 +360,9 @@ def create_app():
     # It also helps us identify crops and measures in each state uniformly.
 
     def update_hex_map(year, sector, measure, selected_state):
-        # For hex map, show empty map with all states (no data needed initially)
-        # This allows users to click any state to load its data
+        """Update the hexagonal map visualization with national data."""
+        print(f"\n=== HEX MAP CALLBACK ===")
+        print(f"Measure: {measure}, Year: {year}, Sector: {sector}")
         
         # Change color scale for different selected filters
         if 'area' in measure:
@@ -376,12 +377,67 @@ def create_app():
         year_str = f" ({year})" if year != 'ALL' else ""
         title = f"US States - Click to View Data{year_str}"
         
-        # Create empty dataframe - hex_map_figure will show all states without values
-        empty_df = pd.DataFrame()
+        # Load national crops data for hex map coloring
+        try:
+            national_df = load_national_crops_summary()
+            
+            if not national_df.empty:
+                # Map measure to statisticcat_desc
+                measure_mapping = {
+                    'area_harvested_acres': 'AREA HARVESTED',
+                    'area_planted_acres': 'AREA PLANTED',
+                    'revenue_usd': 'SALES',
+                    'operations': 'OPERATIONS',
+                    'ops_per_1k_acres': 'OPERATIONS'  # Will compute this later
+                }
+                
+                stat_cat = measure_mapping.get(measure)
+                if not stat_cat:
+                    # If measure not in mapping, return empty
+                    map_df = pd.DataFrame()
+                else:
+                    # Filter to the statistic category
+                    map_df = national_df[national_df['statisticcat_desc'] == stat_cat].copy()
+                    
+                    # Filter by year if specified
+                    if year != 'ALL' and 'year' in map_df.columns:
+                        year_int = int(year)
+                        map_df = map_df[map_df['year'] == year_int]
+                    
+                    # Filter by sector if specified
+                    if sector != 'ALL' and 'group_desc' in map_df.columns:
+                        # Note: sector in dropdown is like 'CROPS', 'ANIMALS & PRODUCTS'
+                        # group_desc in data is like 'FIELD CROPS', 'VEGETABLES', etc.
+                        # For now, skip sector filtering since group_desc is more granular
+                        pass
+                    
+                    # Aggregate by state_alpha
+                    if not map_df.empty and 'state_alpha' in map_df.columns:
+                        # Sum value_num by state
+                        map_df = map_df.groupby('state_alpha')['value_num'].sum().reset_index()
+                        # Rename value_num to the measure name for hex_map_figure
+                        map_df = map_df.rename(columns={'value_num': measure})
+                        print(f"Prepared hex map data: {len(map_df)} states")
+                        print(f"Sample:\n{map_df.head()}")
+                        
+                        # For ops_per_1k_acres, we would need area data too - skip for now
+                        if measure == 'ops_per_1k_acres':
+                            map_df = pd.DataFrame()  # Can't compute without area data
+                    else:
+                        print("Warning: Empty map_df or missing state_alpha column")
+                        map_df = pd.DataFrame()
+            else:
+                map_df = pd.DataFrame()
+        except Exception as e:
+            print(f"Could not load national data for hex map: {e}")
+            import traceback
+            traceback.print_exc()
+            map_df = pd.DataFrame()
         
         return hex_map_figure(
-            empty_df, 
-            measure, 
+            map_df, 
+            measure,
+            year=None,  # Already filtered in callback
             selected_state=selected_state,
             color_scale=cscale,
             title=title
