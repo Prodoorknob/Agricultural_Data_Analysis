@@ -18,6 +18,9 @@ seaborn>=0.12.2
 # HTTP requests (for S3 data loading via HTTPS URLs)
 requests>=2.31.0
 
+# S3/HTTP file access for pandas (required for reading parquet from S3 URLs)
+fsspec>=2023.6.0
+
 # WSGI server for production
 gunicorn>=21.2.0
 
