@@ -12,6 +12,7 @@ ASSUMPTIONS AND NOTES:
 - NASS QuickStats Value column may contain: commas, (D), (Z), (NA), (X) - cleaned to numeric
 - MajorLandUse.csv has columns: Region or State, Year, Land use, Value, Units
 - BiotechCropsAllTables2024.csv has columns: Attribute, State, Year, Value, Table (encoding='latin-1')
+- CACHING: For t2.micro or memory-constrained environments, uses in-memory cache
 
 You can edit the DATA_DIR path or S3 settings below to match your file structure.
 """
@@ -22,6 +23,52 @@ import numpy as np
 import pandas as pd
 from typing import Dict, Tuple, Optional, List
 from io import StringIO
+from functools import lru_cache
+import pickle
+import hashlib
+
+# ============================================================================
+# CACHING CONFIGURATION - For memory-constrained environments (e.g., t2.micro)
+# ============================================================================
+
+# Enable caching: Set to True on t2.micro/limited RAM environments
+ENABLE_CACHING = os.environ.get('ENABLE_CACHING', 'True').lower() == 'true'
+
+# Cache directory for pickle files (uses temp storage on EC2)
+CACHE_DIR = os.environ.get('CACHE_DIR', '/tmp/dashboard_cache')
+
+# Create cache directory if it doesn't exist
+if ENABLE_CACHING and not os.path.exists(CACHE_DIR):
+    try:
+        os.makedirs(CACHE_DIR, exist_ok=True)
+    except Exception as e:
+        print(f"Warning: Could not create cache directory {CACHE_DIR}: {e}")
+        ENABLE_CACHING = False
+
+# In-memory cache for DataFrames (key -> DataFrame)
+_DATA_CACHE = {}
+
+def _get_cache_key(filepath: str, **kwargs) -> str:
+    """Generate a unique cache key based on filepath and parameters."""
+    key_str = filepath + str(sorted(kwargs.items()))
+    return hashlib.md5(key_str.encode()).hexdigest()
+
+def _load_from_cache(cache_key: str) -> Optional[pd.DataFrame]:
+    """Load DataFrame from in-memory cache."""
+    if cache_key in _DATA_CACHE:
+        return _DATA_CACHE[cache_key].copy()
+    return None
+
+def _save_to_cache(cache_key: str, df: pd.DataFrame) -> None:
+    """Save DataFrame to in-memory cache."""
+    if ENABLE_CACHING:
+        _DATA_CACHE[cache_key] = df.copy()
+
+def clear_cache():
+    """Clear all cached data. Useful for freeing memory."""
+    global _DATA_CACHE
+    _DATA_CACHE.clear()
+    print("Cache cleared")
 
 # ============================================================================
 # CONFIGURATION - Edit these paths as needed
@@ -30,9 +77,23 @@ from io import StringIO
 # S3 Configuration - Set USE_S3=True to load data from S3 bucket
 # IMPORTANT: This uses PUBLIC S3 URLs (HTTPS) - NO AWS CREDENTIALS REQUIRED
 # The S3 bucket must have public read access enabled for these files
-USE_S3 = True  # Load from S3 by default
+#
+# DATA STRATEGY: State-partitioned parquet files for on-demand loading
+# - Only loads data for the selected state (reduces memory usage)
+# - National summaries cached globally (loaded once, reused)
+# - MajorLandUse.csv loaded separately as needed
+#
+# FILES REQUIRED IN S3 (58 total):
+#   - partitioned_states/*.parquet (50 state files)
+#   - partitioned_states/NATIONAL_SUMMARY_CROPS.parquet
+#   - partitioned_states/NATIONAL_SUMMARY_LABOR.parquet
+#   - partitioned_states/NATIONAL_SUMMARY_LANDUSE.parquet
+#   - MajorLandUse.csv
+#
+# See S3_UPLOAD_GUIDE.md for detailed upload instructions
+USE_S3 = os.environ.get('USE_S3', 'False').lower() == 'true'
 
-# Your S3 bucket URL (public access) - includes survey_datasets folder
+# Your S3 bucket URL (public access) - base path to survey_datasets folder
 # Override via environment variable: export S3_BUCKET_URL="https://your-bucket.s3.region.amazonaws.com/path"
 S3_BUCKET_URL = os.environ.get(
     'S3_BUCKET_URL', 
@@ -42,6 +103,24 @@ S3_BUCKET_URL = os.environ.get(
 # Local data directory (used when USE_S3=False)
 DATA_DIR = os.path.join(os.path.dirname(__file__), "survey_datasets")
 
+# ============================================================================
+# STATE-LEVEL PARTITIONING CONFIGURATION
+# ============================================================================
+
+# Use state-level partitioned data for on-demand loading
+USE_PARTITIONED_DATA = os.environ.get('USE_PARTITIONED_DATA', 'True').lower() == 'true'
+
+# Directory for state-level partitioned files
+PARTITIONED_STATES_DIR = 'partitioned_states'
+
+# In-memory cache for loaded states
+_STATE_DATA_CACHE = {}
+
+# Cache for national summary data (loaded once, reused across all states)
+_NATIONAL_LABOR_CACHE = None
+_NATIONAL_LANDUSE_CACHE = None
+_NATIONAL_CROPS_CACHE = None
+
 
 def get_file_path(filename: str) -> str:
     """
@@ -50,6 +129,16 @@ def get_file_path(filename: str) -> str:
     
     NOTE: When USE_S3=True, this returns public HTTPS URLs that pandas
     can read directly without any AWS credentials or boto3.
+    
+    Examples:
+        Local:  C:/path/to/survey_datasets/MajorLandUse.csv
+        S3:     https://bucket.s3.region.amazonaws.com/survey_datasets/MajorLandUse.csv
+    
+    Args:
+        filename: Relative filename (e.g., 'MajorLandUse.csv')
+        
+    Returns:
+        Full path or HTTPS URL
     """
     if USE_S3:
         return f"{S3_BUCKET_URL}/{filename}"
@@ -57,9 +146,105 @@ def get_file_path(filename: str) -> str:
         return os.path.join(DATA_DIR, filename)
 
 
+def get_state_file_path(state_name: str) -> str:
+    """
+    Get the full path/URL for a state-level partitioned file.
+    
+    Supports both state data files and national summary files:
+    - State files: INDIANA.parquet, CALIFORNIA.parquet, etc.
+    - National files: NATIONAL_SUMMARY_CROPS.parquet, NATIONAL_SUMMARY_LABOR.parquet, etc.
+    
+    Examples:
+        Local:  survey_datasets/partitioned_states/INDIANA.parquet
+        S3:     https://bucket.s3.region.amazonaws.com/survey_datasets/partitioned_states/INDIANA.parquet
+    
+    Args:
+        state_name: Name of the state or national summary file
+                   (e.g., 'CALIFORNIA', 'INDIANA', 'NATIONAL_SUMMARY_CROPS')
+        
+    Returns:
+        S3 URL or local path to the state's parquet file
+    """
+    filename = f"{PARTITIONED_STATES_DIR}/{state_name}.parquet"
+    if USE_S3:
+        return f"{S3_BUCKET_URL}/{filename}"
+    else:
+        return os.path.join(DATA_DIR, filename)
+
+
+def load_national_labor_summary() -> pd.DataFrame:
+    """
+    Load pre-aggregated labor wage data for all states.
+    Cached on first load to avoid repeated file I/O.
+    
+    Returns:
+        DataFrame with columns: year, state_alpha, state_name, wage_rate, data_source
+    """
+    global _NATIONAL_LABOR_CACHE
+    if _NATIONAL_LABOR_CACHE is not None:
+        return _NATIONAL_LABOR_CACHE
+    
+    try:
+        filepath = get_state_file_path('NATIONAL_SUMMARY_LABOR')
+        _NATIONAL_LABOR_CACHE = pd.read_parquet(filepath)
+        print(f"Loaded national labor summary: {len(_NATIONAL_LABOR_CACHE)} records")
+        return _NATIONAL_LABOR_CACHE
+    except Exception as e:
+        print(f"Warning: Could not load national labor summary: {e}")
+        return pd.DataFrame()
+
+
+def load_national_landuse_summary() -> pd.DataFrame:
+    """
+    Load pre-aggregated land use data for all states.
+    Cached on first load.
+    
+    Returns:
+        DataFrame with columns: state_name, year, total_cropland, land_in_urban_areas
+    """
+    global _NATIONAL_LANDUSE_CACHE
+    if _NATIONAL_LANDUSE_CACHE is not None:
+        return _NATIONAL_LANDUSE_CACHE
+    
+    try:
+        filepath = get_state_file_path('NATIONAL_SUMMARY_LANDUSE')
+        _NATIONAL_LANDUSE_CACHE = pd.read_parquet(filepath)
+        print(f"Loaded national land use summary: {len(_NATIONAL_LANDUSE_CACHE)} records")
+        return _NATIONAL_LANDUSE_CACHE
+    except Exception as e:
+        print(f"Warning: Could not load national land use summary: {e}")
+        return pd.DataFrame()
+
+
+def load_national_crops_summary() -> pd.DataFrame:
+    """
+    Load pre-aggregated crop data for all states (for boom crops national comparison).
+    Cached on first load.
+    
+    Returns:
+        DataFrame with columns: state_alpha, state_name, commodity_desc, year, 
+                                statisticcat_desc, value_num
+    """
+    global _NATIONAL_CROPS_CACHE
+    if _NATIONAL_CROPS_CACHE is not None:
+        return _NATIONAL_CROPS_CACHE
+    
+    try:
+        filepath = get_state_file_path('NATIONAL_SUMMARY_CROPS')
+        _NATIONAL_CROPS_CACHE = pd.read_parquet(filepath)
+        print(f"Loaded national crops summary: {len(_NATIONAL_CROPS_CACHE)} records")
+        return _NATIONAL_CROPS_CACHE
+    except Exception as e:
+        print(f"Warning: Could not load national crops summary: {e}")
+        return pd.DataFrame()
+
+
 def read_csv_file(filepath: str, **kwargs) -> pd.DataFrame:
     """
     Read a CSV file from either local path or S3 URL.
+    
+    CACHING: Automatically caches results in memory to avoid re-reading large files.
+    For t2.micro/limited RAM, this dramatically reduces memory pressure on repeated requests.
     
     MEMORY-CONSCIOUS: Pandas reads from URLs via streaming (chunked HTTP requests),
     so large files don't need to be fully downloaded before parsing begins.
@@ -72,11 +257,21 @@ def read_csv_file(filepath: str, **kwargs) -> pd.DataFrame:
         **kwargs: Additional arguments to pass to pd.read_csv
         
     Returns:
-        DataFrame
+        DataFrame (from cache if available, otherwise freshly loaded)
     """
     try:
-        # pandas can read from HTTPS URLs directly (public S3 objects work perfectly)
+        # Check cache first
+        cache_key = _get_cache_key(filepath, **kwargs)
+        cached_df = _load_from_cache(cache_key)
+        if cached_df is not None:
+            return cached_df
+        
+        # Read from source (pandas can read from HTTPS URLs directly)
         df = pd.read_csv(filepath, **kwargs)
+        
+        # Save to cache for future requests
+        _save_to_cache(cache_key, df)
+        
         return df
     except Exception as e:
         print(f"  Error reading {filepath}: {e}")
@@ -200,6 +395,84 @@ def clean_value_column(df: pd.DataFrame, value_col: str = 'Value',
     return df
 
 
+def filter_totals(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Filter out TOTALS commodities to avoid double-counting.
+    
+    TOTALS include aggregated categories like 'FIELD CROP TOTALS', 'ANIMAL TOTALS',
+    'DAIRY PRODUCT TOTALS', etc. which would duplicate individual crop/animal data.
+    
+    Args:
+        df: DataFrame with commodity_desc column
+        
+    Returns:
+        DataFrame with TOTALS rows removed
+    """
+    if 'commodity_desc' not in df.columns:
+        return df
+    
+    # Filter out any commodity that contains 'TOTAL'
+    return df[~df['commodity_desc'].str.contains('TOTAL', case=False, na=False)].copy()
+
+
+def filter_extreme_yoy_changes(df: pd.DataFrame, value_cols: list = None, 
+                                threshold: float = 10.0) -> pd.DataFrame:
+    """
+    Filter out data points with extreme year-over-year changes (>1000% by default).
+    
+    This helps remove data quality issues like unit conversion errors or
+    reporting mistakes that show up as unrealistic spikes.
+    
+    Args:
+        df: DataFrame with year, commodity_desc, and value columns
+        value_cols: List of value columns to check (defaults to revenue and area)
+        threshold: Multiplier threshold (10.0 = 1000% increase)
+        
+    Returns:
+        DataFrame with extreme outliers removed
+    """
+    if df.empty or 'year' not in df.columns or 'commodity_desc' not in df.columns:
+        return df
+    
+    if value_cols is None:
+        value_cols = ['revenue_usd', 'area_harvested_acres', 'area_planted_acres', 'production']
+    
+    # Only check columns that exist
+    value_cols = [col for col in value_cols if col in df.columns]
+    
+    if not value_cols:
+        return df
+    
+    df = df.copy()
+    df = df.sort_values(['commodity_desc', 'year'])
+    
+    # Mark rows to keep
+    keep_mask = pd.Series([True] * len(df), index=df.index)
+    
+    for col in value_cols:
+        # Calculate year-over-year ratio for each commodity
+        df['_prev_value'] = df.groupby('commodity_desc')[col].shift(1)
+        df['_yoy_ratio'] = df[col] / df['_prev_value']
+        
+        # Flag extreme increases (>1000% = ratio > 10)
+        # Also flag extreme decreases (>90% drop = ratio < 0.1)
+        extreme_mask = (df['_yoy_ratio'] > threshold) | (df['_yoy_ratio'] < 1.0/threshold)
+        
+        # Only flag if both current and previous values are substantial (not near zero)
+        substantial_mask = (df[col] > 1) & (df['_prev_value'] > 1)
+        
+        keep_mask &= ~(extreme_mask & substantial_mask & df[col].notna())
+    
+    # Clean up temporary columns
+    df = df.drop(columns=['_prev_value', '_yoy_ratio'], errors='ignore')
+    
+    removed_count = (~keep_mask).sum()
+    if removed_count > 0:
+        print(f"  Filtered {removed_count} rows with extreme YoY changes (>{threshold}x)")
+    
+    return df[keep_mask]
+
+
 # ============================================================================
 # DATA LOADING FUNCTIONS
 # ============================================================================
@@ -251,6 +524,210 @@ def load_nass_file(filepath: str, sample_frac: Optional[float] = None) -> pd.Dat
     
     print(f"  Loaded {len(df):,} rows")
     return df
+
+
+def load_state_data(state_name: str) -> pd.DataFrame:
+    """
+    Load all data for a specific state from state-level partitioned file.
+    This loads all years (2001-2025) and all datasets for the given state.
+    
+    CACHING: Results are cached in memory to avoid re-reading from disk/S3.
+    Each state file is typically < 3 MB, so caching 10-20 states is very memory-efficient.
+    
+    Args:
+        state_name: Name of the state in uppercase (e.g., 'CALIFORNIA', 'INDIANA')
+        
+    Returns:
+        DataFrame with all data for the state, or empty DataFrame if not found
+    """
+    # Check cache first
+    if state_name in _STATE_DATA_CACHE:
+        return _STATE_DATA_CACHE[state_name].copy()
+    
+    try:
+        filepath = get_state_file_path(state_name)
+        print(f"Loading state data: {state_name}...")
+        
+        # Read parquet file (works with both local paths and S3 URLs)
+        df = pd.read_parquet(filepath)
+        
+        # Clean the Value column if not already numeric
+        if 'Value' in df.columns and df['Value'].dtype == 'object':
+            df = clean_value_column(df)
+        
+        # Standardize state FIPS if present
+        if 'state_fips_code' in df.columns:
+            df['state_fips_code'] = df['state_fips_code'].astype(str).str.zfill(2)
+        
+        # Create FIPS code (state + county) if needed
+        if 'county_code' in df.columns and 'state_fips_code' in df.columns:
+            df['county_code'] = df['county_code'].astype(str).str.zfill(3)
+            df['fips'] = df['state_fips_code'] + df['county_code']
+        
+        # Cache for future use
+        _STATE_DATA_CACHE[state_name] = df.copy()
+        
+        print(f"  Loaded {len(df):,} rows for {state_name}")
+        return df
+        
+    except FileNotFoundError:
+        print(f"  Warning: State file not found for {state_name}")
+        return pd.DataFrame()
+    except Exception as e:
+        print(f"  Error loading state data for {state_name}: {e}")
+        return pd.DataFrame()
+
+
+def clear_state_cache():
+    """Clear cached state data. Useful for freeing memory."""
+    global _STATE_DATA_CACHE
+    _STATE_DATA_CACHE.clear()
+    print("State data cache cleared")
+
+
+def process_state_data(state_name: str) -> Dict[str, pd.DataFrame]:
+    """
+    Load and process data for a specific state into the format expected by visualizations.
+    
+    This function:
+    1. Loads the state's raw data from the partitioned file
+    2. Aggregates it into state_crop_year format
+    3. Computes state totals
+    4. Loads land use and labor data if available
+    5. Returns a dictionary matching the structure from prepare_all_data()
+    
+    Args:
+        state_name: State name in uppercase (e.g., 'CALIFORNIA', 'INDIANA')
+        
+    Returns:
+        Dictionary with keys: 'nass_raw', 'state_crop_year', 'state_totals', 'landuse', 'labor', 'farm_operations'
+    """
+    result = {}
+    
+    # Load raw state data (NASS crops/animals/economics)
+    state_df = load_state_data(state_name)
+    
+    if state_df.empty:
+        print(f"Warning: No data found for {state_name}")
+        return {
+            'nass_raw': pd.DataFrame(),
+            'state_crop_year': pd.DataFrame(),
+            'state_totals': pd.DataFrame(),
+            'landuse': pd.DataFrame(),
+            'labor': pd.DataFrame(),
+            'farm_operations': pd.DataFrame(),
+            'biotech': pd.DataFrame()
+        }
+    
+    result['nass_raw'] = state_df
+    
+    # Aggregate to state × crop × year format
+    state_crop_year = aggregate_state_crop_year(state_df)
+    result['state_crop_year'] = state_crop_year
+    
+    # Compute state totals
+    if not state_crop_year.empty:
+        result['state_totals'] = compute_state_totals(state_crop_year)
+    else:
+        result['state_totals'] = pd.DataFrame()
+    
+    # Load land use data for this state (from full MLU dataset - small file)
+    try:
+        mlu_df = load_major_land_use()
+        if not mlu_df.empty and 'state_name' in mlu_df.columns:
+            state_mlu = mlu_df[mlu_df['state_name'].str.upper() == state_name]
+            result['landuse'] = aggregate_state_year_landuse(state_mlu)
+        else:
+            result['landuse'] = pd.DataFrame()
+    except Exception as e:
+        print(f"  Warning: Could not load land use data for {state_name}: {e}")
+        result['landuse'] = pd.DataFrame()
+    
+    # Extract labor data from the state partition (Economics dataset already loaded)
+    # Labor data is in Economics dataset with commodity_desc='LABOR'
+    try:
+        if not state_df.empty and 'dataset_source' in state_df.columns:
+            economics_df = state_df[state_df['dataset_source'] == 'nass_economics'].copy()
+            if not economics_df.empty and 'commodity_desc' in economics_df.columns:
+                labor_df = economics_df[economics_df['commodity_desc'] == 'LABOR'].copy()
+                
+                if not labor_df.empty and 'statisticcat_desc' in labor_df.columns:
+                    # Aggregate by year and statistic category
+                    labor_by_year = []
+                    for year, year_group in labor_df.groupby('year'):
+                        row = {
+                            'year': int(year),
+                            'state_alpha': year_group['state_alpha'].iloc[0] if 'state_alpha' in year_group.columns else None,
+                            'state_name': year_group['state_name'].iloc[0] if 'state_name' in year_group.columns else None,
+                            'data_source': 'USDA_NASS'
+                        }
+                        
+                        # Extract wage rate
+                        wage_rows = year_group[year_group['statisticcat_desc'].str.contains('WAGE RATE', case=False, na=False)]
+                        if not wage_rows.empty:
+                            row['wage_rate'] = wage_rows['value_num'].mean()
+                        
+                        # Extract workers
+                        worker_rows = year_group[year_group['statisticcat_desc'].str.contains('WORKERS', case=False, na=False)]
+                        if not worker_rows.empty:
+                            row['workers'] = worker_rows['value_num'].sum()
+                        
+                        # Extract hours
+                        hours_rows = year_group[year_group['statisticcat_desc'].str.contains('TIME WORKED', case=False, na=False)]
+                        if not hours_rows.empty:
+                            row['hours_per_week'] = hours_rows['value_num'].mean()
+                        
+                        labor_by_year.append(row)
+                    
+                    result['labor'] = pd.DataFrame(labor_by_year) if labor_by_year else pd.DataFrame()
+                    print(f"  Extracted labor data: {len(result['labor'])} year records")
+                else:
+                    result['labor'] = pd.DataFrame()
+            else:
+                result['labor'] = pd.DataFrame()
+        else:
+            result['labor'] = pd.DataFrame()
+    except Exception as e:
+        print(f"  Warning: Could not extract labor data from partition: {e}")
+        result['labor'] = pd.DataFrame()
+    
+    # Extract farm operations from the state partition (Economics dataset already loaded)
+    try:
+        if not state_df.empty and 'dataset_source' in state_df.columns:
+            economics_df = state_df[state_df['dataset_source'] == 'nass_economics'].copy()
+            if not economics_df.empty and 'commodity_desc' in economics_df.columns:
+                # Filter to SURVEY source only to avoid census year double-counting (2002, 2007, 2012, 2017, 2022)
+                if 'source_desc' in economics_df.columns:
+                    economics_df = economics_df[economics_df['source_desc'] == 'SURVEY']
+                
+                ops_df = economics_df[
+                    (economics_df['commodity_desc'] == 'FARM OPERATIONS') &
+                    (economics_df['statisticcat_desc'] == 'OPERATIONS')
+                ].copy()
+                
+                if not ops_df.empty:
+                    # Aggregate by year
+                    ops_by_year = ops_df.groupby('year').agg({
+                        'value_num': 'sum',
+                        'state_alpha': 'first',
+                        'state_name': 'first'
+                    }).reset_index()
+                    ops_by_year = ops_by_year.rename(columns={'value_num': 'total_operations'})
+                    result['farm_operations'] = ops_by_year
+                    print(f"  Extracted operations data: {len(result['farm_operations'])} year records")
+                else:
+                    result['farm_operations'] = pd.DataFrame()
+            else:
+                result['farm_operations'] = pd.DataFrame()
+        else:
+            result['farm_operations'] = pd.DataFrame()
+    except Exception as e:
+        print(f"  Warning: Could not extract farm operations from partition: {e}")
+        result['farm_operations'] = pd.DataFrame()
+    
+    result['biotech'] = pd.DataFrame()
+    
+    return result
 
 
 def load_all_nass_data(sample_frac: Optional[float] = None,
@@ -343,68 +820,24 @@ def load_major_land_use() -> pd.DataFrame:
     # Multiply by 1000 since units are "1,000 acres"
     df['acres'] = df['acres'] * 1000
     
-    print(f"  Loaded {len(df):,} rows")
-    return df
-
-
-def load_biotech_data() -> pd.DataFrame:
-    """
-    Load and process the Biotech Crops adoption dataset.
-    
-    Returns:
-        DataFrame with columns: state_name, state_alpha, year, crop, attribute, pct_adopted
-    """
-    filepath = get_file_path(BIOTECH_FILE)
-    print(f"Loading: {BIOTECH_FILE}...")
-    
-    df = read_csv_file(filepath, encoding='latin-1')
-    
-    # Rename columns
-    df = df.rename(columns={
-        'State': 'state_name',
-        'Year': 'year',
-        'Attribute': 'attribute',
-        'Value': 'pct_adopted'
-    })
-    
-    # Map state names to alpha codes
-    df['state_alpha'] = df['state_name'].map(STATE_NAME_TO_ALPHA)
-    
-    # Parse crop type from attribute
-    def extract_crop(attr):
-        attr_lower = attr.lower()
-        if 'corn' in attr_lower:
-            return 'CORN'
-        elif 'soybean' in attr_lower:
-            return 'SOYBEANS'
-        elif 'cotton' in attr_lower:
-            return 'COTTON'
-        else:
-            return 'OTHER'
-    
-    # Parse biotech trait type
-    def extract_trait(attr):
-        attr_lower = attr.lower()
-        if 'bt only' in attr_lower or 'insect-resistant' in attr_lower:
-            return 'bt_only'
-        elif 'ht only' in attr_lower or 'herbicide-tolerant' in attr_lower:
-            return 'ht_only'
-        elif 'stacked' in attr_lower:
-            return 'stacked'
-        elif 'all ge' in attr_lower:
-            return 'all_ge'
-        else:
-            return 'other'
-    
-    df['crop'] = df['attribute'].apply(extract_crop)
-    df['trait_type'] = df['attribute'].apply(extract_trait)
-    
-    # Convert percentage to numeric
-    df['pct_adopted'] = pd.to_numeric(df['pct_adopted'], errors='coerce')
+    # Filter to years 2004-2024
+    if 'year' in df.columns:
+        df = df[(df['year'] >= 2004) & (df['year'] <= 2024)]
+        print(f"  Filtered to years 2004-2024")
     
     print(f"  Loaded {len(df):,} rows")
     return df
 
+
+# ============================================================================
+# BIOTECH FUNCTIONS - REMOVED (not used in sample data deployment)
+# ============================================================================
+
+# load_biotech_data() and aggregate_biotech_state_crop_year() removed
+
+# ============================================================================
+# LABOR DATA LOADING
+# ============================================================================
 
 def load_labor_data() -> pd.DataFrame:
     """
@@ -442,6 +875,10 @@ def load_labor_data() -> pd.DataFrame:
     
     # Clean values
     labor_df = clean_value_column(labor_df)
+    
+    # Filter to years 2004-2024
+    if 'year' in labor_df.columns:
+        labor_df = labor_df[(labor_df['year'] >= 2004) & (labor_df['year'] <= 2024)]
     
     # Filter to state-level data
     if 'agg_level_desc' in labor_df.columns:
@@ -642,6 +1079,10 @@ def load_farm_operations_data() -> pd.DataFrame:
     # Clean values
     ops_df = clean_value_column(ops_df)
     
+    # Filter to years 2004-2024
+    if 'year' in ops_df.columns:
+        ops_df = ops_df[(ops_df['year'] >= 2004) & (ops_df['year'] <= 2024)]
+    
     # Filter to state-level data
     if 'agg_level_desc' in ops_df.columns:
         ops_df = ops_df[ops_df['agg_level_desc'] == 'STATE']
@@ -680,11 +1121,38 @@ def aggregate_state_crop_year(nass_df: pd.DataFrame) -> pd.DataFrame:
     Returns:
         Aggregated DataFrame
     """
+    # Filter out TOTALS to avoid double-counting
+    df = filter_totals(nass_df)
+    
+    # Filter to years 2004-2024 only
+    if 'year' in df.columns:
+        df = df[(df['year'] >= 2004) & (df['year'] <= 2024)].copy()
+        print(f"  Filtered to years 2004-2024")
+    
+    # Filter to SURVEY source only to avoid census year double-counting
+    if 'source_desc' in df.columns:
+        df = df[df['source_desc'] == 'SURVEY'].copy()
+    
     # Filter to state-level aggregations only
-    df = nass_df[nass_df['agg_level_desc'] == 'STATE'].copy()
+    if 'agg_level_desc' in df.columns:
+        df = df[df['agg_level_desc'] == 'STATE'].copy()
+    else:
+        # If agg_level_desc is missing, assume all data is state-level
+        df = df.copy()
     
     if df.empty:
-        print("Warning: No state-level data found")
+        print("Warning: No state-level data found in aggregate_state_crop_year")
+        print(f"  Input columns: {nass_df.columns.tolist()}")
+        if 'agg_level_desc' in nass_df.columns:
+            print(f"  Agg levels present: {nass_df['agg_level_desc'].unique().tolist()}")
+        return pd.DataFrame()
+    
+    # Check required columns exist
+    required_cols = ['state_alpha', 'state_name', 'commodity_desc', 'year', 'sector_desc', 'statisticcat_desc', 'value_num']
+    missing_cols = [col for col in required_cols if col not in df.columns]
+    if missing_cols:
+        print(f"Warning: Missing required columns: {missing_cols}")
+        print(f"  Available columns: {df.columns.tolist()}")
         return pd.DataFrame()
     
     # Get commodity list
@@ -696,10 +1164,12 @@ def aggregate_state_crop_year(nass_df: pd.DataFrame) -> pd.DataFrame:
         # Filter to this statistic category
         cat_df = df[df['statisticcat_desc'] == stat_cat]
         
-        # Aggregate by state, crop, year
-        agg_df = cat_df.groupby(
-            ['state_alpha', 'state_name', 'commodity_desc', 'year', 'sector_desc']
-        ).agg({
+        # Aggregate by state, crop, year (include group_desc for filtering)
+        group_cols = ['state_alpha', 'state_name', 'commodity_desc', 'year', 'sector_desc']
+        if 'group_desc' in cat_df.columns:
+            group_cols.append('group_desc')
+        
+        agg_df = cat_df.groupby(group_cols).agg({
             'value_num': 'sum',
             'unit_desc': 'first'
         }).reset_index()
@@ -712,9 +1182,14 @@ def aggregate_state_crop_year(nass_df: pd.DataFrame) -> pd.DataFrame:
     
     long_df = pd.concat(results, ignore_index=True)
     
+    # Determine pivot index columns based on available columns
+    pivot_index = ['state_alpha', 'state_name', 'commodity_desc', 'year', 'sector_desc']
+    if 'group_desc' in long_df.columns:
+        pivot_index.append('group_desc')
+    
     # Pivot to get metrics as columns
     pivot_df = long_df.pivot_table(
-        index=['state_alpha', 'state_name', 'commodity_desc', 'year', 'sector_desc'],
+        index=pivot_index,
         columns='statistic',
         values='value_num',
         aggfunc='sum'
@@ -743,6 +1218,9 @@ def aggregate_state_crop_year(nass_df: pd.DataFrame) -> pd.DataFrame:
         pivot_df['ops_per_1k_acres'] = (
             pivot_df['operations'] / pivot_df['area_harvested_acres'] * 1000
         ).replace([np.inf, -np.inf], np.nan)
+    
+    # Filter extreme year-over-year changes (data quality filter)
+    pivot_df = filter_extreme_yoy_changes(pivot_df, threshold=10.0)
     
     print(f"Aggregated state×crop×year: {len(pivot_df):,} rows")
     return pivot_df
@@ -783,35 +1261,9 @@ def aggregate_state_year_landuse(mlu_df: pd.DataFrame) -> pd.DataFrame:
     return pivot_df
 
 
-def aggregate_biotech_state_crop_year(biotech_df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Pivot biotech data to state × crop × year with trait types as columns.
-    
-    Args:
-        biotech_df: Cleaned biotech DataFrame
-        
-    Returns:
-        DataFrame with columns: state_alpha, crop, year, pct_bt, pct_ht, pct_stacked, pct_all_ge
-    """
-    pivot_df = biotech_df.pivot_table(
-        index=['state_alpha', 'state_name', 'crop', 'year'],
-        columns='trait_type',
-        values='pct_adopted',
-        aggfunc='mean'
-    ).reset_index()
-    
-    # Rename columns
-    rename_map = {
-        'bt_only': 'pct_bt',
-        'ht_only': 'pct_ht', 
-        'stacked': 'pct_stacked',
-        'all_ge': 'pct_all_ge'
-    }
-    pivot_df = pivot_df.rename(columns=rename_map)
-    
-    print(f"Aggregated biotech state×crop×year: {len(pivot_df):,} rows")
-    return pivot_df
-
+# ============================================================================
+# STATE TOTALS COMPUTATION
+# ============================================================================
 
 def compute_state_totals(state_crop_df: pd.DataFrame) -> pd.DataFrame:
     """

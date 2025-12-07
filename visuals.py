@@ -152,26 +152,40 @@ def hex_map_figure(
     hex_df = HEX_LAYOUT.copy()
     
     # Prepare data for merging
-    if year is not None and 'year' in data_df.columns:
-        merge_data = data_df[data_df['year'] == year].copy()
+    if not data_df.empty:
+        if year is not None and 'year' in data_df.columns:
+            merge_data = data_df[data_df['year'] == year].copy()
+        else:
+            merge_data = data_df.copy()
+        
+        # Aggregate if there are duplicates
+        if value_col in merge_data.columns:
+            merge_data = merge_data.groupby('state_alpha').agg({
+                value_col: 'sum'
+            }).reset_index()
+            
+            # Merge with hex layout
+            hex_df = hex_df.merge(merge_data[['state_alpha', value_col]], 
+                                  on='state_alpha', how='left')
     else:
-        merge_data = data_df.copy()
+        # If no data, add empty value column for consistent display
+        hex_df[value_col] = 0  # Use 0 instead of None for valid color mapping
     
-    # Aggregate if there are duplicates
-    if value_col in merge_data.columns:
-        merge_data = merge_data.groupby('state_alpha').agg({
-            value_col: 'sum'
-        }).reset_index()
-    
-    # Merge with hex layout
-    hex_df = hex_df.merge(merge_data[['state_alpha', value_col]], 
-                          on='state_alpha', how='left')
+    # Fill NaN values with 0 for valid color mapping
+    if value_col in hex_df.columns:
+        hex_df[value_col] = hex_df[value_col].fillna(0)
     
     # Get colorscale
     cscale = COLOR_SCALES.get(color_scale, color_scale)
     
     # Create figure
     fig = go.Figure()
+    
+    # Determine if we should show colorbar (only if we have actual data)
+    has_data = bool(hex_df[value_col].sum() > 0)
+    
+    # Default color for states (when no data)
+    default_color = '#7CB9E8'  # Light blue - more appealing than gray
     
     # Add hexagon markers for each state - sized to fit without overlap
     fig.add_trace(go.Scatter(
@@ -180,23 +194,24 @@ def hex_map_figure(
         mode='markers+text',
         marker=dict(
             symbol='hexagon',
-            size=75,  # Sized to prevent overlap while filling space
-            color=hex_df[value_col],
-            colorscale=cscale,
+            size=55,  # Sized for compact display (reduced from 75 originally)
+            color=hex_df[value_col] if has_data else [default_color] * len(hex_df),
+            colorscale=cscale if has_data else None,
             colorbar=dict(
                 title=value_col.replace('_', ' ').title(),
                 thickness=15,
                 len=0.8
-            ),
+            ) if has_data else None,
             line=dict(color='white', width=1),
-            showscale=True
+            showscale=has_data
         ),
         text=hex_df['state_alpha'],
         textposition='middle center',
         textfont=dict(color='white', size=9, family='Segoe UI Semibold'),
         hovertemplate=(
             '<b>%{customdata[0]}</b><br>' +
-            f'{value_col}: ' + '%{customdata[1]:,.0f}<extra></extra>'
+            (f'{value_col}: ' + '%{customdata[1]:,.0f}<extra></extra>' if has_data 
+             else 'Click to load data<extra></extra>')
         ),
         customdata=np.stack([hex_df['state_name'], hex_df[value_col]], axis=-1),
         name=''
@@ -212,7 +227,7 @@ def hex_map_figure(
                 mode='markers',
                 marker=dict(
                     symbol='hexagon',
-                    size=80,  # Slightly larger for highlight
+                    size=60,  # Slightly larger for highlight (5 units larger than base)
                     color='rgba(0,0,0,0)',
                     line=dict(color='#FF6B6B', width=3)
                 ),
@@ -220,7 +235,7 @@ def hex_map_figure(
                 name='Selected'
             ))
     
-    # Update layout - adjusted ranges for proper hex spacing
+    # Update layout - adjusted ranges for compact hex spacing
     fig.update_layout(
         title=dict(
             text=title or f'US States by {value_col.replace("_", " ").title()}',
@@ -229,13 +244,13 @@ def hex_map_figure(
         showlegend=False,
         xaxis=dict(
             showgrid=False, zeroline=False, showticklabels=False,
-            range=[-0.5, 12.5], scaleanchor='y', scaleratio=1
+            range=[-0.3, 11.3], scaleanchor='y', scaleratio=0.9  # Tighter spacing
         ),
         yaxis=dict(
             showgrid=False, zeroline=False, showticklabels=False,
-            range=[-7.5, 0.5]
+            range=[-6.5, 0.3]  # Reduced for more compact vertical spacing
         ),
-        height=700,
+        height=550,  # Reduced from 700 for more compact appearance
         **LAYOUT_TEMPLATE
     )
     
@@ -311,12 +326,14 @@ def state_crop_bar_chart(
     # Create figure
     fig = go.Figure()
     
-    # Format values - show in thousands for area columns
+    # Format values - normalize area to 100M acres base, show others as-is
     is_area_col = 'area' in value_col.lower() or 'acres' in value_col.lower()
     
     if is_area_col:
-        # Show in thousands with 'K' suffix
-        text_labels = [f'{v/1000:,.1f}K ({p:.1f}%)' for v, p in zip(agg_df[value_col], agg_df['pct_of_total'])]
+        # Normalize to 100M acres base for better percentage representation
+        AREA_BASE = 100_000_000  # 100M acres
+        display_values = agg_df[value_col] / AREA_BASE
+        text_labels = [f'{v:.2f} ({p:.1f}%)' for v, p in zip(display_values, agg_df['pct_of_total'])]
         hover_template = '<b>%{y}</b><br>' + f'{value_col}: ' + '%{customdata:,.0f} acres<extra></extra>'
     else:
         text_labels = [f'{v:,.0f} ({p:.1f}%)' for v, p in zip(agg_df[value_col], agg_df['pct_of_total'])]
@@ -324,17 +341,17 @@ def state_crop_bar_chart(
     
     fig.add_trace(go.Bar(
         y=agg_df['commodity_desc'],
-        x=agg_df[value_col],
+        x=display_values if is_area_col else agg_df[value_col],
         orientation='h',
         marker=dict(
-            color=agg_df[value_col],
+            color=agg_df[value_col],  # Use original values for color scale
             colorscale=color_scale,
             showscale=False
         ),
         text=text_labels,
         textposition='outside',
         hovertemplate=hover_template,
-        customdata=agg_df[value_col],
+        customdata=agg_df[value_col] if is_area_col else agg_df[value_col],  # Show actual acres in hover
         name=''
     ))
     
@@ -344,9 +361,9 @@ def state_crop_bar_chart(
     
     year_str = f' ({year})' if year else ''
     
-    # Adjust x-axis title for area columns to show thousands
+    # Adjust x-axis title for area columns to show normalized units
     if is_area_col:
-        x_title = f'{value_col.replace("_", " ").title()} (thousands)'
+        x_title = f'{value_col.replace("_", " ").title()} (per 100M acres)'
     else:
         x_title = value_col.replace('_', ' ').title()
     
@@ -754,6 +771,28 @@ def revenue_trend_chart(
         **LAYOUT_TEMPLATE
     )
     fig.update_traces(connectgaps=True)
+    
+    # Add annotation for HAY in 2020 (COVID-19 supply chain disruptions)
+    if 'HAY' in df['commodity_desc'].values and 2020 in df['year'].values:
+        hay_2020 = df[(df['commodity_desc'] == 'HAY') & (df['year'] == 2020)]
+        if not hay_2020.empty and 'revenue_usd' in hay_2020.columns:
+            fig.add_annotation(
+                x=2020,
+                y=hay_2020['revenue_usd'].iloc[0],
+                text="⚠ COVID-19<br>disruptions",
+                showarrow=True,
+                arrowhead=2,
+                arrowsize=1,
+                arrowwidth=2,
+                arrowcolor="#ff6b6b",
+                ax=-40,
+                ay=-40,
+                font=dict(size=10, color="#ff6b6b"),
+                bgcolor="rgba(255,255,255,0.8)",
+                bordercolor="#ff6b6b",
+                borderwidth=1
+            )
+    
     return fig
 
 
@@ -765,33 +804,41 @@ def area_vs_urban_scatter(
     crop_df: pd.DataFrame,
     landuse_df: pd.DataFrame,
     state_alpha: Optional[str] = None,
+    national_landuse_df: Optional[pd.DataFrame] = None,
     title: Optional[str] = None
 ) -> go.Figure:
     """
     Create a scatter plot comparing change in cropland vs change in urban land.
     
     Args:
-        crop_df: Crop data with area_harvested_acres
-        landuse_df: Land use data with cropland and urban land
+        crop_df: Crop data with area_harvested_acres (not used but kept for consistency)
+        landuse_df: Land use data for selected state with cropland and urban land
         state_alpha: If specified, highlight this state
+        national_landuse_df: Optional national-level land use data for all states
         title: Optional title
         
     Returns:
         Plotly Figure object
     """
-    if landuse_df.empty:
+    # Use national data if provided, otherwise fall back to landuse_df
+    data_to_use = national_landuse_df if national_landuse_df is not None and not national_landuse_df.empty else landuse_df
+    
+    if data_to_use.empty:
         return _empty_figure("No land use data available")
     
     # Compute changes between earliest and latest year for each state
-    years = landuse_df['year'].unique()
+    years = data_to_use['year'].unique()
     if len(years) < 2:
         return _empty_figure("Need at least 2 years of data for comparison")
     
     early_year = min(years)
     late_year = max(years)
     
-    early = landuse_df[landuse_df['year'] == early_year].set_index('state_alpha')
-    late = landuse_df[landuse_df['year'] == late_year].set_index('state_alpha')
+    # Check if data has state_alpha or state_name for grouping
+    group_col = 'state_alpha' if 'state_alpha' in data_to_use.columns else 'state_name'
+    
+    early = data_to_use[data_to_use['year'] == early_year].set_index(group_col)
+    late = data_to_use[data_to_use['year'] == late_year].set_index(group_col)
     
     # Calculate changes
     changes = pd.DataFrame()
@@ -803,7 +850,16 @@ def area_vs_urban_scatter(
         changes['urban_change'] = (late['land_in_urban_areas'] - early['land_in_urban_areas']) / early['land_in_urban_areas'] * 100
     
     changes = changes.reset_index()
-    changes = changes.merge(HEX_LAYOUT[['state_alpha', 'state_name']], on='state_alpha')
+    changes = changes.rename(columns={group_col: 'state_key'})
+    
+    # Merge with hex layout to get state_alpha and state_name
+    if group_col == 'state_name':
+        changes['state_name_upper'] = changes['state_key'].str.upper()
+        hex_merge = HEX_LAYOUT.copy()
+        hex_merge['state_name_upper'] = hex_merge['state_name'].str.upper()
+        changes = changes.merge(hex_merge[['state_alpha', 'state_name', 'state_name_upper']], on='state_name_upper', how='left')
+    else:
+        changes = changes.merge(HEX_LAYOUT[['state_alpha', 'state_name']], left_on='state_key', right_on='state_alpha', how='left')
     
     if 'cropland_change' not in changes.columns or 'urban_change' not in changes.columns:
         return _empty_figure("Missing cropland or urban data")
@@ -913,6 +969,7 @@ def labor_wage_trends(
     labor_df: pd.DataFrame,
     state_alpha: Optional[str] = None,
     year: Optional[int] = None,
+    national_labor_df: Optional[pd.DataFrame] = None,
     title: Optional[str] = None
 ) -> go.Figure:
     """
@@ -926,23 +983,27 @@ def labor_wage_trends(
     
     Args:
         data_df: Crop data (for context, not used directly)
-        labor_df: Labor data with wage_rate, workers, year, data_source
+        labor_df: Labor data for selected state with wage_rate, workers, year, data_source
         state_alpha: If specified, highlight this state and show comparison
         year: If specified, used for context but shows multi-year trend
+        national_labor_df: Optional national-level labor data for all states
         title: Optional title
         
     Returns:
         Plotly Figure object
     """
+    # Use national data if provided, otherwise fall back to labor_df
+    data_to_use = national_labor_df if national_labor_df is not None and not national_labor_df.empty else labor_df
+    
     # Check if labor data is available
-    if labor_df is None or labor_df.empty:
+    if data_to_use is None or data_to_use.empty:
         return _empty_figure(
             "Labor data not available.\n"
             "Please ensure the Economics dataset is loaded\n"
             "with LABOR commodity data."
         )
     
-    df = labor_df.copy()
+    df = data_to_use.copy()
     
     # Check for required columns
     if 'wage_rate' not in df.columns or 'year' not in df.columns:
@@ -1191,19 +1252,6 @@ def labor_wage_trends(
     return fig
 
 
-# Keep old function name as alias for backwards compatibility
-def labor_intensity_scatter(
-    data_df: pd.DataFrame,
-    labor_df: pd.DataFrame,
-    state_alpha: Optional[str] = None,
-    year: Optional[int] = None,
-    title: Optional[str] = None
-) -> go.Figure:
-    """Alias for labor_wage_trends for backwards compatibility."""
-    return labor_wage_trends(data_df, labor_df, state_alpha, year, title)
-
-
-
 def sector_comparison_chart(
     data_df: pd.DataFrame,
     year: Optional[int] = None,
@@ -1277,8 +1325,8 @@ def boom_crops_chart(
     Identify and show crops that have grown the most over time.
     
     Args:
-        data_df: Crop data
-        metric: Metric to use for measuring growth
+        data_df: Crop data (state-level or national summary format)
+        metric: Metric to use for measuring growth ('area_harvested_acres' or 'value_num')
         top_n: Number of top "boom" crops to show
         title: Optional title
         state_filter: Optional state alpha code to filter data (D2 enhancement)
@@ -1287,8 +1335,21 @@ def boom_crops_chart(
     Returns:
         Plotly Figure object
     """
+    # Check if this is national summary format (has 'value_num' and 'statisticcat_desc')
+    is_national_format = 'value_num' in data_df.columns and 'statisticcat_desc' in data_df.columns
+    
+    if is_national_format:
+        # Aggregate national data to get area_harvested_acres
+        area_data = data_df[data_df['statisticcat_desc'] == 'AREA HARVESTED'].copy()
+        area_data = area_data.groupby(['commodity_desc', 'year']).agg({
+            'value_num': 'sum'
+        }).reset_index()
+        area_data = area_data.rename(columns={'value_num': 'area_harvested_acres'})
+        data_df = area_data
+        metric = 'area_harvested_acres'
+    
     # D2 - Apply state filter if provided
-    if state_filter:
+    if state_filter and 'state_alpha' in data_df.columns:
         data_df = data_df[data_df['state_alpha'] == state_filter].copy()
         if data_df.empty:
             return _empty_figure(f"No data available for {state_filter}")
@@ -1323,6 +1384,16 @@ def boom_crops_chart(
     growth['pct_change'] = (growth['late'] - growth['early']) / growth['early'] * 100
     growth = growth.dropna()
     growth = growth[growth['early'] > 0]  # Avoid division issues
+    
+    # Filter out extreme growth rates (>500%) - likely data errors
+    extreme_growth_threshold = 500.0
+    extreme_crops = growth[growth['pct_change'] > extreme_growth_threshold].index.tolist()
+    
+    if extreme_crops:
+        print(f"  Excluding {len(extreme_crops)} crops with extreme growth (>500%): {extreme_crops[:5]}...")
+    
+    # Keep only reasonable growth rates
+    growth = growth[growth['pct_change'] <= extreme_growth_threshold]
     
     if growth.empty:
         return _empty_figure(f"No growth data available{' for ' + state_filter if state_filter else ''}")
@@ -1364,6 +1435,28 @@ def boom_crops_chart(
         height=max(300, top_n * 30 + 100),
         **LAYOUT_TEMPLATE
     )
+    
+    # Add annotation if extreme growth crops were excluded
+    if extreme_crops:
+        annotation_text = f"⚠ {len(extreme_crops)} crop(s) excluded due to extreme growth (>500%):<br>"
+        annotation_text += "<br>".join([f"• {crop[:30]}" for crop in extreme_crops[:3]])
+        if len(extreme_crops) > 3:
+            annotation_text += f"<br>• ...and {len(extreme_crops) - 3} more"
+        annotation_text += "<br><i>These require further investigation</i>"
+        
+        fig.add_annotation(
+            xref="paper", yref="paper",
+            x=0.98, y=0.02,
+            text=annotation_text,
+            showarrow=False,
+            font=dict(size=9, color="#ff6b6b"),
+            bgcolor="rgba(255,235,235,0.9)",
+            bordercolor="#ff6b6b",
+            borderwidth=1,
+            align="left",
+            xanchor="right",
+            yanchor="bottom"
+        )
     
     return fig
 
