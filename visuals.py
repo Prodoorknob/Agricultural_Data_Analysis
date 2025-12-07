@@ -1540,7 +1540,7 @@ def get_chart_for_view(
             # Chart 3: Labor wage trends
             labor_df = data.get('labor', pd.DataFrame())
             # Load national labor for comparison
-            from Agri_data_backup.data_prep import load_national_labor_summary
+            from data_prep import load_national_labor_summary
             national_labor = load_national_labor_summary()
             return labor_wage_trends(state_crop_df, labor_df, state_alpha, year, national_labor)
     
@@ -1565,7 +1565,7 @@ def get_chart_for_view(
 if __name__ == "__main__":
     import sys
     sys.path.insert(0, '.')
-    from Agri_data_backup.data_prep import load_sample_data
+    from data_prep import load_sample_data
     
     print("Loading sample data...")
     data = load_sample_data()
