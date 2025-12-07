@@ -34,7 +34,8 @@ from data_prep_demo import (
     load_national_landuse_summary,
     load_national_crops_summary,
     DEMO_START_YEAR,
-    DEMO_END_YEAR
+    DEMO_END_YEAR,
+    DEMO_STATE_ALPHAS
 )
 from visuals_demo import (
     hex_map_figure,
@@ -157,7 +158,8 @@ def create_app():
     demo_banner = dbc.Alert(
         [
             html.H5("🎯 DEMO MODE", className="alert-heading"),
-            html.P(f"Data limited to {DEMO_START_YEAR}-{DEMO_END_YEAR} for demonstration purposes.")
+            html.P(f"Data limited to {DEMO_START_YEAR}-{DEMO_END_YEAR} for demonstration purposes."),
+            html.P(f"Available states: {', '.join(DEMO_STATE_ALPHAS)}", style={'margin-bottom': '0', 'font-size': '14px'})
         ],
         color="info",
         style={'margin-bottom': '20px'}

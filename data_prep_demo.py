@@ -19,6 +19,10 @@ import data_prep
 DEMO_START_YEAR = 2019
 DEMO_END_YEAR = 2024
 
+# Demo states - only these 5 states have data in demo
+DEMO_STATES = ['INDIANA', 'IOWA', 'CALIFORNIA', 'TEXAS', 'ILLINOIS']
+DEMO_STATE_ALPHAS = ['IN', 'IA', 'CA', 'TX', 'IL']
+
 # Import everything from the original data_prep
 from data_prep import *
 
@@ -73,15 +77,23 @@ original_load_state_data = data_prep.load_state_data
 def load_state_data(state_name: str) -> pd.DataFrame:
     """
     DEMO VERSION: Converts state abbreviations to full names before loading.
+    Only allows 5 demo states: Indiana, Iowa, California, Texas, Illinois.
     """
     # Import HEX_LAYOUT to do the conversion
     from visuals import HEX_LAYOUT
+    
+    original_name = state_name
     
     # If state_name is a 2-letter code, convert to full name
     if len(state_name) == 2:
         state_row = HEX_LAYOUT[HEX_LAYOUT['state_alpha'] == state_name]
         if not state_row.empty:
             state_name = state_row['state_name'].iloc[0].upper()
+    
+    # Check if state is in demo states
+    if state_name not in DEMO_STATES:
+        print(f"  ⚠️  {original_name} not available in demo (only {', '.join(DEMO_STATE_ALPHAS)} available)")
+        return pd.DataFrame()
     
     return original_load_state_data(state_name)
 
@@ -102,5 +114,6 @@ def get_available_years(df: pd.DataFrame) -> list:
 
 
 print(f"[DEMO MODE] Using pre-filtered data files ({DEMO_START_YEAR}-{DEMO_END_YEAR})")
-print(f"[DEMO MODE] Reading from: {PARTITIONED_STATES_DIR}/ (reduces memory by ~75%)")
+print(f"[DEMO MODE] Available states: {', '.join(DEMO_STATE_ALPHAS)}")
+print(f"[DEMO MODE] Reading from: {PARTITIONED_STATES_DIR}/ (67% size reduction)")
 
