@@ -12,7 +12,11 @@ from data_prep import (
     get_available_years, 
     get_available_crops, 
     get_available_states,
-    load_sample_data
+    load_state_data,
+    process_state_data,
+    load_national_labor_summary,
+    load_national_landuse_summary,
+    load_national_crops_summary
 )
 from visuals import (
     hex_map_figure,
@@ -31,8 +35,6 @@ from visuals import (
 )
 
 
-# Set to True for faster loading during development
-USE_SAMPLE_DATA = True
 # Dropdown Data Options
 # Measure options for dropdown
 MEASURE_OPTIONS = [
@@ -49,6 +51,15 @@ SECTOR_OPTIONS = [
     {'label': 'Crops', 'value': 'CROPS'},
     {'label': 'Animals & Products', 'value': 'ANIMALS & PRODUCTS'},
     {'label': 'Economics', 'value': 'ECONOMICS'},
+]
+
+# Crop group options (for filtering within CROPS sector)
+CROP_GROUP_OPTIONS = [
+    {'label': 'All Crop Groups', 'value': 'ALL'},
+    {'label': 'Field Crops', 'value': 'FIELD CROPS'},
+    {'label': 'Vegetables', 'value': 'VEGETABLES'},
+    {'label': 'Fruit & Tree Nuts', 'value': 'FRUIT & TREE NUTS'},
+    {'label': 'Horticulture', 'value': 'HORTICULTURE'},
 ]
 
 # View mode options - B1: Removed Yield & Technology
@@ -91,7 +102,7 @@ DROPDOWN_STYLE = {
 
 # App design
 
-def create_app(use_sample = USE_SAMPLE_DATA):
+def create_app():
     # Initialize Dash app with Bootstrap theme
     app = Dash(
         __name__,
@@ -102,28 +113,36 @@ def create_app(use_sample = USE_SAMPLE_DATA):
     # Expose server for WSGI (gunicorn)
     server = app.server
     
-    # Load data
-    if use_sample:
-        data = load_sample_data()
-    else:
-        data = prepare_all_data(sample_frac=None, nass_files=['commodities', 'field_crops'])
+    # Initialize with empty data (will lazy-load states on demand)
+    # For now, get years from a representative state
+    sample_state_data = pd.DataFrame()
+    try:
+        # Try to load Indiana as a sample to get available years
+        sample_state_data = load_state_data('INDIANA')
+    except:
+        print("Warning: Could not load sample state data for UI initialization")
     
     # Get available years
     years = []
-    if 'state_crop_year' in data and not data['state_crop_year'].empty:
-        years = get_available_years(data['state_crop_year'])
+    if not sample_state_data.empty and 'year' in sample_state_data.columns:
+        years = sorted(sample_state_data['year'].unique().tolist())
+    else:
+        # Default years if no data available
+        years = list(range(2001, 2026))
     
     year_options = [{'label': 'All Years', 'value': 'ALL'}] + \
                    [{'label': str(y), 'value': y} for y in years]
     
-    # Get available crops
+    # Get available crops from sample data
     crops = []
-    if 'state_crop_year' in data and not data['state_crop_year'].empty:
-        crops = get_available_crops(data['state_crop_year'])
+    if not sample_state_data.empty and 'commodity_desc' in sample_state_data.columns:
+        crops = sorted(sample_state_data['commodity_desc'].dropna().unique().tolist())
     
     crop_options = [{'label': 'All Crops', 'value': 'ALL'}] + \
                    [{'label': c, 'value': c} for c in crops[:50]]  # Limit for performance
     
+    # Store empty data dict - will be populated by state loading
+    data = {}
     # Store data in app for access in callbacks
     app.data = data
     
@@ -166,6 +185,16 @@ def create_app(use_sample = USE_SAMPLE_DATA):
             style=DROPDOWN_STYLE
         ),
         
+        # Crop group filter (always visible, only applies to CROPS sector)
+        html.Label("Crop Group", className="fw-bold"),
+        dcc.Dropdown(
+            id='crop-group-select',
+            options=CROP_GROUP_OPTIONS,
+            value='ALL',
+            clearable=False,
+            style=DROPDOWN_STYLE
+        ),
+        
         # Measure filter
         html.Label("Measure", className="fw-bold"),
         dcc.Dropdown(
@@ -177,6 +206,19 @@ def create_app(use_sample = USE_SAMPLE_DATA):
         ),
         # A1 - Measure note div
         html.Div(id='measure-note', style={'fontSize': '11px', 'color': '#666', 'marginTop': '-10px', 'marginBottom': '10px'}),
+        
+        # Measure guidance
+        html.Div([
+            html.Small([
+                html.Strong("Measure Guide:"),
+                html.Br(),
+                "• Overview: Area Harvested",
+                html.Br(),
+                "• Labor & Operations: Operations",
+                html.Br(),
+                "• Economics: Revenue"
+            ], style={'color': '#555', 'fontSize': '10px'})
+        ], style={'padding': '8px', 'backgroundColor': '#f0f0f0', 'borderRadius': '4px', 'marginBottom': '10px'}),
         
         html.Hr(),
         
@@ -313,21 +355,8 @@ def create_app(use_sample = USE_SAMPLE_DATA):
     # It also helps us identify crops and measures in each state uniformly.
 
     def update_hex_map(year, sector, measure, selected_state):
-
-        df = app.data.get('state_crop_year', pd.DataFrame())
-        if df.empty:
-            return _empty_fig("No data loaded")
-        
-        # filters
-        if year != 'ALL':
-            df = df[df['year'] == year]
-        if sector != 'ALL' and 'sector_desc' in df.columns:
-            df = df[df['sector_desc'] == sector]
-        if measure not in df.columns:
-            measure = 'area_harvested_acres'
-        
-        # Aggregate to state level
-        state_totals = df.groupby('state_alpha').agg({measure: 'sum'}).reset_index()
+        # For hex map, show empty map with all states (no data needed initially)
+        # This allows users to click any state to load its data
         
         # Change color scale for different selected filters
         if 'area' in measure:
@@ -340,10 +369,13 @@ def create_app(use_sample = USE_SAMPLE_DATA):
             cscale = 'Blues'
         
         year_str = f" ({year})" if year != 'ALL' else ""
-        title = f"US States by {measure.replace('_', ' ').title()}{year_str}"
+        title = f"US States - Click to View Data{year_str}"
+        
+        # Create empty dataframe - hex_map_figure will show all states without values
+        empty_df = pd.DataFrame()
         
         return hex_map_figure(
-            state_totals, 
+            empty_df, 
             measure, 
             selected_state=selected_state,
             color_scale=cscale,
@@ -411,28 +443,48 @@ def create_app(use_sample = USE_SAMPLE_DATA):
         Output('chart-1', 'figure'),
         [Input('year-select', 'value'),
          Input('sector-select', 'value'),
+         Input('crop-group-select', 'value'),
          Input('measure-select', 'value'),
          Input('selected-state', 'data'),
          Input('viewmode-tabs', 'value')]
     )
-    def update_chart_1(year, sector, measure, selected_state, view_mode):
+    def update_chart_1(year, sector, crop_group, measure, selected_state, view_mode):
         """Update Chart 1 - State crop summary."""
 
-        df = app.data.get('state_crop_year', pd.DataFrame())
-        if df.empty:
-            return _empty_fig("No data loaded")
         if selected_state is None:
             return _empty_fig("Click a state on the map to see details")
+        
+        # Get state name from state_alpha for data loading
+        state_row = HEX_LAYOUT[HEX_LAYOUT['state_alpha'] == selected_state]
+        if state_row.empty:
+            return _empty_fig("Invalid state selected")
+        
+        state_name = state_row['state_name'].iloc[0].upper()
+        processed_data = process_state_data(state_name)
+        df = processed_data.get('state_crop_year', pd.DataFrame())
+        
+        if df.empty:
+            return _empty_fig("No data available for this state")
+        
+        # Apply sector filter
         if sector != 'ALL' and 'sector_desc' in df.columns:
             df = df[df['sector_desc'] == sector]
+        
+        # Apply crop group filter if crops sector selected
+        if sector == 'CROPS' and crop_group != 'ALL' and 'group_desc' in df.columns:
+            df = df[df['group_desc'] == crop_group]
+        
+        # Set measure based on view mode
         if view_mode == 'Labor & Operations':
             measure = 'operations'
         elif view_mode == 'Economics & Profitability':
             measure = 'revenue_usd'
         elif view_mode == 'Yield & Technology':
             measure = 'yield_per_acre'
+        
         if measure not in df.columns:
             measure = 'area_harvested_acres'
+        
         year_val = None if year == 'ALL' else year
 
         return state_crop_bar_chart(df, selected_state, measure, year_val)
@@ -442,17 +494,34 @@ def create_app(use_sample = USE_SAMPLE_DATA):
         [Input('selected-state', 'data'),
          Input('selected-crop', 'data'),
          Input('viewmode-tabs', 'value'),
-         Input('year-select', 'value')]
+         Input('year-select', 'value'),
+         Input('sector-select', 'value'),
+         Input('crop-group-select', 'value')]
     )
-    def update_chart_2(selected_state, selected_crop, view_mode, year_value):
+    def update_chart_2(selected_state, selected_crop, view_mode, year_value, sector, crop_group):
         """Update Chart 2 - Trend chart with subtitle for year filter."""
 
-        df = app.data.get('state_crop_year', pd.DataFrame())
-        landuse_df = app.data.get('landuse', pd.DataFrame())
-        farm_ops_df = app.data.get('farm_operations', pd.DataFrame())
-        
         if selected_state is None:
             return _empty_fig("Select a state to see trends")
+        
+        # Get state name from state_alpha for data loading
+        state_row = HEX_LAYOUT[HEX_LAYOUT['state_alpha'] == selected_state]
+        if state_row.empty:
+            return _empty_fig("Invalid state selected")
+        
+        state_name = state_row['state_name'].iloc[0].upper()
+        processed_data = process_state_data(state_name)
+        df = processed_data.get('state_crop_year', pd.DataFrame())
+        landuse_df = processed_data.get('landuse', pd.DataFrame())
+        farm_ops_df = processed_data.get('farm_operations', pd.DataFrame())
+        
+        # Apply sector filter
+        if sector != 'ALL' and 'sector_desc' in df.columns:
+            df = df[df['sector_desc'] == sector]
+        
+        # Apply crop group filter if crops sector selected
+        if sector == 'CROPS' and crop_group != 'ALL' and 'group_desc' in df.columns:
+            df = df[df['group_desc'] == crop_group]
         
         # A3 - Generate subtitle for year filter context
         if year_value and year_value != 'ALL':
@@ -495,13 +564,37 @@ def create_app(use_sample = USE_SAMPLE_DATA):
          Input('selected-state', 'data'),
          Input('selected-crop', 'data'),
          Input('viewmode-tabs', 'value'),
-         Input('overview-boom-toggle', 'value')]
+         Input('overview-boom-toggle', 'value'),
+         Input('sector-select', 'value'),
+         Input('crop-group-select', 'value')]
     )
-    def update_chart_3(year, selected_state, selected_crop, view_mode, boom_toggle):
+    def update_chart_3(year, selected_state, selected_crop, view_mode, boom_toggle, sector, crop_group):
         """Update Chart 3 - Diagnostic/comparison chart."""
-        df = app.data.get('state_crop_year', pd.DataFrame())
-        landuse_df = app.data.get('landuse', pd.DataFrame())
-        labor_df = app.data.get('labor', pd.DataFrame())
+        
+        if selected_state is None:
+            return _empty_fig("Select a state to see details")
+        
+        # Get state name from state_alpha for data loading
+        state_row = HEX_LAYOUT[HEX_LAYOUT['state_alpha'] == selected_state]
+        if state_row.empty:
+            return _empty_fig("Invalid state selected")
+        
+        state_name = state_row['state_name'].iloc[0].upper()
+        processed_data = process_state_data(state_name)
+        df = processed_data.get('state_crop_year', pd.DataFrame())
+        landuse_df = processed_data.get('landuse', pd.DataFrame())
+        labor_df = processed_data.get('labor', pd.DataFrame())
+        
+        if df.empty:
+            return _empty_fig("No data available for this state")
+        
+        # Apply sector filter
+        if sector != 'ALL' and 'sector_desc' in df.columns:
+            df = df[df['sector_desc'] == sector]
+        
+        # Apply crop group filter if crops sector selected
+        if sector == 'CROPS' and crop_group != 'ALL' and 'group_desc' in df.columns:
+            df = df[df['group_desc'] == crop_group]
         
         year_val = None if year == 'ALL' else year
         
@@ -509,13 +602,25 @@ def create_app(use_sample = USE_SAMPLE_DATA):
             # Boom toggle: national vs selected state
             if boom_toggle == 'state' and selected_state:
                 return boom_crops_chart(df, 'area_harvested_acres', state_filter=selected_state, selected_crop=selected_crop)
-            return boom_crops_chart(df, 'area_harvested_acres', selected_crop=selected_crop)
+            else:
+                # Load national crops data for national view
+                national_crops = load_national_crops_summary()
+                if not national_crops.empty:
+                    # Apply crop group filter to national data if CROPS sector selected
+                    if sector == 'CROPS' and crop_group != 'ALL' and 'group_desc' in national_crops.columns:
+                        national_crops = national_crops[national_crops['group_desc'] == crop_group]
+                    return boom_crops_chart(national_crops, 'area_harvested_acres', selected_crop=selected_crop)
+                return boom_crops_chart(df, 'area_harvested_acres', selected_crop=selected_crop)
         
         elif view_mode == 'Land & Area':
-            return area_vs_urban_scatter(df, landuse_df, selected_state)
+            # Load national land use for all-states scatter plot
+            national_landuse = load_national_landuse_summary()
+            return area_vs_urban_scatter(df, landuse_df, selected_state, national_landuse)
         
         elif view_mode == 'Labor & Operations':
-            return labor_wage_trends(df, labor_df, selected_state, year_val)
+            # Load national labor for all-states comparison
+            national_labor = load_national_labor_summary()
+            return labor_wage_trends(df, labor_df, selected_state, year_val, national_labor)
         
         elif view_mode == 'Economics & Profitability':
             return boom_crops_chart(df, 'revenue_usd', selected_crop=selected_crop)
@@ -651,82 +756,11 @@ def _empty_fig(message: str) -> go.Figure:
 
 
 # ============================================================================
-# COLAB/JUPYTER SUPPORT
-# ============================================================================
-
-def run_in_notebook(port: int = 8050, mode: str = 'inline'):
-    """
-    Run the app in a Jupyter notebook or Google Colab.
-    
-    Args:
-        port: Port number for the server
-        mode: 'inline', 'external', or 'jupyterlab'
-    """
-    app = create_app()
-    
-    # Check if running in Colab
-    try:
-        from google.colab import output
-        output.serve_kernel_port_as_window(port)
-        app.run_server(port=port, debug=False)
-    except ImportError:
-        # Running in Jupyter
-        app.run_server(mode=mode, port=port, debug=False)
-
-
-def get_figures_for_notebook(
-    state_alpha: str = 'IA',
-    year: int = 2020,
-    use_sample: bool = True
-):
-    """
-    Get all dashboard figures for use in a Jupyter notebook.
-    
-    Args:
-        state_alpha: State to focus on
-        year: Year to use for single-year visualizations
-        use_sample: Whether to use sample data
-        
-    Returns:
-        Dictionary of Plotly figures
-    """
-    if use_sample:
-        data = load_sample_data()
-    else:
-        data = prepare_all_data()
-    
-    df = data.get('state_crop_year', pd.DataFrame())
-    landuse = data.get('landuse', pd.DataFrame())
-    
-    if df.empty:
-        print("Warning: No data loaded")
-        return {}
-    
-    # Aggregate for hex map
-    state_totals = df.groupby('state_alpha')['area_harvested_acres'].sum().reset_index()
-    
-    figures = {
-        'hex_map': hex_map_figure(state_totals, 'area_harvested_acres', 
-                                   selected_state=state_alpha, title="US States by Area Harvested"),
-        'crop_bar': state_crop_bar_chart(df, state_alpha, 'area_harvested_acres', year),
-        'area_trend': area_trend_chart(df, state_alpha),
-        'revenue_trend': revenue_trend_chart(df, state_alpha),
-        'boom_crops': boom_crops_chart(df, 'area_harvested_acres'),
-    }
-    
-    if not landuse.empty:
-        figures['land_use'] = land_use_trend_chart(landuse, state_alpha)
-        figures['urban_scatter'] = area_vs_urban_scatter(df, landuse, state_alpha)
-    
-    return figures
-
-
-# ============================================================================
 # MAIN - Create app instance at module level for gunicorn
 # ============================================================================
 
 # Create the app instance at module level for gunicorn to import
-app = create_app(use_sample=USE_SAMPLE_DATA)
+app = create_app()
 
 # Expose the Flask server object for WSGI servers (gunicorn, uwsgi, etc.)
 server = app.server

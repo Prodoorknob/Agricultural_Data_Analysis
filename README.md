@@ -77,9 +77,37 @@ docker run -p 8080:8080 usda-dashboard:latest
 curl http://localhost:8080
 ```
 
-## Deploying to AWS (ECR + App Runner)
+## Deploying to AWS (ECR + EC2 t2.micro - Free Tier)
 
-This app is designed to deploy to AWS using:
+### Recommended: Free Deployment on t2.micro
+
+For the best free option, deploy on **AWS EC2 t2.micro** (free for 12 months):
+
+- **No credit card charges** for 12 months
+- **Built-in caching** optimizes for 1 GB RAM
+- **Complete guide**: See `EC2_DEPLOYMENT.md`
+
+```bash
+# Quick summary:
+1. Deploy Docker image to ECR (see below)
+2. Launch t2.micro EC2 instance (free tier)
+3. Pull image and run with caching enabled
+4. Access at http://your-ec2-public-ip
+```
+
+**Cost**: $0/month for 12 months, then ~$13/month after free tier expires
+
+### Alternative: AWS App Runner (Paid)
+
+If you prefer a fully managed service (costs money):
+
+- Setup: Follow "Deploying to AWS (ECR + App Runner)" section below
+- Cost: ~$50-100/month
+- No infrastructure management
+
+---
+
+## Deploying to AWS (ECR + App Runner)
 - **Amazon ECR**: Container registry for storing Docker images
 - **AWS App Runner**: Managed service for running containers
 

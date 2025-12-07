@@ -50,6 +50,7 @@ env/
 .pydevproject
 .settings/
 
+
 # -----------------------------------------------------------------------------
 # OS Generated Files
 # -----------------------------------------------------------------------------
@@ -87,6 +88,12 @@ survey_datasets
 
 # Old/backup files
 old_files
+Agri_data_backup
+readme_files
+
+# Documentation files (keep only README.md in repo)
+*.md
+!README.md
 
 # Census datasets (if not needed in version control)
 census_datasets
@@ -146,3 +153,4 @@ docs/_build/
 *.bak
 *.backup
 *~
+*.md
