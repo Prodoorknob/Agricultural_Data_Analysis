@@ -6,8 +6,6 @@ This module provides reusable Plotly figure generator functions for:
 - State crop summary bar charts
 - Time series / trend charts
 - Diagnostic comparison charts
-
-All functions return Plotly Figure objects that work both in Dash and Jupyter notebooks.
 """
 
 import numpy as np
@@ -17,9 +15,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from typing import Dict, List, Optional, Tuple, Union
 
-# ============================================================================
 # HEX TILE MAP LAYOUT
-# ============================================================================
 
 # Hex tile layout for US states - positions each state in a grid
 # Modeled after common tilegram layouts
@@ -101,9 +97,7 @@ COLOR_SCALES = {
     'default': 'Viridis'
 }
 
-# ============================================================================
 # THEME AND STYLING - G1/G3: Centralized Segoe UI fonts and color scales
-# ============================================================================
 
 LAYOUT_TEMPLATE = {
     'plot_bgcolor': 'white',
@@ -112,7 +106,7 @@ LAYOUT_TEMPLATE = {
     'margin': {'l': 60, 'r': 30, 't': 50, 'b': 50},
 }
 
-# Title font style (applied separately to avoid conflicts) - G1: Segoe UI
+# Title font style-G1: Segoe UI
 TITLE_FONT = {'size': 16, 'color': '#333', 'family': 'Segoe UI Semibold, Arial, sans-serif'}
 
 
@@ -121,10 +115,7 @@ def apply_theme(fig: go.Figure) -> go.Figure:
     fig.update_layout(**LAYOUT_TEMPLATE)
     return fig
 
-
-# ============================================================================
 # HEX MAP VISUALIZATION
-# ============================================================================
 
 def hex_map_figure(
     data_df: pd.DataFrame,
@@ -134,20 +125,7 @@ def hex_map_figure(
     color_scale: str = 'default',
     title: Optional[str] = None
 ) -> go.Figure:
-    """
-    Create a hex-tile map of US states colored by a metric.
-    
-    Args:
-        data_df: DataFrame with 'state_alpha' and the value column
-        value_col: Column name to use for coloring
-        year: If specified, filter to this year
-        selected_state: State alpha code to highlight
-        color_scale: Key for COLOR_SCALES or a Plotly colorscale name
-        title: Optional title for the figure
-        
-    Returns:
-        Plotly Figure object
-    """
+    """ Create a hex-tile map of US states colored by a metric. """
     # Start with hex layout
     hex_df = HEX_LAYOUT.copy()
     
@@ -169,32 +147,23 @@ def hex_map_figure(
                                   on='state_alpha', how='left')
     else:
         # If no data, add empty value column for consistent display
-        hex_df[value_col] = 0  # Use 0 instead of None for valid color mapping
+        hex_df[value_col] = 0  
     
-    # Fill NaN values with 0 for valid color mapping
     if value_col in hex_df.columns:
         hex_df[value_col] = hex_df[value_col].fillna(0)
-    
-    # Get colorscale
     cscale = COLOR_SCALES.get(color_scale, color_scale)
-    
-    # Create figure
     fig = go.Figure()
-    
-    # Determine if we should show colorbar (only if we have actual data)
     has_data = bool(hex_df[value_col].sum() > 0)
+
+    default_color = '#7CB9E8' 
     
-    # Default color for states (when no data)
-    default_color = '#7CB9E8'  # Light blue - more appealing than gray
-    
-    # Add hexagon markers for each state - sized to fit without overlap
     fig.add_trace(go.Scatter(
         x=hex_df['col'],
-        y=-hex_df['row'],  # Invert y so row 0 is at top
+        y=-hex_df['row'], 
         mode='markers+text',
         marker=dict(
             symbol='hexagon',
-            size=55,  # Sized for compact display (reduced from 75 originally)
+            size=55,  
             color=hex_df[value_col] if has_data else [default_color] * len(hex_df),
             colorscale=cscale if has_data else None,
             colorbar=dict(
@@ -221,47 +190,15 @@ def hex_map_figure(
     if selected_state:
         selected = hex_df[hex_df['state_alpha'] == selected_state]
         if not selected.empty:
-            fig.add_trace(go.Scatter(
-                x=selected['col'],
-                y=-selected['row'],
-                mode='markers',
-                marker=dict(
-                    symbol='hexagon',
-                    size=60,  # Slightly larger for highlight (5 units larger than base)
-                    color='rgba(0,0,0,0)',
-                    line=dict(color='#FF6B6B', width=3)
-                ),
-                hoverinfo='skip',
-                name='Selected'
-            ))
-    
-    # Update layout - adjusted ranges for compact hex spacing
-    fig.update_layout(
-        title=dict(
-            text=title or f'US States by {value_col.replace("_", " ").title()}',
-            font=TITLE_FONT
-        ),
-        showlegend=False,
-        xaxis=dict(
-            showgrid=False, zeroline=False, showticklabels=False,
-            range=[-0.3, 11.3], scaleanchor='y', scaleratio=0.9  # Tighter spacing
-        ),
-        yaxis=dict(
-            showgrid=False, zeroline=False, showticklabels=False,
-            range=[-6.5, 0.3]  # Reduced for more compact vertical spacing
-        ),
-        height=550,  # Reduced from 700 for more compact appearance
-        **LAYOUT_TEMPLATE
-    )
-    
+            fig.add_trace(go.Scatter(x=selected['col'],y=-selected['row'],mode='markers',marker=dict(symbol='hexagon',size=60,  
+                    color='rgba(0,0,0,0)',line=dict(color='#FF6B6B', width=3)),hoverinfo='skip',name='Selected'))
+    fig.update_layout(title=dict(text=title or f'US States by {value_col.replace("_", " ").title()}',font=TITLE_FONT),showlegend=False,
+        xaxis=dict(showgrid=False, zeroline=False, showticklabels=False,range=[-0.3, 11.3], scaleanchor='y', scaleratio=0.9),
+        yaxis=dict(showgrid=False, zeroline=False, showticklabels=False,range=[-6.5, 0.3]),height=550,**LAYOUT_TEMPLATE)
     return fig
 
 
-# ============================================================================
 # CHART 1: STATE CROP SUMMARY BAR CHART
-# ============================================================================
-
-# Patterns to exclude from aggregation (double-counting totals)
 EXCLUDE_COMMODITIES = [
     'FIELD CROPS, TOTAL',
     'FIELD CROPS TOTAL', 
@@ -279,21 +216,7 @@ def state_crop_bar_chart(
     title: Optional[str] = None,
     color_scale: str = 'Tealgrn'
 ) -> go.Figure:
-    """
-    Create a horizontal bar chart of top crops for a selected state.
-    
-    Args:
-        data_df: DataFrame with state_alpha, commodity_desc, and value column
-        state_alpha: State to filter to
-        value_col: Column to use for bar values
-        year: If specified, filter to this year
-        top_n: Number of top crops to show
-        title: Optional title
-        color_scale: Plotly colorscale name
-        
-    Returns:
-        Plotly Figure object
-    """
+    """Create a horizontal bar chart of top crops for a selected state."""
     # Filter data
     df = data_df[data_df['state_alpha'] == state_alpha].copy()
     
@@ -303,7 +226,6 @@ def state_crop_bar_chart(
     if df.empty or value_col not in df.columns:
         return _empty_figure(f"No data available for {state_alpha}")
     
-    # Issue 1: Exclude total/aggregate commodities to avoid double-counting
     df = df[~df['commodity_desc'].str.upper().isin([x.upper() for x in EXCLUDE_COMMODITIES])]
     df = df[~df['commodity_desc'].str.contains('TOTAL', case=False, na=False)]
     
@@ -312,21 +234,12 @@ def state_crop_bar_chart(
         value_col: 'sum'
     }).reset_index()
     
-    # Issue 2: Filter out zero values before getting top N
     agg_df = agg_df[agg_df[value_col] > 0]
-    
-    # Get top N
     agg_df = agg_df.nlargest(top_n, value_col)
     agg_df = agg_df.sort_values(value_col, ascending=True)
-    
-    # Compute percentage of total
     total = agg_df[value_col].sum()
     agg_df['pct_of_total'] = (agg_df[value_col] / total * 100).round(1)
-    
-    # Create figure
     fig = go.Figure()
-    
-    # Format values - normalize area to 100M acres base, show others as-is
     is_area_col = 'area' in value_col.lower() or 'acres' in value_col.lower()
     
     if is_area_col:
@@ -344,7 +257,7 @@ def state_crop_bar_chart(
         x=display_values if is_area_col else agg_df[value_col],
         orientation='h',
         marker=dict(
-            color=agg_df[value_col],  # Use original values for color scale
+            color=agg_df[value_col],
             colorscale=color_scale,
             showscale=False
         ),
@@ -367,23 +280,12 @@ def state_crop_bar_chart(
     else:
         x_title = value_col.replace('_', ' ').title()
     
-    fig.update_layout(
-        title=dict(
-            text=title or f'Top Crops in {state_name} by {value_col.replace("_", " ").title()}{year_str}',
-            font=TITLE_FONT
-        ),
-        xaxis_title=x_title,
-        yaxis_title='',
-        height=max(300, top_n * 25 + 100),
-        **LAYOUT_TEMPLATE
-    )
-    
+    fig.update_layout( title=dict(text=title or f'Top Crops in {state_name} by {value_col.replace("_", " ").title()}{year_str}',font=TITLE_FONT),
+        xaxis_title=x_title, yaxis_title='', height=max(300, top_n * 25 + 100), **LAYOUT_TEMPLATE)
     return fig
 
 
-# ============================================================================
 # CHART 2: TIME SERIES / TREND CHARTS
-# ============================================================================
 
 def area_trend_chart(
     data_df: pd.DataFrame,
@@ -392,65 +294,28 @@ def area_trend_chart(
     top_n: int = 5,
     title: Optional[str] = None
 ) -> go.Figure:
-    """
-    Create a line chart showing area harvested over time for top crops.
-    
-    Args:
-        data_df: DataFrame with state_alpha, commodity_desc, year, area_harvested_acres
-        state_alpha: State to filter to
-        crops: List of specific crops to show (if None, uses top N)
-        top_n: Number of top crops to show if crops is None
-        title: Optional title
-        
-    Returns:
-        Plotly Figure object
-    """
+    """Create a line chart showing area harvested over time for top crops."""
     df = data_df[data_df['state_alpha'] == state_alpha].copy()
     
     if df.empty or 'area_harvested_acres' not in df.columns:
         return _empty_figure(f"No area data available for {state_alpha}")
     
-    # Determine which crops to show
     if crops is None:
-        # Get top N crops by total area
         top_crops = df.groupby('commodity_desc')['area_harvested_acres'].sum() \
                       .nlargest(top_n).index.tolist()
     else:
         top_crops = crops
     
     df = df[df['commodity_desc'].isin(top_crops)]
-    
-    # Sort by year to ensure continuous lines (fixes disjointed line issue)
     df = df.sort_values(['commodity_desc', 'year'])
     
-    # Create figure
-    fig = px.line(
-        df,
-        x='year',
-        y='area_harvested_acres',
-        color='commodity_desc',
-        markers=True,
-        labels={
-            'year': 'Year',
-            'area_harvested_acres': 'Area Harvested (acres)',
-            'commodity_desc': 'Crop'
-        }
-    )
-    
+    fig = px.line(df,x='year',y='area_harvested_acres', color='commodity_desc', markers=True,
+        labels={'year': 'Year','area_harvested_acres': 'Area Harvested (acres)','commodity_desc': 'Crop'})
     state_name = HEX_LAYOUT[HEX_LAYOUT['state_alpha'] == state_alpha]['state_name'].iloc[0] \
                  if state_alpha in HEX_LAYOUT['state_alpha'].values else state_alpha
     
-    fig.update_layout(
-        title=dict(
-            text=title or f'Area Harvested Over Time - {state_name}',
-            font=TITLE_FONT
-        ),
-        legend_title='Crop',
-        height=400,
-        **LAYOUT_TEMPLATE
-    )
+    fig.update_layout(title=dict(text=title or f'Area Harvested Over Time - {state_name}',font=TITLE_FONT),legend_title='Crop',height=400, **LAYOUT_TEMPLATE)
     fig.update_traces(connectgaps=True)
-    
     return fig
 
 
@@ -491,14 +356,6 @@ def land_use_trend_chart(
     Create a stacked area chart showing land use composition over time.
     Categorizes land into 4 main types: Cropland, Urban Land, Forest Land, Misc Land.
     E1: Includes vertical line at year of maximum urbanization rate.
-    
-    Args:
-        landuse_df: Pivoted land use DataFrame
-        state_alpha: State to filter to
-        title: Optional title
-        
-    Returns:
-        Plotly Figure object
     """
     df = landuse_df[landuse_df['state_alpha'] == state_alpha].copy()
     
@@ -513,19 +370,11 @@ def land_use_trend_chart(
         return _empty_figure("No land use categories found")
     
     # Melt for grouping
-    df_long = df.melt(
-        id_vars=['year'],
-        value_vars=land_cols,
-        var_name='land_type_raw',
-        value_name='acres'
-    )
+    df_long = df.melt( id_vars=['year'], value_vars=land_cols, var_name='land_type_raw',value_name='acres')
     
     # Map to 4 main categories
     df_long['land_category'] = df_long['land_type_raw'].map(LAND_USE_CATEGORIES)
-    # Default unmapped to Misc Land
     df_long['land_category'] = df_long['land_category'].fillna('Misc Land')
-    
-    # Aggregate by year and category
     agg_df = df_long.groupby(['year', 'land_category'])['acres'].sum().reset_index()
     
     # Sort categories for consistent stacking order
@@ -533,16 +382,8 @@ def land_use_trend_chart(
     agg_df['land_category'] = pd.Categorical(agg_df['land_category'], categories=category_order, ordered=True)
     agg_df = agg_df.sort_values(['year', 'land_category'])
     
-    # Create area chart with custom colors
-    fig = px.area(
-        agg_df,
-        x='year',
-        y='acres',
-        color='land_category',
-        color_discrete_map=LAND_USE_COLORS,
-        category_orders={'land_category': category_order},
-        labels={'year': 'Year', 'acres': 'Acres (thousands)', 'land_category': 'Land Use Type'}
-    )
+    fig = px.area(agg_df,x='year',y='acres',color='land_category', color_discrete_map=LAND_USE_COLORS,
+        category_orders={'land_category': category_order},labels={'year': 'Year', 'acres': 'Acres (thousands)', 'land_category': 'Land Use Type'})
     
     # E1 - Add vertical line at year of maximum urbanization rate
     urban_df = agg_df[agg_df['land_category'] == 'Urban Land'].copy()
@@ -552,30 +393,17 @@ def land_use_trend_chart(
         max_idx = urban_df['urban_change'].idxmax()
         if pd.notna(max_idx):
             max_urban_year = int(urban_df.loc[max_idx, 'year'])  # Convert to int explicitly
-            fig.add_vline(
-                x=max_urban_year,
+            fig.add_vline(x=max_urban_year,
                 line_dash="dash",
                 line_color="#E74C3C",
                 annotation_text=f"Peak Urban Growth ({max_urban_year})",
-                annotation_position="top right"
-            )
-    
-    # Convert y-axis to thousands for readability
+                annotation_position="top right")
     fig.update_traces(hovertemplate='%{x}<br>%{y:,.0f} acres<extra>%{fullData.name}</extra>')
-    
     state_name = HEX_LAYOUT[HEX_LAYOUT['state_alpha'] == state_alpha]['state_name'].iloc[0] \
                  if state_alpha in HEX_LAYOUT['state_alpha'].values else state_alpha
-    
-    fig.update_layout(
-        title=dict(
-            text=title or f'Land Use Over Time - {state_name}',
-            font=TITLE_FONT
-        ),
-        legend_title='Land Type',
-        height=400,
-        **LAYOUT_TEMPLATE
-    )
-    
+
+    fig.update_layout(title=dict(text=title or f'Land Use Over Time - {state_name}',font=TITLE_FONT),
+        legend_title='Land Type', height=400, **LAYOUT_TEMPLATE)
     return fig
 
 
@@ -590,17 +418,6 @@ def operations_trend_chart(
     """
     Create a chart showing farm operations over time.
     Uses crop-level operations if available, otherwise shows total farm operations.
-    
-    Args:
-        data_df: DataFrame with operations and ops_per_1k_acres columns
-        state_alpha: State to filter to
-        crops: List of specific crops
-        top_n: Number of top crops if crops is None
-        title: Optional title
-        farm_ops_df: Optional DataFrame with total farm operations by state/year
-        
-    Returns:
-        Plotly Figure object
     """
     df = data_df[data_df['state_alpha'] == state_alpha].copy()
     
@@ -615,40 +432,22 @@ def operations_trend_chart(
             ops_state = ops_state.sort_values('year')
             
             fig = go.Figure()
-            fig.add_trace(go.Scatter(
-                x=ops_state['year'],
-                y=ops_state['total_operations'],
-                mode='lines+markers',
-                name='Total Farm Operations',
-                line=dict(color='#2E86AB', width=3),
-                marker=dict(size=8)
-            ))
+            fig.add_trace(go.Scatter(x=ops_state['year'],y=ops_state['total_operations'], mode='lines+markers',name='Total Farm Operations',
+                line=dict(color='#2E86AB', width=3),marker=dict(size=8)))
             
             state_name = HEX_LAYOUT[HEX_LAYOUT['state_alpha'] == state_alpha]['state_name'].iloc[0] \
                          if state_alpha in HEX_LAYOUT['state_alpha'].values else state_alpha
             
-            fig.update_layout(
-                title=dict(
-                    text=title or f'Total Farm Operations - {state_name}',
-                    font=TITLE_FONT
-                ),
-                xaxis_title='Year',
-                yaxis_title='Number of Farm Operations',
-                height=400,
-                **LAYOUT_TEMPLATE
-            )
+            fig.update_layout(title=dict(text=title or f'Total Farm Operations - {state_name}',font=TITLE_FONT),
+                xaxis_title='Year',yaxis_title='Number of Farm Operations',height=400,**LAYOUT_TEMPLATE)
             return fig
-    
-    # If still no data available
     if df.empty:
         return _empty_figure(f"No data available for {state_alpha}")
-    
     if not has_crop_ops:
         return _empty_figure(
             "No operations data available for this state.\n"
             "Crop-level operations data is not present in\n"
-            "the loaded NASS datasets."
-        )
+            "the loaded NASS datasets.")
     
     # Use crop-level operations data
     if crops is None:
@@ -658,20 +457,14 @@ def operations_trend_chart(
         top_crops = crops
     
     df = df[df['commodity_desc'].isin(top_crops)]
-    
     fig = make_subplots(specs=[[{"secondary_y": True}]])
-    
     colors = px.colors.qualitative.Set2
     
     for i, crop in enumerate(top_crops):
         crop_df = df[df['commodity_desc'] == crop].sort_values('year')
         color = colors[i % len(colors)]
         
-        fig.add_trace(
-            go.Scatter(
-                x=crop_df['year'],
-                y=crop_df['operations'],
-                name=f'{crop} (Operations)',
+        fig.add_trace(go.Scatter(x=crop_df['year'],y=crop_df['operations'],name=f'{crop} (Operations)',
                 line=dict(color=color),
                 mode='lines+markers'
             ),
