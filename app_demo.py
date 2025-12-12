@@ -9,8 +9,6 @@ import sys
 # Force demo to use local files by default (not S3)
 if 'USE_S3' not in os.environ:
     os.environ['USE_S3'] = 'False'
-
-# Ensure current directory is first in path to avoid importing from subdirectories
 current_dir = os.path.abspath(os.path.dirname(__file__))
 if current_dir in sys.path:
     sys.path.remove(current_dir)
@@ -157,7 +155,7 @@ def create_app():
     # Create DEMO banner
     demo_banner = dbc.Alert(
         [
-            html.H5("🎯 DEMO MODE", className="alert-heading"),
+            html.H5("DEMO MODE", className="alert-heading"),
             html.P(f"Data limited to {DEMO_START_YEAR}-{DEMO_END_YEAR} for demonstration purposes."),
             html.P(f"Available state: {', '.join(DEMO_STATE_ALPHAS)}", style={'margin-bottom': '0', 'font-size': '14px'})
         ],
@@ -290,7 +288,6 @@ def create_app():
     ])
     
     # Import all callbacks from original app by executing the callback registration
-    # We'll copy the key callbacks here
     
     @app.callback(
         Output('selected-state', 'data'),
@@ -367,7 +364,7 @@ def create_app():
                     'area_planted_acres': 'AREA PLANTED',
                     'revenue_usd': 'SALES',
                     'operations': 'OPERATIONS',
-                    'ops_per_1k_acres': 'OPERATIONS'  # Will compute this later
+                    'ops_per_1k_acres': 'OPERATIONS'  
                 }
                 
                 stat_cat = measure_mapping.get(measure)
@@ -385,9 +382,6 @@ def create_app():
                     
                     # Filter by sector if specified
                     if sector != 'ALL' and 'group_desc' in map_df.columns:
-                        # Note: sector in dropdown is like 'CROPS', 'ANIMALS & PRODUCTS'
-                        # group_desc in data is like 'FIELD CROPS', 'VEGETABLES', etc.
-                        # For now, skip sector filtering since group_desc is more granular
                         pass
                     
                     # Aggregate by state_alpha
@@ -398,10 +392,9 @@ def create_app():
                         map_df = map_df.rename(columns={'value_num': measure})
                         print(f"Prepared hex map data: {len(map_df)} states")
                         print(f"Sample:\n{map_df.head()}")
-                        
-                        # For ops_per_1k_acres, we would need area data too - skip for now
+
                         if measure == 'ops_per_1k_acres':
-                            map_df = pd.DataFrame()  # Can't compute without area data
+                            map_df = pd.DataFrame() 
                     else:
                         print("Warning: Empty map_df or missing state_alpha column")
                         map_df = pd.DataFrame()
@@ -416,7 +409,7 @@ def create_app():
         return hex_map_figure(
             map_df,
             measure,
-            year=None,  # Already filtered in callback
+            year=None, 
             selected_state=selected_state,
             color_scale=cscale,
             title=title
