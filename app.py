@@ -119,7 +119,6 @@ def create_app():
     server = app.server
     
     # Initialize with empty data (will lazy-load states on demand)
-    # For now, get years from a representative state
     sample_state_data = pd.DataFrame()
     try:
         # Try to load Indiana as a sample to get available years
@@ -146,9 +145,8 @@ def create_app():
     crop_options = [{'label': 'All Crops', 'value': 'ALL'}] + \
                    [{'label': c, 'value': c} for c in crops[:50]]  # Limit for performance
     
-    # Store empty data dict - will be populated by state loading
+
     data = {}
-    # Store data in app for access in callbacks
     app.data = data
     
     # App layout
@@ -388,7 +386,7 @@ def create_app():
                     'area_planted_acres': 'AREA PLANTED',
                     'revenue_usd': 'SALES',
                     'operations': 'OPERATIONS',
-                    'ops_per_1k_acres': 'OPERATIONS'  # Will compute this later
+                    'ops_per_1k_acres': 'OPERATIONS' 
                 }
                 
                 stat_cat = measure_mapping.get(measure)
@@ -406,23 +404,18 @@ def create_app():
                     
                     # Filter by sector if specified
                     if sector != 'ALL' and 'group_desc' in map_df.columns:
-                        # Note: sector in dropdown is like 'CROPS', 'ANIMALS & PRODUCTS'
-                        # group_desc in data is like 'FIELD CROPS', 'VEGETABLES', etc.
-                        # For now, skip sector filtering since group_desc is more granular
                         pass
                     
                     # Aggregate by state_alpha
                     if not map_df.empty and 'state_alpha' in map_df.columns:
                         # Sum value_num by state
                         map_df = map_df.groupby('state_alpha')['value_num'].sum().reset_index()
-                        # Rename value_num to the measure name for hex_map_figure
                         map_df = map_df.rename(columns={'value_num': measure})
                         print(f"Prepared hex map data: {len(map_df)} states")
                         print(f"Sample:\n{map_df.head()}")
                         
-                        # For ops_per_1k_acres, we would need area data too - skip for now
                         if measure == 'ops_per_1k_acres':
-                            map_df = pd.DataFrame()  # Can't compute without area data
+                            map_df = pd.DataFrame()  
                     else:
                         print("Warning: Empty map_df or missing state_alpha column")
                         map_df = pd.DataFrame()
@@ -437,7 +430,7 @@ def create_app():
         return hex_map_figure(
             map_df, 
             measure,
-            year=None,  # Already filtered in callback
+            year=None,  
             selected_state=selected_state,
             color_scale=cscale,
             title=title
@@ -815,15 +808,8 @@ def _empty_fig(message: str) -> go.Figure:
     )
     return fig
 
-
-# ============================================================================
-# MAIN - Create app instance at module level for gunicorn
-# ============================================================================
-
-# Create the app instance at module level for gunicorn to import
 app = create_app()
 
-# Expose the Flask server object for WSGI servers (gunicorn, uwsgi, etc.)
 server = app.server
 
 if __name__ == "__main__":
