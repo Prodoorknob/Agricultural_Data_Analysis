@@ -91,7 +91,7 @@ def clear_cache():
 #   - MajorLandUse.csv
 #
 # See S3_UPLOAD_GUIDE.md for detailed upload instructions
-USE_S3 = os.environ.get('USE_S3', 'False').lower() == 'true'
+USE_S3 = os.environ.get('USE_S3', 'True').lower() == 'true'
 
 # Your S3 bucket URL (public access) - base path to survey_datasets folder
 # Override via environment variable: export S3_BUCKET_URL="https://your-bucket.s3.region.amazonaws.com/path"
