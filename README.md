@@ -98,9 +98,9 @@ Visuals are designed to support **insight discovery**, not just presentation.
 
 Sample analysis output (labor):
 
-![Labor statistics](/labor_statistics.png)
+![Labor statistics](labor_statistics.png)
 
-Figure: Labor wage and employment statistics, highlighting sector-level differences and long-run shifts.
+Figure: Labor wage and employment statistics, highlighting national differences and long-run shifts.
 
 ---
 
