@@ -51,7 +51,7 @@ export default function TopCropsChart({ data, title, color = '#2E7D32' }: TopCro
                         tick={{ fontSize: 11 }}
                     />
                     <Tooltip
-                        formatter={(value: number) => [value.toLocaleString(), 'Value']}
+                        formatter={(value: number | undefined) => [value?.toLocaleString() || '0', 'Value']}
                         cursor={{ fill: 'transparent' }}
                     />
                     <Bar dataKey="value" radius={[0, 4, 4, 0]}>
