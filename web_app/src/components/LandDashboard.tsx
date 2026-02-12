@@ -5,7 +5,7 @@ import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
     AreaChart, Area, Legend, ScatterChart, Scatter, ZAxis
 } from 'recharts';
-import { getTopCrops, getLandUseTrends, getLandUseComposition, getLandUseChange } from '@/lib/data-processing';
+import { getTopCrops, getLandUseTrends, getLandUseComposition, getLandUseChange } from '../lib/processData';
 
 interface LandDashboardProps {
     data: any[];

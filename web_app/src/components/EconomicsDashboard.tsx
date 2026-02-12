@@ -5,7 +5,7 @@ import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
     LineChart, Line, Legend
 } from 'recharts';
-import { getTopCrops, getTrendData, getBoomCrops } from '@/lib/data-processing';
+import { getTopCrops, getTrendData, getBoomCrops } from '../lib/processData';
 
 interface EconomicsDashboardProps {
     data: any[];

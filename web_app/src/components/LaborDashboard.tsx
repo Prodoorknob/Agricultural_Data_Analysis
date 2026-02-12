@@ -4,7 +4,7 @@ import React, { useMemo } from 'react';
 import {
     LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend
 } from 'recharts';
-import { getLaborTrends } from '@/lib/data-processing';
+import { getLaborTrends } from '../lib/processData';
 
 interface LaborDashboardProps {
     laborData: any[];
