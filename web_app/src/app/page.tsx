@@ -5,8 +5,8 @@ import EconomicsDashboard from '@/components/EconomicsDashboard';
 import LandDashboard from '@/components/LandDashboard';
 import LaborDashboard from '@/components/LaborDashboard';
 import React, { useState, useEffect, useMemo } from 'react';
-import { fetchStateData, fetchNationalCrops, fetchLandUseData, fetchLaborData } from '../lib/serviceData';
-import { getMapData } from '../lib/processData';
+import { fetchStateData, fetchNationalCrops, fetchLandUseData, fetchLaborData } from '../utils/serviceData';
+import { getMapData } from '../utils/processData';
 
 // --- Types ---
 type ViewMode = 'OVERVIEW' | 'LAND' | 'LABOR' | 'ECONOMICS';
