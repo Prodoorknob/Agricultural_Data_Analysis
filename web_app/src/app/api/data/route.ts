@@ -27,22 +27,30 @@ export async function GET(request: NextRequest) {
     // Use path.join to ensure correct separators on Windows
     const localPath = path.join(process.cwd(), 'final_data', localFilename || '');
 
+    // Determine if running on Vercel (production) or locally
+    const isVercel = process.env.VERCEL === '1';
+    const localFileExists = !isVercel && fs.existsSync(localPath);
+
     console.log(`[API] Request for ${filename}`);
-    console.log(`[API] CWD: ${process.cwd()}`);
-    console.log(`[API] Resolved Local Path: ${localPath}`);
-    console.log(`[API] File Exists: ${fs.existsSync(localPath)}`);
+    console.log(`[API] Environment: ${isVercel ? 'Vercel (Production)' : 'Local Development'}`);
+    if (!isVercel) {
+        console.log(`[API] CWD: ${process.cwd()}`);
+        console.log(`[API] Resolved Local Path: ${localPath}`);
+        console.log(`[API] File Exists: ${localFileExists}`);
+    }
 
     try {
         let arrayBuffer: ArrayBuffer;
         let contentType = 'application/octet-stream';
 
-        // Try local file first (if exists)
-        if (fs.existsSync(localPath)) {
+        // Try local file first (only in development, not on Vercel)
+        if (localFileExists) {
             console.log(`[API] Serving local file: ${localPath}`);
             const fileBuffer = fs.readFileSync(localPath);
             arrayBuffer = fileBuffer.buffer.slice(fileBuffer.byteOffset, fileBuffer.byteOffset + fileBuffer.byteLength);
         } else {
-            console.log(`[API] Local file not found, proxying to S3: ${s3Url}`);
+            // On Vercel or if local file doesn't exist, proxy to S3
+            console.log(`[API] ${isVercel ? '(Vercel) ' : ''}Proxying to S3: ${s3Url}`);
             const response = await fetch(s3Url, { cache: 'no-store' });
 
             if (!response.ok) {

@@ -6,10 +6,7 @@ import LandDashboard from '@/components/LandDashboard';
 import LaborDashboard from '@/components/LaborDashboard';
 import CropsDashboard from '@/components/CropsDashboard';
 import AnimalsDashboard from '@/components/AnimalsDashboard';
-import StateInfoPanel from '@/components/StateInfoPanel';
-import StateSingleMap from '@/components/StateSingleMap';
 import React, { useState, useEffect, useMemo } from 'react';
-import { US_STATES } from '../utils/serviceData';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   BarChart, Bar, Cell
@@ -304,23 +301,6 @@ export default function Home() {
 
           {/* Filters */}
           <div className="flex flex-wrap items-center gap-3">
-            {/* State Selector */}
-            <div className="relative">
-              <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-gray-500 pointer-events-none">
-                <span className="material-symbols-outlined text-[18px]">location_on</span>
-              </span>
-              <select
-                value={selectedState || ''}
-                onChange={(e) => setSelectedState(e.target.value || undefined)}
-                className="bg-[#0f1117] border border-[#2a4030] text-white text-sm rounded-lg pl-10 pr-8 py-2 focus:ring-2 focus:ring-[#19e63c] appearance-none cursor-pointer"
-              >
-                <option value="">National View</option>
-                {Object.entries(US_STATES).map(([code, name]) => (
-                  <option key={code} value={code}>{name}</option>
-                ))}
-              </select>
-            </div>
-
             {/* Year Filter */}
             <div className="relative">
               <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-gray-500 pointer-events-none">
@@ -395,25 +375,30 @@ export default function Home() {
       {renderHeader()}
 
       <div className="px-4 lg:px-8 py-8 max-w-[1800px] mx-auto">
-        {/* State Selector Section */}
-        <div className="mb-8 grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Left: State Info Panel */}
-          <div className="h-[500px]">
-            <StateInfoPanel
-              selectedState={selectedState}
-              selectedYear={selectedYear}
-              selectedSector={selectedSector}
-              selectedCommodity={overviewCommodity}
-              stateData={stateData}
-            />
-          </div>
-          
-          {/* Right: State Map */}
-          <div className="h-[500px]">
-            <StateSingleMap
-              selectedState={selectedState}
-              mapData={mapData}
-            />
+        {/* Persistent Map */}
+        <div className="mb-8">
+          <div className="bg-[#1a1d24] p-6 rounded-xl border border-[#2a4030]">
+            <div className="flex justify-between items-center mb-4">
+              <div>
+                <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+                  <span className="material-symbols-outlined text-[#19e63c]">map</span>
+                  US Agricultural Map
+                </h3>
+                <p className="text-sm text-gray-400 mt-1">
+                  {selectedState ? `Viewing ${selectedState}` : 'National View'} • {selectedYear > 0 ? selectedYear : 'All Years'}
+                </p>
+              </div>
+              <span className="text-xs text-gray-500 bg-[#0f1117] px-3 py-1.5 rounded-lg border border-[#2a4030]">
+                Click a state to drill down
+              </span>
+            </div>
+            <div className="h-[600px]">
+              <USMap
+                data={mapData}
+                selectedState={selectedState}
+                onStateSelect={setSelectedState}
+              />
+            </div>
           </div>
         </div>
 
@@ -550,7 +535,7 @@ export default function Home() {
         {viewMode === 'CROPS' && (
           <div className="bg-[#0f1117] -mx-4 lg:-mx-8 px-4 lg:px-8 py-8">
             <CropsDashboard
-              data={filteredStateData}
+              data={stateData}
               year={selectedYear}
               stateName={selectedState || 'National'}
             />

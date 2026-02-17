@@ -1,6 +1,7 @@
 import { parquetRead, parquetMetadata } from 'hyparquet';
 
-// const S3_BUCKET_URL = 'https://usda-analysis-datasets.s3.us-east-2.amazonaws.com/survey_datasets';
+// S3 bucket configuration - Primary data source
+const S3_BUCKET_URL = 'https://usda-analysis-datasets.s3.us-east-2.amazonaws.com/survey_datasets/partitioned_states';
 
 export const US_STATES: Record<string, string> = {
     'AL': 'ALABAMA', 'AK': 'ALASKA', 'AZ': 'ARIZONA', 'AR': 'ARKANSAS', 'CA': 'CALIFORNIA',
@@ -35,74 +36,97 @@ export interface CropData {
 }
 
 /**
- * Fetch and parse a Parquet file via local API proxy.
+ * Parse parquet ArrayBuffer and return data objects
+ */
+async function parseParquetBuffer(arrayBuffer: ArrayBuffer): Promise<any[]> {
+    return new Promise((resolve, reject) => {
+        try {
+            const metadata = parquetMetadata(arrayBuffer);
+
+            if (!metadata || !metadata.row_groups || metadata.row_groups.length === 0) {
+                console.warn('No row groups found in parquet file');
+                resolve([]);
+                return;
+            }
+
+            const columnHelpers = metadata.row_groups[0].columns;
+            const headers = columnHelpers.map((c: any) => c.meta_data.path_in_schema[0]);
+
+            parquetRead({
+                file: arrayBuffer,
+                onComplete: (data) => {
+                    const result = data.map((row: any[]) => {
+                        const obj: any = {};
+                        headers.forEach((header: string, index: number) => {
+                            const val = row[index];
+                            obj[header] = typeof val === 'bigint' ? Number(val) : val;
+                        });
+                        return obj;
+                    });
+                    resolve(result);
+                }
+            });
+        } catch (e) {
+            console.error("Error reading parquet metadata/data", e);
+            resolve([]);
+        }
+    });
+}
+
+/**
+ * Fetch and parse a Parquet file with fallback strategy:
+ * 1. Try S3 bucket (primary)
+ * 2. Try local API proxy (fallback)
+ * 3. Return empty array on all failures
  * 
- * @param filename Relative path to the parquet file (e.g., 'partitioned_states/INDIANA.parquet')
+ * @param filename Relative path to the parquet file (e.g., 'IN.parquet')
  * @returns Array of data objects
  */
 async function fetchParquet(filename: string): Promise<any[]> {
-    // Use local API proxy to avoid CORS issues with S3
-    // Append timestamp to bust cache
-    const url = `/api/data?file=${encodeURIComponent(filename)}&t=${Date.now()}`;
-    console.log(`Fetching ${url}...`);
-
+    // Normalize filename: extract just the state code from path like 'partitioned_states/IN.parquet'
+    const justFilename = filename.includes('/') ? filename.split('/').pop() || filename : filename;
+    
+    // Strategy 1: Try S3 bucket first (primary source)
+    console.log(`[S3] Attempting to fetch ${justFilename} from S3...`);
     try {
-        const response = await fetch(url);
-        if (!response.ok) {
-            if (response.status === 403 || response.status === 404) {
-                console.warn(`File not found or access denied: ${filename}`);
-                return [];
-            }
-            throw new Error(`Failed to fetch ${url}: ${response.statusText}`);
-        }
-
-        const arrayBuffer = await response.arrayBuffer();
-
-        // 1. Read Metadata to get Column Names
-        return new Promise((resolve, reject) => {
-            try {
-                // parquetMetadata is synchronous
-                const metadata = parquetMetadata(arrayBuffer);
-
-                if (!metadata || !metadata.row_groups || metadata.row_groups.length === 0) {
-                    console.warn('No row groups found in parquet file');
-                    resolve([]);
-                    return;
-                }
-
-                const columnHelpers = metadata.row_groups[0].columns;
-                const headers = columnHelpers.map((c: any) => c.meta_data.path_in_schema[0]);
-                console.log('Parquet Headers:', headers);
-
-                // 2. Read Data
-                parquetRead({
-                    file: arrayBuffer,
-                    onComplete: (data) => {
-                        // hyparquet returns an array of arrays (rows)
-                        // data is [ [val0, val1...], [val0, val1...] ... ]
-
-                        const result = data.map((row: any[]) => {
-                            const obj: any = {};
-                            headers.forEach((header: string, index: number) => {
-                                const val = row[index];
-                                obj[header] = typeof val === 'bigint' ? Number(val) : val;
-                            });
-                            return obj;
-                        });
-
-                        resolve(result);
-                    }
-                });
-            } catch (e) {
-                console.error("Error reading parquet metadata/data", e);
-                resolve([]);
-            }
+        const s3Url = `${S3_BUCKET_URL}/${justFilename}`;
+        const s3Response = await fetch(s3Url, { 
+            method: 'GET',
+            mode: 'cors',
+            credentials: 'omit'
         });
-
-    } catch (error) {
-        console.error(`Error fetching parquet file ${filename}:`, error);
-        return [];
+        
+        if (s3Response.ok) {
+            console.log(`[S3] ✓ Successfully fetched ${justFilename} from S3`);
+            const arrayBuffer = await s3Response.arrayBuffer();
+            return parseParquetBuffer(arrayBuffer);
+        } else {
+            console.warn(`[S3] File not found or access denied (${s3Response.status}): ${justFilename}`);
+        }
+    } catch (s3Error) {
+        console.warn(`[S3] Failed to fetch from S3:`, s3Error instanceof Error ? s3Error.message : s3Error);
     }
+
+    // Strategy 2: Fall back to local API proxy
+    console.log(`[Local API] Attempting to fetch ${filename} from local API...`);
+    try {
+        const apiUrl = `/api/data?file=${encodeURIComponent(filename)}&t=${Date.now()}`;
+        const apiResponse = await fetch(apiUrl);
+        
+        if (apiResponse.ok) {
+            console.log(`[Local API] ✓ Successfully fetched ${filename} from local API`);
+            const arrayBuffer = await apiResponse.arrayBuffer();
+            return parseParquetBuffer(arrayBuffer);
+        } else {
+            console.warn(`[Local API] File not found or access denied (${apiResponse.status}): ${filename}`);
+        }
+    } catch (apiError) {
+        console.warn(`[Local API] Failed to fetch from local API:`, apiError instanceof Error ? apiError.message : apiError);
+    }
+
+    // All strategies failed
+    console.error(`[Fetch] Failed to retrieve ${filename} from all sources (S3, Local API)`);
+    return [];
 }
 
 /**
