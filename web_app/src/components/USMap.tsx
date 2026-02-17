@@ -1,12 +1,13 @@
+
 'use client';
 
 import * as React from 'react';
 import Map, { Source, Layer } from 'react-map-gl/maplibre';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { useMemo, useState, useCallback } from 'react';
+import { useMemo, useState, useCallback, useEffect } from 'react';
 import { scaleQuantile } from 'd3-scale';
 
-const US_STATES_GEOJSON = 'https://d2ad6b4ur7yvpq.cloudfront.net/naturalearth-3.3.0/ne_110m_admin_1_states_provinces_shp.geojson';
+const US_STATES_GEOJSON_URL = 'https://d2ad6b4ur7yvpq.cloudfront.net/naturalearth-3.3.0/ne_110m_admin_1_states_provinces_shp.geojson';
 
 interface USMapProps {
     data: Record<string, number>; // state_alpha -> value
@@ -16,6 +17,24 @@ interface USMapProps {
 
 export default function USMap({ data, selectedState, onStateSelect }: USMapProps) {
     const [hoverInfo, setHoverInfo] = useState<{ feature: any, x: number, y: number } | null>(null);
+    const [usGeoJson, setUsGeoJson] = useState<any>(null);
+
+    // Fetch GeoJSON and filter to US states only
+    useEffect(() => {
+        fetch(US_STATES_GEOJSON_URL)
+            .then(res => res.json())
+            .then(geojson => {
+                // Filter features to only US states (iso_a2 === 'US')
+                const usOnly = {
+                    ...geojson,
+                    features: geojson.features.filter((f: any) =>
+                        f.properties.iso_a2 === 'US'
+                    )
+                };
+                setUsGeoJson(usOnly);
+            })
+            .catch(err => console.warn('Failed to load GeoJSON:', err));
+    }, []);
 
     // Calculate generic quantile scale for coloring
     const colorScale = useMemo(() => {
@@ -57,7 +76,7 @@ export default function USMap({ data, selectedState, onStateSelect }: USMapProps
                 paint: {
                     'fill-color': '#e2e8f0',
                     'fill-opacity': 0.8,
-                    'fill-outline-color': '#ffffff'
+                    'fill-outline-color': '#94a3b8'
                 }
             };
         }
@@ -81,8 +100,8 @@ export default function USMap({ data, selectedState, onStateSelect }: USMapProps
             type: 'fill',
             paint: {
                 'fill-color': expression,
-                'fill-opacity': 0.8,
-                'fill-outline-color': '#ffffff' // White borders
+                'fill-opacity': 0.85,
+                'fill-outline-color': '#94a3b8' // Visible state borders
             }
         };
     }, [data, colorScale]);
@@ -99,6 +118,17 @@ export default function USMap({ data, selectedState, onStateSelect }: USMapProps
         filter: ['==', 'postal', selectedState || '']
     };
 
+    // State border lines (always visible)
+    const borderLayer: any = {
+        id: 'state-borders',
+        type: 'line',
+        paint: {
+            'line-color': '#64748b',
+            'line-width': 1,
+            'line-opacity': 0.5
+        }
+    };
+
     const onHover = useCallback((event: any) => {
         const { features, point } = event;
         const hoveredFeature = features && features[0];
@@ -109,35 +139,41 @@ export default function USMap({ data, selectedState, onStateSelect }: USMapProps
         const feature = event.features && event.features[0];
         if (feature) {
             onStateSelect(feature.properties.postal);
-        } else {
-            // Deselect if clicking background? Maybe keep selected.
         }
     }, [onStateSelect]);
 
     return (
-        <div className="relative w-full h-[500px] bg-slate-50 rounded-xl overflow-hidden shadow-inner">
+        <div className="relative w-full h-full bg-slate-50 rounded-xl overflow-hidden shadow-inner" style={{ minHeight: '500px' }}>
             <Map
                 initialViewState={{
-                    longitude: -96,
-                    latitude: 37.8,
-                    zoom: 3
+                    longitude: -98.5,
+                    latitude: 39.8,
+                    zoom: 3.8,
+                    pitch: 0,
+                    bearing: 0
                 }}
+                maxBounds={[[-135, 22], [-62, 53]]}
+                minZoom={3}
+                maxZoom={7}
                 style={{ width: '100%', height: '100%' }}
-                mapStyle="https://basemaps.cartocdn.com/gl/positron-gl-style/style.json"
+                mapStyle="https://basemaps.cartocdn.com/gl/positron-nolabels-gl-style/style.json"
                 interactiveLayerIds={['states-fill']}
                 onMouseMove={onHover}
                 onClick={onClick}
                 attributionControl={false}
             >
-                <Source id="states" type="geojson" data={US_STATES_GEOJSON}>
-                    <Layer {...fillLayer} />
-                    <Layer {...highlightLayer} />
-                </Source>
+                {usGeoJson && (
+                    <Source id="states" type="geojson" data={usGeoJson}>
+                        <Layer {...fillLayer} />
+                        <Layer {...borderLayer} />
+                        <Layer {...highlightLayer} />
+                    </Source>
+                )}
 
                 {/* Tooltip */}
                 {hoverInfo && (
                     <div
-                        className="absolute z-10 bg-white p-3 rounded shadow-lg pointer-events-none border border-slate-100 feature-tooltip"
+                        className="absolute z-10 bg-white p-3 rounded-lg shadow-lg pointer-events-none border border-slate-200"
                         style={{ left: hoverInfo.x + 10, top: hoverInfo.y + 10 }}
                     >
                         <div className="font-bold text-slate-800">{hoverInfo.feature.properties.name}</div>

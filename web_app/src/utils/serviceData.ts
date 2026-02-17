@@ -2,7 +2,7 @@ import { parquetRead, parquetMetadata } from 'hyparquet';
 
 // const S3_BUCKET_URL = 'https://usda-analysis-datasets.s3.us-east-2.amazonaws.com/survey_datasets';
 
-const US_STATES: Record<string, string> = {
+export const US_STATES: Record<string, string> = {
     'AL': 'ALABAMA', 'AK': 'ALASKA', 'AZ': 'ARIZONA', 'AR': 'ARKANSAS', 'CA': 'CALIFORNIA',
     'CO': 'COLORADO', 'CT': 'CONNECTICUT', 'DE': 'DELAWARE', 'FL': 'FLORIDA', 'GA': 'GEORGIA',
     'HI': 'HAWAII', 'ID': 'IDAHO', 'IL': 'ILLINOIS', 'IN': 'INDIANA', 'IA': 'IOWA',
@@ -42,7 +42,8 @@ export interface CropData {
  */
 async function fetchParquet(filename: string): Promise<any[]> {
     // Use local API proxy to avoid CORS issues with S3
-    const url = `/api/data?file=${encodeURIComponent(filename)}`;
+    // Append timestamp to bust cache
+    const url = `/api/data?file=${encodeURIComponent(filename)}&t=${Date.now()}`;
     console.log(`Fetching ${url}...`);
 
     try {
@@ -114,8 +115,9 @@ export async function fetchStateData(stateAlpha: string) {
         return [];
     }
 
-    // Filename format: partitioned_states/INDIANA.parquet
-    const filename = `partitioned_states/${stateName}.parquet`;
+    // Filename format: partitioned_states/IN.parquet (New Structure)
+    // The API route maps this to final_data/IN.parquet
+    const filename = `partitioned_states/${stateAlpha}.parquet`;
     return fetchParquet(filename);
 }
 
@@ -123,19 +125,19 @@ export async function fetchStateData(stateAlpha: string) {
  * Fetch national summary data (if needed for comparison)
  */
 export async function fetchNationalCrops() {
-    return fetchParquet('partitioned_states/NATIONAL_SUMMARY_CROPS.parquet');
+    return fetchParquet('partitioned_states/NATIONAL.parquet');
 }
 
 /**
  * Fetch National Land Use Summary
  */
 export async function fetchLandUseData() {
-    return fetchParquet('partitioned_states/NATIONAL_SUMMARY_LANDUSE.parquet');
+    return fetchParquet('partitioned_states/NATIONAL.parquet');
 }
 
 /**
  * Fetch National Labor Wage Data
  */
 export async function fetchLaborData() {
-    return fetchParquet('partitioned_states/NATIONAL_SUMMARY_LABOR.parquet');
+    return fetchParquet('partitioned_states/NATIONAL.parquet');
 }

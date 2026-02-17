@@ -6,7 +6,8 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const filePath = path.resolve(__dirname, '../sample_aws_data/NATIONAL_SUMMARY_LABOR.parquet');
+const relativePath = process.argv[2] || '../sample_aws_data/NATIONAL_SUMMARY_LABOR.parquet';
+const filePath = path.resolve(process.cwd(), relativePath);
 
 console.log('Reading:', filePath);
 

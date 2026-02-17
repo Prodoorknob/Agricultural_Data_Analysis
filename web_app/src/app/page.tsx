@@ -1,20 +1,35 @@
+
 'use client';
 
 import USMap from '@/components/USMap';
 import EconomicsDashboard from '@/components/EconomicsDashboard';
 import LandDashboard from '@/components/LandDashboard';
 import LaborDashboard from '@/components/LaborDashboard';
+import CropsDashboard from '@/components/CropsDashboard';
+import AnimalsDashboard from '@/components/AnimalsDashboard';
 import React, { useState, useEffect, useMemo } from 'react';
+import {
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
+  BarChart, Bar, Cell
+} from 'recharts';
 import { fetchStateData, fetchNationalCrops, fetchLandUseData, fetchLaborData } from '../utils/serviceData';
-import { getMapData } from '../utils/processData';
+import { getMapData, getLandUseTrends, getBoomCrops, filterData } from '../utils/processData';
 
 // --- Types ---
-type ViewMode = 'OVERVIEW' | 'LAND' | 'LABOR' | 'ECONOMICS';
+type ViewMode = 'OVERVIEW' | 'CROPS' | 'ANIMALS' | 'LAND' | 'LABOR' | 'ECONOMICS';
 
 // --- Filter Options ---
 const YEARS = Array.from({ length: 25 }, (_, i) => 2025 - i); // 2025 down to 2001
 const SECTORS = ['All Sectors', 'Crops', 'Animals & Products', 'Economics'];
-const CROP_GROUPS = ['All Crop Groups', 'Field Crops', 'Vegetables', 'Fruit & Tree Nuts', 'Horticulture'];
+
+// Dynamic Group Options
+const GROUP_OPTIONS: Record<string, string[]> = {
+  'All Sectors': ['All Groups'],
+  'Crops': ['All Crop Groups', 'Field Crops', 'Vegetables', 'Fruit & Tree Nuts', 'Horticulture'],
+  'Animals & Products': ['All Animal Groups', 'Livestock', 'Poultry', 'Dairy'],
+  'Economics': ['All Economics', 'Expenses', 'Income']
+};
+
 const MEASURES = [
   'Area Harvested (acres)',
   'Area Planted (acres)',
@@ -28,36 +43,37 @@ export default function Home() {
   const [selectedState, setSelectedState] = useState<string | undefined>('IN');
   const [selectedYear, setSelectedYear] = useState<number>(2022);
   const [selectedSector, setSelectedSector] = useState<string>('All Sectors');
-  const [selectedCropGroup, setSelectedCropGroup] = useState<string>('All Crop Groups');
+  const [selectedSubGroup, setSelectedSubGroup] = useState<string>('All Groups'); // Unified Group Filter
   const [selectedMeasure, setSelectedMeasure] = useState<string>('Area Harvested (acres)');
   const [viewMode, setViewMode] = useState<ViewMode>('OVERVIEW');
-  const [jumpToCrop, setJumpToCrop] = useState<string>('');
+
+  // Overview Interaction State
+  const [overviewCommodity, setOverviewCommodity] = useState<string | null>(null);
 
   // Data State
   const [nationalData, setNationalData] = useState<any[]>([]);
   const [stateData, setStateData] = useState<any[]>([]);
-  const [landUseData, setLandUseData] = useState<any[]>([]);
-  const [laborData, setLaborData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // --- Reset SubGroup when Sector Changes ---
+  useEffect(() => {
+    // Default to first option in list (usually 'All ...')
+    const options = GROUP_OPTIONS[selectedSector] || ['All Groups'];
+    setSelectedSubGroup(options[0]);
+  }, [selectedSector]);
+
 
   // --- Data Loading ---
   useEffect(() => {
     async function loadNational() {
       try {
-        const national = await fetchNationalCrops();
+        const national = await fetchNationalCrops(); // Now returns separate 'US' and State rows
         setNationalData(national);
 
-        const landUse = await fetchLandUseData();
-        setLandUseData(landUse);
-
-        const labor = await fetchLaborData();
-        setLaborData(labor);
-
+        // Initial State Load (Parallel)
         if (selectedState) {
           const state = await fetchStateData(selectedState);
           setStateData(state);
-        } else {
-          setStateData([]);
         }
       } catch (e) {
         console.error('Failed to load initial data', e);
@@ -82,13 +98,18 @@ export default function Home() {
       }
     }
     loadData();
+    // Reset overview interaction on state change
+    setOverviewCommodity(null);
   }, [selectedState]);
 
-  // --- Data Filtering ---
-  const filteredStateData = useMemo(() => {
-    if (!stateData.length) return [];
+  // --- Global Filtering Logic ---
+  const filterByGroup = (data: any[]) => {
+    // 0. Base Filter (Removal of totals etc via processData util)
+    // Note: fetchStateData returns raw parquet array. processData functions usually apply filterData.
+    // But for Dashboard props, we want to pass pre-filtered data if possible, OR rely on components.
+    // Here we apply GLOBAL UI filters (Sector/Group).
 
-    return stateData.filter(d => {
+    return data.filter(d => {
       // Filter by Sector
       if (selectedSector !== 'All Sectors') {
         const sectorMap: Record<string, string> = {
@@ -96,22 +117,53 @@ export default function Home() {
           'Animals & Products': 'ANIMALS & PRODUCTS',
           'Economics': 'ECONOMICS'
         };
-        // Case-insensitive check just in case
         if (d.sector_desc?.toUpperCase() !== sectorMap[selectedSector]) return false;
       }
 
-      // Filter by Crop Group
-      if (selectedCropGroup !== 'All Crop Groups') {
-        // Direct match (assuming UPPERCASE in DB)
-        if (d.group_desc?.toUpperCase() !== selectedCropGroup.toUpperCase()) return false;
+      // Filter by SubGroup
+      // Logic: "All Crop Groups" (contains 'All') -> pass
+      // specific group -> match d.group_desc
+      if (selectedSubGroup && !selectedSubGroup.includes('All')) {
+        // Handle minor naming mismatches if any. 
+        // DB usually Uppercase: FIELD CROPS, VEGETABLES
+        // UI: Field Crops
+        const formattedUI = selectedSubGroup.toUpperCase();
+        const dbGroup = d.group_desc?.toUpperCase();
+        if (dbGroup !== formattedUI) {
+          // Try exact match or contains?
+          // Some groups might be distinct.
+          // Let's rely on exact match for robust filters.
+          // Exception: 'Fruit & Tree Nuts' vs 'FRUIT & TREE NUTS'
+          if (dbGroup !== formattedUI) return false;
+        }
       }
-
       return true;
     });
-  }, [stateData, selectedSector, selectedCropGroup]);
+  };
+
+  const filteredStateData = useMemo(() => {
+    if (!stateData.length) return [];
+    // Also apply 'filterData' to remove totals/invalid rows globally
+    const clean = filterData(stateData);
+    return filterByGroup(clean);
+  }, [stateData, selectedSector, selectedSubGroup]);
+
+  // For Map: Need state-level aggregates from National file (where state_alpha != 'US')
+  const filteredMapSource = useMemo(() => {
+    if (!nationalData.length) return [];
+    // filterData removes 'Totals'.
+    // We need to keep State rows (agg_level_desc='STATE')
+    return filterData(nationalData).filter(d => d.state_alpha !== 'US');
+  }, [nationalData]);
+
+  // For National Summaries: Need 'US' rows
+  const filteredNationalSummary = useMemo(() => {
+    if (!nationalData.length) return [];
+    return filterData(nationalData).filter(d => d.state_alpha === 'US');
+  }, [nationalData]);
+
 
   // --- Derived Data for Map ---
-  // Map Metric Mapping: Map "Area Harvested (acres)" -> "AREA HARVESTED"
   const mapMetric = useMemo(() => {
     if (selectedMeasure.includes('Revenue')) return 'SALES';
     if (selectedMeasure.includes('Harvested')) return 'AREA HARVESTED';
@@ -121,34 +173,46 @@ export default function Home() {
     return 'AREA HARVESTED';
   }, [selectedMeasure]);
 
-  const filteredNationalData = useMemo(() => {
-    if (!nationalData.length) return [];
-
-    return nationalData.filter(d => {
-      // Filter by Sector
-      if (selectedSector !== 'All Sectors') {
-        const sectorMap: Record<string, string> = {
-          'Crops': 'CROPS',
-          'Animals & Products': 'ANIMALS & PRODUCTS',
-          'Economics': 'ECONOMICS'
-        };
-        if (d.sector_desc?.toUpperCase() !== sectorMap[selectedSector]) return false;
-      }
-
-      // Filter by Crop Group
-      if (selectedCropGroup !== 'All Crop Groups') {
-        if (d.group_desc?.toUpperCase() !== selectedCropGroup.toUpperCase()) return false;
-      }
-      return true;
-    });
-  }, [nationalData, selectedSector, selectedCropGroup]);
-
   const mapData = useMemo(() => {
-    if (!filteredNationalData.length) return {};
-    return getMapData(filteredNationalData, selectedYear, mapMetric);
-  }, [filteredNationalData, selectedYear, mapMetric]);
+    // Map needs Global Filtering?
+    // Usually Map reflects "All US" for the selected measure.
+    // If User selects "Crops" sector, map should show Crop Area.
+    // If User selects "Corn", map should show Corn.
+    // But map filter is currently high-level (Metric).
+    // Let's pass the Group filtered data to Map generation.
+    // But 'filteredMapSource' contains ALL states.
+    // We must apply the current sector/group filter to it.
+    const relevant = filterByGroup(filteredMapSource);
+    return getMapData(relevant, selectedYear, mapMetric);
+  }, [filteredMapSource, selectedYear, mapMetric, selectedSector, selectedSubGroup]);
+
+  // --- Derived Data for Overview Charts ---
+
+  // 1. Fastest Growing (Boom Crops)
+  const overviewBoomCrops = useMemo(() => {
+    // Use State Data if selected, else National Summary
+    // But 'Boom Crops' usually needs distinct commodities. 
+    // State data is best.
+    const source = filteredStateData.length ? filteredStateData : filterByGroup(filteredNationalSummary);
+    return getBoomCrops(source, 'AREA HARVESTED', 2023, 2001);
+  }, [filteredStateData, filteredNationalSummary, selectedSector, selectedSubGroup]);
+
+  // 2. Area Trends (Interactive)
+  const overviewAreaTrends = useMemo(() => {
+    let source = filteredStateData.length ? filteredStateData : filterByGroup(filteredNationalSummary);
+
+    // Interaction: If a commodity is clicked in Boom Chart, filter trends to that commodity
+    if (overviewCommodity) {
+      source = source.filter(d => d.commodity_desc === overviewCommodity);
+    }
+
+    return getLandUseTrends(source);
+  }, [filteredStateData, filteredNationalSummary, overviewCommodity, selectedSector, selectedSubGroup]);
+
 
   // --- Render Helpers ---
+  const currentGroupOptions = GROUP_OPTIONS[selectedSector] || ['All Groups'];
+
   const renderSidebar = () => (
     <div className="w-64 bg-slate-200 border-r border-slate-300 flex flex-col h-screen fixed left-0 top-0 overflow-y-auto p-4 z-20 shadow-lg">
       <div className="mb-6">
@@ -182,18 +246,19 @@ export default function Home() {
         </div>
 
         <div>
-          <label className="text-xs font-semibold text-slate-600 mb-1 block">Crop Group</label>
+          <label className="text-xs font-semibold text-slate-600 mb-1 block">Group</label>
           <select
-            value={selectedCropGroup}
-            onChange={(e) => setSelectedCropGroup(e.target.value)}
+            value={selectedSubGroup}
+            onChange={(e) => setSelectedSubGroup(e.target.value)}
             className="w-full p-2 rounded border border-slate-300 text-sm"
+            disabled={currentGroupOptions.length <= 1}
           >
-            {CROP_GROUPS.map(g => <option key={g} value={g}>{g}</option>)}
+            {currentGroupOptions.map(g => <option key={g} value={g}>{g}</option>)}
           </select>
         </div>
 
         <div>
-          <label className="text-xs font-semibold text-slate-600 mb-1 block">Measure</label>
+          <label className="text-xs font-semibold text-slate-600 mb-1 block">Map Metric</label>
           <select
             value={selectedMeasure}
             onChange={(e) => setSelectedMeasure(e.target.value)}
@@ -201,83 +266,70 @@ export default function Home() {
           >
             {MEASURES.map(m => <option key={m} value={m}>{m}</option>)}
           </select>
-          <div className="mt-2 text-[10px] text-slate-500 bg-white p-2 rounded border border-slate-200">
-            <p className="font-semibold mb-1">Measure Guide:</p>
-            <ul className="list-disc pl-3 space-y-1">
-              <li>Overview: {selectedMeasure}</li>
-              <li>Labor: Operations</li>
-              <li>Economics: Revenue</li>
-            </ul>
-          </div>
         </div>
       </div>
 
-      {/* View Mode */}
-      <div className="mb-8">
-        <label className="text-xs font-semibold text-slate-600 mb-2 block">View Mode</label>
-        <div className="space-y-2">
-          {['OVERVIEW', 'LAND', 'LABOR', 'ECONOMICS'].map((mode) => (
-            <label key={mode} className="flex items-center gap-2 cursor-pointer group">
-              <input
-                type="radio"
-                name="viewMode"
-                checked={viewMode === mode}
-                onChange={() => setViewMode(mode as ViewMode)}
-                className="accent-slate-700"
-              />
-              <span className={`text-sm ${viewMode === mode ? 'font-bold text-blue-800' : 'text-slate-600 group-hover:text-slate-900'}`}>
-                {mode === 'OVERVIEW' ? 'Overview' :
-                  mode === 'LAND' ? 'Land & Area' :
-                    mode === 'LABOR' ? 'Labor & Operations' : 'Economics & Profitability'}
-              </span>
-            </label>
-          ))}
-        </div>
-      </div>
+      {/* Navigation */}
+      <nav className="space-y-2">
+        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Dashboards</p>
+        {['OVERVIEW', 'CROPS', 'ANIMALS', 'LAND', 'LABOR', 'ECONOMICS'].map((mode) => (
+          <label key={mode} className="flex items-center gap-2 cursor-pointer group p-2 rounded hover:bg-slate-300 transition-colors">
+            <input
+              type="radio"
+              name="viewMode"
+              checked={viewMode === mode}
+              onChange={() => setViewMode(mode as ViewMode)}
+              className="accent-blue-600 w-4 h-4"
+            />
+            <span className={`text-sm ${viewMode === mode ? 'font-bold text-blue-800' : 'text-slate-600 group-hover:text-slate-900'}`}>
+              {mode === 'OVERVIEW' ? 'Overview' :
+                mode === 'CROPS' ? 'Crops' :
+                  mode === 'ANIMALS' ? 'Animals & Livestock' :
+                    mode === 'LAND' ? 'Land & Area' :
+                      mode === 'LABOR' ? 'Labor & Operations' : 'Economics & Profitability'}
+            </span>
+          </label>
+        ))}
+      </nav>
 
-      {/* Search & State */}
-      <div className="mt-auto space-y-4">
-        <div>
-          <label className="text-xs font-semibold text-slate-600 mb-1 block">Jump to Crop</label>
-          <input
-            type="text"
-            placeholder="Search crops..."
-            value={jumpToCrop}
-            onChange={(e) => setJumpToCrop(e.target.value)}
-            className="w-full p-2 rounded border border-slate-300 text-sm"
-          />
-        </div>
-        <div className="bg-white p-3 rounded border border-slate-300 shadow-sm">
-          <p className="text-xs text-slate-500 font-bold uppercase">State</p>
-          <p className="text-sm font-medium text-slate-800">{selectedState || 'None'}</p>
-        </div>
+      <div className="mt-auto pt-6 text-xs text-slate-400">
+        Data Source: USDA Quickstats (Survey)
       </div>
     </div>
   );
 
   return (
-    <div className="flex min-h-screen bg-gray-50 font-sans text-slate-800">
+    <div className="flex bg-slate-50 min-h-screen">
       {renderSidebar()}
 
-      <main className="ml-64 w-full p-8">
-        {/* Helper Header */}
-        <div className="mb-6 flex justify-between items-center">
-          <h2 className="text-2xl font-bold text-slate-700">
-            {viewMode === 'OVERVIEW' ? `US Agricultural Overview - ${selectedState || 'National'}` :
-              viewMode === 'LAND' ? `Land Use & Area Analysis - ${selectedState || 'National'}` :
-                viewMode === 'LABOR' ? `Labor & Operations Analysis - ${selectedState || 'National'}` :
-                  `Economics & Profitability - ${selectedState || 'National'}`}
-          </h2>
-          <div className="text-xs text-slate-400">
-            Data Sources: USDA NASS Quick Stats, USDA ERS Major Land Uses
+      <div className="flex-1 ml-64 p-8">
+        {/* Header */}
+        <div className="flex justify-between items-end mb-8 border-b border-slate-200 pb-4">
+          <div>
+            <h2 className="text-3xl font-bold text-slate-800">
+              {viewMode === 'OVERVIEW' ? 'Agricultural Overview' :
+                viewMode === 'CROPS' ? 'Crop Production' :
+                  viewMode === 'ANIMALS' ? 'Livestock & Animals' :
+                    viewMode === 'LAND' ? 'Land Use & Area' :
+                      viewMode === 'LABOR' ? 'Labor & Operations' : 'Farm Economics'}
+            </h2>
+            <p className="text-slate-500 mt-1">
+              {selectedState ? `Analyzing data for ` : 'National View'}
+              <span className="font-bold text-blue-600">{selectedState ? selectedState : 'United States'}</span>
+              <span className="mx-2">•</span>
+              {selectedYear > 0 ? selectedYear : 'All Years'}
+            </p>
           </div>
         </div>
 
-        {/* Content Area */}
-        {viewMode === 'OVERVIEW' && (
-          <div className="space-y-6">
-            <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 min-h-[500px]">
-              <h3 className="text-lg font-semibold mb-4">US States - Click to View Data</h3>
+        {/* Persistent Map */}
+        <div className="mb-8">
+          <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold text-slate-700">US Agricultural Map - {selectedState || 'National View'}</h3>
+              <span className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded">Click a state to filter dashboard</span>
+            </div>
+            <div className="h-[600px]">
               <USMap
                 data={mapData}
                 selectedState={selectedState}
@@ -285,6 +337,163 @@ export default function Home() {
               />
             </div>
           </div>
+        </div>
+
+        {/* Content Area */}
+        {viewMode === 'OVERVIEW' && (
+          <div className="space-y-6">
+
+            {/* Area Trends Chart */}
+            <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+              <div className="flex justify-between items-center mb-2">
+                <h3 className="text-lg font-semibold text-slate-700">
+                  Area Trends Over Time
+                  {overviewCommodity && <span className="text-blue-600 ml-2">({overviewCommodity})</span>}
+                </h3>
+                {overviewCommodity && (
+                  <button
+                    onClick={() => setOverviewCommodity(null)}
+                    className="text-xs text-red-500 hover:underline"
+                  >
+                    Clear Filter
+                  </button>
+                )}
+              </div>
+              <div className="mb-4 space-y-1">
+                <p className="text-xs text-slate-400">
+                  Only crops with <strong>both</strong> Planted &amp; Harvested data
+                  ({(overviewAreaTrends as any).excludedCropCount ?? '?'} harvest-only crops excluded)
+                </p>
+                {((overviewAreaTrends as any).multiHarvestCrops?.length > 0) && (
+                  <p className="text-xs text-amber-600 font-medium">
+                    ⚡ Multi-harvest: {(overviewAreaTrends as any).multiHarvestCrops.join(', ')} — harvested may exceed planted
+                  </p>
+                )}
+              </div>
+              <div className="h-[400px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={overviewAreaTrends}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                    <XAxis
+                      dataKey="year"
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fill: '#64748b', fontSize: 12 }}
+                      dy={10}
+                    />
+                    <YAxis
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fill: '#64748b', fontSize: 12 }}
+                      tickFormatter={(val) => val >= 1000000 ? `${(val / 1000000).toFixed(1)}M` : val >= 1000 ? `${(val / 1000).toFixed(0)}k` : val}
+                    />
+                    <Tooltip
+                      formatter={(val: number | string | undefined) => [new Intl.NumberFormat('en-US').format(Number(val || 0)) + ' acres', '']}
+                      contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                    />
+                    <Legend />
+                    <Line
+                      type="monotone"
+                      dataKey="planted"
+                      name="Area Planted"
+                      stroke="#3b82f6"
+                      strokeWidth={3}
+                      dot={{ r: 4, fill: '#3b82f6', strokeWidth: 0 }}
+                      activeDot={{ r: 6 }}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="harvested"
+                      name="Area Harvested"
+                      stroke="#10b981"
+                      strokeWidth={3}
+                      dot={{ r: 4, fill: '#10b981', strokeWidth: 0 }}
+                      activeDot={{ r: 6 }}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            {/* Fastest Growing Crops Chart */}
+            <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+              <h3 className="text-lg font-semibold mb-4 text-slate-700">Fastest Growing Crops (2001-2023 Growth %) - Click bar to filter trend</h3>
+              <div className="h-[500px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    layout="vertical"
+                    data={overviewBoomCrops}
+                    margin={{ top: 5, right: 30, left: 40, bottom: 5 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#e2e8f0" />
+                    <XAxis type="number" hide />
+                    <YAxis
+                      type="category"
+                      dataKey="commodity"
+                      width={120}
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fill: '#475569', fontSize: 11, fontWeight: 500 }}
+                    />
+                    <Tooltip
+                      cursor={{ fill: '#f1f5f9' }}
+                      formatter={(val: number | string | undefined) => [`${Number(val || 0).toFixed(1)}%`, 'Growth']}
+                      contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                    />
+                    <Bar
+                      dataKey="growth"
+                      name="Growth %"
+                      radius={[0, 4, 4, 0]}
+                      barSize={24}
+                      onClick={(data: any) => {
+                        if (data && data.commodity) {
+                          setOverviewCommodity(data.commodity);
+                        }
+                      }}
+                      className="cursor-pointer hover:opacity-80 transition-opacity"
+                    >
+                      {overviewBoomCrops.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.growth > 0 ? '#10b981' : '#ef4444'} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+          </div>
+        )}
+
+        {viewMode === 'CROPS' && (
+          <CropsDashboard
+            data={filteredStateData} // Passes globally filtered data
+            year={selectedYear}
+            stateName={selectedState || 'National'}
+          />
+        )}
+
+        {viewMode === 'ANIMALS' && (
+          <AnimalsDashboard
+            data={filteredStateData}
+            year={selectedYear}
+            stateName={selectedState || 'National'}
+          />
+        )}
+
+        {viewMode === 'LAND' && (
+          <LandDashboard
+            data={filteredStateData}
+            year={selectedYear}
+            stateName={selectedState || 'National'}
+          />
+        )}
+
+        {viewMode === 'LABOR' && (
+          <LaborDashboard
+            data={filteredStateData} // Filtered data will now contain wage rates correctly filtered
+            year={selectedYear}
+            stateName={selectedState || 'National'}
+          />
         )}
 
         {viewMode === 'ECONOMICS' && (
@@ -295,25 +504,7 @@ export default function Home() {
           />
         )}
 
-        {/* Other placeholders */}
-        {viewMode === 'LAND' && (
-          <LandDashboard
-            data={filteredStateData}
-            landUseData={landUseData}
-            year={selectedYear}
-            stateName={selectedState || 'National'}
-          />
-        )}
-
-        {viewMode === 'LABOR' && (
-          <LaborDashboard
-            laborData={laborData}
-            year={selectedYear}
-            stateName={selectedState || 'National'}
-          />
-        )}
-
-      </main>
-    </div>
+      </div>
+    </div >
   );
 }
