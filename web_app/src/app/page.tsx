@@ -270,25 +270,27 @@ export default function Home() {
       </div>
 
       {/* Navigation */}
-      <nav className="space-y-2">
-        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Dashboards</p>
-        {['OVERVIEW', 'CROPS', 'ANIMALS', 'LAND', 'LABOR', 'ECONOMICS'].map((mode) => (
-          <label key={mode} className="flex items-center gap-2 cursor-pointer group p-2 rounded hover:bg-slate-300 transition-colors">
-            <input
-              type="radio"
-              name="viewMode"
-              checked={viewMode === mode}
-              onChange={() => setViewMode(mode as ViewMode)}
-              className="accent-blue-600 w-4 h-4"
-            />
-            <span className={`text-sm ${viewMode === mode ? 'font-bold text-blue-800' : 'text-slate-600 group-hover:text-slate-900'}`}>
-              {mode === 'OVERVIEW' ? 'Overview' :
-                mode === 'CROPS' ? 'Crops' :
-                  mode === 'ANIMALS' ? 'Animals & Livestock' :
-                    mode === 'LAND' ? 'Land & Area' :
-                      mode === 'LABOR' ? 'Labor & Operations' : 'Economics & Profitability'}
-            </span>
-          </label>
+      <nav className="space-y-1">
+        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Dashboards</p>
+        {[
+          { key: 'OVERVIEW', label: 'Overview', icon: '📊' },
+          { key: 'CROPS', label: 'Crops', icon: '🌾' },
+          { key: 'ANIMALS', label: 'Animals & Livestock', icon: '🐄' },
+          { key: 'LAND', label: 'Land & Area', icon: '🗺️' },
+          { key: 'LABOR', label: 'Labor & Operations', icon: '👷' },
+          { key: 'ECONOMICS', label: 'Economics', icon: '💰' },
+        ].map(({ key, label, icon }) => (
+          <button
+            key={key}
+            onClick={() => setViewMode(key as ViewMode)}
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all duration-150 ${viewMode === key
+                ? 'bg-blue-600 text-white font-semibold shadow-md shadow-blue-600/20'
+                : 'text-slate-600 hover:bg-slate-200 hover:text-slate-800'
+              }`}
+          >
+            <span className="text-base">{icon}</span>
+            <span>{label}</span>
+          </button>
         ))}
       </nav>
 
@@ -299,10 +301,10 @@ export default function Home() {
   );
 
   return (
-    <div className="flex bg-slate-50 min-h-screen">
+    <div className={`flex min-h-screen ${viewMode === 'CROPS' ? 'bg-[#0f1117]' : 'bg-slate-50'}`} style={{ transition: 'background-color 0.3s ease' }}>
       {renderSidebar()}
 
-      <div className="flex-1 ml-64 p-8">
+      <div className={`flex-1 ml-64 p-8 ${viewMode === 'CROPS' ? 'text-slate-200' : ''}`}>
         {/* Header */}
         <div className="flex justify-between items-end mb-8 border-b border-slate-200 pb-4">
           <div>
@@ -465,11 +467,13 @@ export default function Home() {
         )}
 
         {viewMode === 'CROPS' && (
-          <CropsDashboard
-            data={filteredStateData} // Passes globally filtered data
-            year={selectedYear}
-            stateName={selectedState || 'National'}
-          />
+          <div style={{ margin: '-32px', padding: '32px', background: '#0f1117', minHeight: 'calc(100vh - 0px)', borderRadius: '0' }}>
+            <CropsDashboard
+              data={filteredStateData}
+              year={selectedYear}
+              stateName={selectedState || 'National'}
+            />
+          </div>
         )}
 
         {viewMode === 'ANIMALS' && (
