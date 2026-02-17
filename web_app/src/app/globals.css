@@ -1,3 +1,4 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 @import "tailwindcss";
 
 :root {
@@ -22,5 +23,86 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  scroll-behavior: smooth;
+}
+
+/* ─── Dark Mode Crops Dashboard ───────────────────────────────── */
+.crops-story {
+  animation: fadeIn 400ms ease-out;
+}
+
+.story-section {
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.story-section:hover {
+  border-color: #3d4256 !important;
+  box-shadow: 0 0 0 1px rgba(96, 165, 250, 0.05), 0 8px 32px rgba(0, 0, 0, 0.15);
+}
+
+/* ─── Staggered Card Animation ────────────────────────────────── */
+@keyframes fadeSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.card-animate {
+  animation: fadeSlideUp 500ms ease-out both;
+}
+
+/* ─── General Fade ────────────────────────────────────────────── */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+/* ─── Card Hover (for non-dark-mode sections) ─────────────────── */
+.card-hover {
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.card-hover:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+}
+
+/* ─── Custom scrollbar for dark mode ──────────────────────────── */
+.crops-story::-webkit-scrollbar {
+  width: 6px;
+}
+
+.crops-story::-webkit-scrollbar-track {
+  background: #141720;
+}
+
+.crops-story::-webkit-scrollbar-thumb {
+  background: #2a2e3d;
+  border-radius: 3px;
+}
+
+.crops-story::-webkit-scrollbar-thumb:hover {
+  background: #3d4256;
+}
+
+/* ─── Recharts overrides for dark mode ────────────────────────── */
+.crops-story .recharts-legend-item-text {
+  color: #9ca3af !important;
+  font-size: 12px !important;
+}
+
+.crops-story .recharts-cartesian-axis-tick-value {
+  fill: #6b7280 !important;
 }

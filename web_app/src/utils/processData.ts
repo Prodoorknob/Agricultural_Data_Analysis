@@ -284,3 +284,162 @@ export function getOperationsTrend(data: any[]) {
     });
     return trends.sort((a, b) => a.year - b.year);
 }
+
+// ─── Anomaly Detection ──────────────────────────────────────────
+/**
+ * Detect anomaly years where a value dips below (mean - 1 * stddev).
+ * Returns array of { year, value, meanVal, threshold } for flagged years.
+ */
+export function detectAnomalies(
+    yearValues: { year: number; value: number }[],
+    sensitivity: number = 1.0
+): { year: number; value: number; meanVal: number; threshold: number }[] {
+    if (yearValues.length < 3) return [];
+    const vals = yearValues.map(d => d.value).filter(v => v > 0);
+    if (vals.length < 3) return [];
+
+    const meanVal = d3.mean(vals) || 0;
+    const stdDev = Math.sqrt(d3.mean(vals.map(v => (v - meanVal) ** 2)) || 0);
+    const threshold = meanVal - sensitivity * stdDev;
+
+    return yearValues
+        .filter(d => d.value > 0 && d.value < threshold)
+        .map(d => ({ year: d.year, value: d.value, meanVal, threshold }));
+}
+
+// ─── Revenue for a Single Commodity ──────────────────────────────
+/**
+ * Extract SALES / revenue data for a single commodity over time.
+ */
+export function getRevenueForCommodity(data: any[], commodity: string) {
+    // Filter to SALES in $ only (use d3.max per year to pick the total, avoiding sub-domain dupes)
+    const filtered = filterData(data).filter(d =>
+        d.commodity_desc === commodity &&
+        d.statisticcat_desc === 'SALES' &&
+        d.unit_desc === '$'
+    );
+
+    const yearGroups = d3.group(filtered, d => d.year);
+    const trends: { year: number; revenue: number }[] = [];
+
+    yearGroups.forEach((rows, year) => {
+        // Use max rather than sum to get the national total (avoid sub-domain duplicates)
+        const revenue = d3.max(rows, r => cleanValue(r.value_num || r.Value)) || 0;
+        if (revenue > 0) trends.push({ year, revenue });
+    });
+
+    return trends.sort((a, b) => a.year - b.year);
+}
+
+// ─── Area Planted for a Single Commodity ─────────────────────────
+/**
+ * Extract AREA PLANTED data for a single commodity over time.
+ */
+export function getAreaPlantedForCommodity(data: any[], commodity: string) {
+    const filtered = filterData(data).filter(d =>
+        d.commodity_desc === commodity &&
+        d.statisticcat_desc === 'AREA PLANTED'
+    );
+
+    const yearGroups = d3.group(filtered, d => d.year);
+    const trends: { year: number; areaPlanted: number }[] = [];
+
+    yearGroups.forEach((rows, year) => {
+        const area = d3.sum(rows, r => cleanValue(r.value_num || r.Value));
+        if (area > 0) trends.push({ year, areaPlanted: area });
+    });
+
+    return trends.sort((a, b) => a.year - b.year);
+}
+
+// ─── Unified Commodity Story ─────────────────────────────────────
+/**
+ * Returns a unified dataset for the "story" view of a single commodity.
+ * Merges yield, production, area harvested, area planted, and revenue into
+ * one array keyed by year. Also detects anomaly dip years for yield.
+ */
+export function getCommodityStory(data: any[], commodity: string) {
+    const cropsData = filterData(data).filter(d =>
+        d.commodity_desc === commodity && d.sector_desc === 'CROPS'
+    );
+
+    const yearGroups = d3.group(cropsData, d => d.year);
+    const mergedMap = new Map<number, any>();
+
+    yearGroups.forEach((rows, year) => {
+        const production = d3.sum(
+            rows.filter(r => r.statisticcat_desc === 'PRODUCTION'),
+            r => cleanValue(r.value_num || r.Value)
+        );
+        const yieldVal = d3.mean(
+            rows.filter(r => r.statisticcat_desc === 'YIELD'),
+            r => cleanValue(r.value_num || r.Value)
+        ) || 0;
+        const areaHarvested = d3.sum(
+            rows.filter(r => r.statisticcat_desc === 'AREA HARVESTED'),
+            r => cleanValue(r.value_num || r.Value)
+        );
+        const areaPlanted = d3.sum(
+            rows.filter(r => r.statisticcat_desc === 'AREA PLANTED'),
+            r => cleanValue(r.value_num || r.Value)
+        );
+        // Revenue: use only $ SALES, take max per year to get the aggregate total
+        const salesRows = rows.filter(r =>
+            r.statisticcat_desc === 'SALES' &&
+            r.unit_desc === '$'
+        );
+        const revenue = d3.max(salesRows, r => cleanValue(r.value_num || r.Value)) || 0;
+
+        const prodUnit = rows.find(r => r.statisticcat_desc === 'PRODUCTION')?.unit_desc || '';
+        const yieldUnit = rows.find(r => r.statisticcat_desc === 'YIELD')?.unit_desc || '';
+
+        mergedMap.set(year, {
+            year,
+            production,
+            yield: yieldVal,
+            areaHarvested,
+            areaPlanted,
+            revenue,
+            prodUnit,
+            yieldUnit,
+        });
+    });
+
+    // Merge in revenue from non-CROPS sector (SALES might be under ECONOMICS)
+    const revData = getRevenueForCommodity(data, commodity);
+    revData.forEach(r => {
+        const existing = mergedMap.get(r.year);
+        if (existing) {
+            if (existing.revenue === 0) existing.revenue = r.revenue;
+        } else {
+            mergedMap.set(r.year, {
+                year: r.year, production: 0, yield: 0,
+                areaHarvested: 0, areaPlanted: 0, revenue: r.revenue,
+                prodUnit: '', yieldUnit: '',
+            });
+        }
+    });
+
+    // Also merge area planted if not already found under sector CROPS
+    const plantedData = getAreaPlantedForCommodity(data, commodity);
+    plantedData.forEach(p => {
+        const existing = mergedMap.get(p.year);
+        if (existing && existing.areaPlanted === 0) {
+            existing.areaPlanted = p.areaPlanted;
+        }
+    });
+
+    const story = Array.from(mergedMap.values()).sort((a, b) => a.year - b.year);
+
+    // Detect yield anomalies
+    const yieldPairs = story.filter(d => d.yield > 0).map(d => ({ year: d.year, value: d.yield }));
+    const anomalies = detectAnomalies(yieldPairs);
+    const anomalyYears = new Set(anomalies.map(a => a.year));
+
+    // Tag each data point
+    story.forEach(d => {
+        d.isAnomaly = anomalyYears.has(d.year);
+    });
+
+    return { story, anomalies, anomalyYears: Array.from(anomalyYears) };
+}
