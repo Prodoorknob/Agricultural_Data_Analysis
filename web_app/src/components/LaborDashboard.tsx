@@ -44,40 +44,79 @@ export default function LaborDashboard({ data, year, stateName }: LaborDashboard
     const nationalWage = latestData ? latestData['National Avg'] : null;
 
     if (!data.length) {
-        return <div className="p-12 text-center text-slate-400">No data available for Labor visualization.</div>;
+        return (
+            <div className="p-12 text-center">
+                <span className="material-symbols-outlined text-gray-600 text-[64px] mb-4 block">work</span>
+                <p className="text-gray-400">No data available for Labor visualization.</p>
+            </div>
+        );
     }
 
     return (
         <div className="space-y-8">
+            {/* Header */}
+            <div>
+                <h2 className="text-2xl font-bold text-white flex items-center gap-3">
+                    <span className="material-symbols-outlined text-[#19e63c] text-[32px]">work</span>
+                    Labor & Workforce Dashboard
+                </h2>
+                <p className="text-gray-400 text-sm mt-1">{stateName} • {latestYear}</p>
+            </div>
 
             {/* KPI Cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-                    <p className="text-sm text-slate-500 font-medium uppercase">{stateName} Avg Wage ({latestYear})</p>
-                    <p className="text-3xl font-bold text-slate-800 mt-2">{formatWage(stateWage)} <span className="text-sm font-normal text-slate-400">/ hour</span></p>
+                <div className="bg-[#1a1d24] p-6 rounded-xl border border-[#2a4030] relative overflow-hidden">
+                    <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-[#19e63c] to-transparent opacity-60"></div>
+                    <div className="flex items-center gap-3 mb-4">
+                        <div className="size-10 bg-[#19e63c]/20 rounded-lg flex items-center justify-center">
+                            <span className="material-symbols-outlined text-[#19e63c] text-[24px]">payments</span>
+                        </div>
+                        <p className="text-gray-400 text-xs font-semibold uppercase tracking-wider">{stateName} Avg Wage ({latestYear})</p>
+                    </div>
+                    <p className="text-3xl font-bold text-white">{formatWage(stateWage)}</p>
+                    <p className="text-sm text-gray-500 mt-1">per hour</p>
                 </div>
-                <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-                    <p className="text-sm text-slate-500 font-medium uppercase">National Avg Wage ({latestYear})</p>
-                    <p className="text-3xl font-bold text-slate-800 mt-2">{formatWage(nationalWage)} <span className="text-sm font-normal text-slate-400">/ hour</span></p>
+                <div className="bg-[#1a1d24] p-6 rounded-xl border border-[#2a4030] relative overflow-hidden">
+                    <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-[#19e63c] to-transparent opacity-60"></div>
+                    <div className="flex items-center gap-3 mb-4">
+                        <div className="size-10 bg-[#19e63c]/20 rounded-lg flex items-center justify-center">
+                            <span className="material-symbols-outlined text-[#19e63c] text-[24px]">public</span>
+                        </div>
+                        <p className="text-gray-400 text-xs font-semibold uppercase tracking-wider">National Avg Wage ({latestYear})</p>
+                    </div>
+                    <p className="text-3xl font-bold text-white">{formatWage(nationalWage)}</p>
+                    <p className="text-sm text-gray-500 mt-1">per hour</p>
                 </div>
             </div>
 
-            {/* Row 1: Wage Trends */}
-            <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-                <h3 className="text-xl font-semibold mb-1 text-slate-800">Farm Labor Wage Trends</h3>
-                <p className="text-sm text-slate-500 mb-6">{stateName} vs. National Average & Key States</p>
+            {/* Row 1: Wage Trends (PRESERVED) */}
+            <div className="bg-[#1a1d24] p-6 rounded-xl border border-[#2a4030]">
+                <div className="flex items-center gap-3 mb-4">
+                    <span className="material-symbols-outlined text-[#19e63c] text-[28px]">trending_up</span>
+                    <div>
+                        <h3 className="text-xl font-semibold text-white">Farm Labor Wage Trends</h3>
+                        <p className="text-sm text-gray-400">{stateName} vs. National Average & Key States</p>
+                    </div>
+                </div>
                 <div className="h-[500px] w-full">
                     <ResponsiveContainer width="100%" height="100%">
                         <LineChart
                             data={laborTrends}
                             margin={{ top: 10, right: 30, left: 10, bottom: 0 }}
                         >
-                            <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                            <XAxis dataKey="year" />
+                            <CartesianGrid strokeDasharray="3 3" stroke="#2a4030" vertical={false} />
+                            <XAxis dataKey="year" stroke="#718096" tick={{ fill: '#9ca3af' }} />
                             <YAxis
                                 domain={['auto', 'auto']}
                                 tickFormatter={(val) => `$${val}`}
-                                label={{ value: 'Wage Rate ($/hour)', angle: -90, position: 'insideLeft' }}
+                                label={{ 
+                                    value: 'Wage Rate ($/hour)', 
+                                    angle: -90, 
+                                    position: 'insideLeft',
+                                    style: { fill: '#9ca3af' }
+                                }}
+                                stroke="#718096"
+                                tick={{ fill: '#9ca3af' }}
                             />
                             <Tooltip
                                 formatter={(val: number | string | Array<number | string> | undefined) => {
@@ -85,25 +124,31 @@ export default function LaborDashboard({ data, year, stateName }: LaborDashboard
                                     if (typeof val === 'number') return [`$${val.toFixed(2)}`, 'Wage Rate'];
                                     return [val, 'Wage Rate'];
                                 }}
-                                labelStyle={{ color: '#2d3748' }}
+                                contentStyle={{
+                                    backgroundColor: '#1a1d24',
+                                    border: '1px solid #2a4030',
+                                    borderRadius: '8px',
+                                    color: '#fff'
+                                }}
+                                labelStyle={{ color: '#9ca3af' }}
                             />
-                            <Legend />
+                            <Legend wrapperStyle={{ color: '#9ca3af' }} />
 
-                            {/* Comparison States (Dotted) - Using proper Codes match getLaborTrends logic */}
-                            <Line type="monotone" dataKey="CA" stroke="#90cdf4" strokeDasharray="3 3" dot={false} strokeWidth={2} name="CA" />
-                            <Line type="monotone" dataKey="FL" stroke="#90cdf4" strokeDasharray="3 3" dot={false} strokeWidth={2} name="FL" />
-                            <Line type="monotone" dataKey="HI" stroke="#90cdf4" strokeDasharray="3 3" dot={false} strokeWidth={2} name="HI" />
+                            {/* Comparison States (Dotted) */}
+                            <Line type="monotone" dataKey="CA" stroke="#60a5fa" strokeDasharray="3 3" dot={false} strokeWidth={2} name="CA" />
+                            <Line type="monotone" dataKey="FL" stroke="#60a5fa" strokeDasharray="3 3" dot={false} strokeWidth={2} name="FL" />
+                            <Line type="monotone" dataKey="HI" stroke="#60a5fa" strokeDasharray="3 3" dot={false} strokeWidth={2} name="HI" />
 
                             {/* National Average (Dashed Bold) */}
-                            <Line type="monotone" dataKey="National Avg" stroke="#3182ce" strokeDasharray="5 5" strokeWidth={3} dot={{ r: 4 }} name="National Avg" />
+                            <Line type="monotone" dataKey="National Avg" stroke="#3b82f6" strokeDasharray="5 5" strokeWidth={3} dot={{ r: 4 }} name="National Avg" />
 
-                            {/* Selected State (Solid Bold Red) */}
+                            {/* Selected State (Solid Bold Green) */}
                             <Line
                                 type="monotone"
                                 dataKey={stateName.toUpperCase()}
-                                stroke="#f56565"
+                                stroke="#19e63c"
                                 strokeWidth={4}
-                                dot={{ r: 6, strokeWidth: 2, fill: '#fff' }}
+                                dot={{ r: 6, strokeWidth: 2, fill: '#0f1117' }}
                                 activeDot={{ r: 8 }}
                                 name={`${stateName} (Selected)`}
                             />
@@ -114,23 +159,41 @@ export default function LaborDashboard({ data, year, stateName }: LaborDashboard
 
             {/* Row 2: Operations Trends */}
             {opsTrends.length > 0 && (
-                <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-                    <h3 className="text-xl font-semibold mb-1 text-slate-800">Farm Operations Trend</h3>
-                    <p className="text-sm text-slate-500 mb-6">Number of Operations over time in {stateName}</p>
+                <div className="bg-[#1a1d24] p-6 rounded-xl border border-[#2a4030]">
+                    <div className="flex items-center gap-3 mb-4">
+                        <span className="material-symbols-outlined text-[#19e63c] text-[28px]">agriculture</span>
+                        <div>
+                            <h3 className="text-xl font-semibold text-white">Farm Operations Trend</h3>
+                            <p className="text-sm text-gray-400">Number of Operations over time in {stateName}</p>
+                        </div>
+                    </div>
                     <div className="h-[400px] w-full">
                         <ResponsiveContainer width="100%" height="100%">
                             <BarChart data={opsTrends} margin={{ top: 10, right: 30, left: 10, bottom: 0 }}>
-                                <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                                <XAxis dataKey="year" />
+                                <CartesianGrid strokeDasharray="3 3" stroke="#2a4030" vertical={false} />
+                                <XAxis dataKey="year" stroke="#718096" tick={{ fill: '#9ca3af' }} />
                                 <YAxis
                                     tickFormatter={(val) => new Intl.NumberFormat('en-US', { notation: "compact", compactDisplay: "short" }).format(val)}
-                                    label={{ value: 'Number of Operations', angle: -90, position: 'insideLeft' }}
+                                    label={{ 
+                                        value: 'Number of Operations', 
+                                        angle: -90, 
+                                        position: 'insideLeft',
+                                        style: { fill: '#9ca3af' }
+                                    }}
+                                    stroke="#718096"
+                                    tick={{ fill: '#9ca3af' }}
                                 />
                                 <Tooltip
                                     formatter={(val: number | string | Array<number | string> | undefined) => [new Intl.NumberFormat('en-US').format(Number(val || 0)), 'Operations']}
-                                    labelStyle={{ color: '#2d3748' }}
+                                    contentStyle={{
+                                        backgroundColor: '#1a1d24',
+                                        border: '1px solid #2a4030',
+                                        borderRadius: '8px',
+                                        color: '#fff'
+                                    }}
+                                    labelStyle={{ color: '#9ca3af' }}
                                 />
-                                <Bar dataKey="operations" fill="#ed8936" name="Operations" radius={[4, 4, 0, 0]} />
+                                <Bar dataKey="operations" fill="#19e63c" name="Operations" radius={[8, 8, 0, 0]} />
                             </BarChart>
                         </ResponsiveContainer>
                     </div>

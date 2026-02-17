@@ -177,15 +177,9 @@ export default function CropsDashboard({ data, year, stateName }: CropsDashboard
     }, [data, year]);
 
     // ─── Chart click handler ──────────────────────────────────────
-    const handleChartClick = useCallback((chartState: any) => {
-        if (!chartState) return;
-        // Recharts passes activeLabel (the x-axis value) on chart click
-        let clickedYear: number | null = null;
-        if (chartState.activeLabel !== undefined && chartState.activeLabel !== null) {
-            clickedYear = Number(chartState.activeLabel);
-        } else if (chartState.activePayload?.[0]?.payload?.year) {
-            clickedYear = Number(chartState.activePayload[0].payload.year);
-        }
+    const handleChartClick = useCallback((data: any) => {
+        if (!data || !data.year) return;
+        const clickedYear = Number(data.year);
         if (clickedYear && !isNaN(clickedYear)) {
             setFocusYear(prev => prev === clickedYear ? null : clickedYear);
         }
@@ -340,7 +334,7 @@ export default function CropsDashboard({ data, year, stateName }: CropsDashboard
 
                 <div style={{ height: '360px' }}>
                     <ResponsiveContainer width="100%" height="100%">
-                        <AreaChart data={story} onClick={handleChartClick} style={{ cursor: 'pointer' }}>
+                        <AreaChart data={story}>
                             <defs>
                                 <linearGradient id="yieldGrad" x1="0" y1="0" x2="0" y2="1">
                                     <stop offset="0%" stopColor={palette.yield} stopOpacity={0.2} />
@@ -401,6 +395,8 @@ export default function CropsDashboard({ data, year, stateName }: CropsDashboard
                                 dot={{ r: 3, fill: palette.production, strokeWidth: 0 }}
                                 activeDot={{ r: 5, stroke: palette.bgCard, strokeWidth: 2 }}
                                 animationDuration={chartDefaults.animationDuration}
+                                onClick={handleChartClick}
+                                style={{ cursor: 'pointer' }}
                             />
                             <Line
                                 yAxisId="right" type="monotone" dataKey="yield" name="Yield"
@@ -408,6 +404,8 @@ export default function CropsDashboard({ data, year, stateName }: CropsDashboard
                                 dot={<AnomalyDot />}
                                 activeDot={{ r: 6, stroke: palette.bgCard, strokeWidth: 2 }}
                                 animationDuration={chartDefaults.animationDuration}
+                                onClick={handleChartClick}
+                                style={{ cursor: 'pointer' }}
                             />
                         </AreaChart>
                     </ResponsiveContainer>
@@ -436,7 +434,7 @@ export default function CropsDashboard({ data, year, stateName }: CropsDashboard
 
                 <div style={{ height: '320px' }}>
                     <ResponsiveContainer width="100%" height="100%">
-                        <AreaChart data={story} onClick={handleChartClick} style={{ cursor: 'pointer' }}>
+                        <AreaChart data={story}>
                             <defs>
                                 <linearGradient id="plantedGrad" x1="0" y1="0" x2="0" y2="1">
                                     <stop offset="0%" stopColor={palette.areaPlanted} stopOpacity={0.15} />
@@ -472,6 +470,8 @@ export default function CropsDashboard({ data, year, stateName }: CropsDashboard
                                 fill="url(#plantedGrad)"
                                 dot={{ r: 2.5, fill: palette.areaPlanted, strokeWidth: 0 }}
                                 animationDuration={chartDefaults.animationDuration}
+                                onClick={handleChartClick}
+                                style={{ cursor: 'pointer' }}
                             />
                             <Area
                                 type="monotone" dataKey="areaHarvested" name="Area Harvested"
@@ -479,6 +479,8 @@ export default function CropsDashboard({ data, year, stateName }: CropsDashboard
                                 fill="url(#harvestedGrad)"
                                 dot={{ r: 2.5, fill: palette.areaHarvested, strokeWidth: 0 }}
                                 animationDuration={chartDefaults.animationDuration}
+                                onClick={handleChartClick}
+                                style={{ cursor: 'pointer' }}
                             />
                         </AreaChart>
                     </ResponsiveContainer>
@@ -508,7 +510,7 @@ export default function CropsDashboard({ data, year, stateName }: CropsDashboard
 
                     <div style={{ height: '300px' }}>
                         <ResponsiveContainer width="100%" height="100%">
-                            <AreaChart data={story} onClick={handleChartClick} style={{ cursor: 'pointer' }}>
+                            <AreaChart data={story}>
                                 <defs>
                                     <linearGradient id="revGrad" x1="0" y1="0" x2="0" y2="1">
                                         <stop offset="0%" stopColor={palette.revenue} stopOpacity={0.2} />
@@ -537,6 +539,8 @@ export default function CropsDashboard({ data, year, stateName }: CropsDashboard
                                     dot={{ r: 3, fill: palette.revenue, strokeWidth: 0 }}
                                     activeDot={{ r: 5, stroke: palette.bgCard, strokeWidth: 2 }}
                                     animationDuration={chartDefaults.animationDuration}
+                                    onClick={handleChartClick}
+                                    style={{ cursor: 'pointer' }}
                                 />
                             </AreaChart>
                         </ResponsiveContainer>

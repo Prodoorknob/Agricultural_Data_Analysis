@@ -30,9 +30,10 @@ export function filterData(data: any[]): any[] {
     if (!data || data.length === 0) return [];
 
     return data.filter(d =>
-        // 1. Source: Survey or Farm Operations Exception
+        // 1. Source: Survey or Farm Operations Exception or Revenue Data Exception
         (!d.source_desc || d.source_desc === 'SURVEY' || d.commodity_desc === 'FARM OPERATIONS' ||
-            (['CORN', 'SOYBEANS', 'WHEAT', 'COTTON'].includes(d.commodity_desc) && d.statisticcat_desc === 'SALES')) &&
+            // CRITICAL: Allow CENSUS revenue data (SALES with $ unit) for ALL crops since SURVEY lacks dollar revenue
+            (d.statisticcat_desc === 'SALES' && d.unit_desc === '$')) &&
 
         // 2. Remove Totals (User Requirement)
         !d.commodity_desc?.includes('TOTAL') &&

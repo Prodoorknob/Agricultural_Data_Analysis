@@ -6,6 +6,7 @@ import {
     LineChart, Line, Legend
 } from 'recharts';
 import { getTopCrops, getTrendData, getBoomCrops } from '../utils/processData';
+import { palette } from '../utils/design';
 
 interface EconomicsDashboardProps {
     data: any[];
@@ -13,9 +14,20 @@ interface EconomicsDashboardProps {
     stateName: string;
 }
 
-const COLORS = ['#2c5282', '#2b6cb0', '#4299e1', '#63b3ed', '#90cdf4', '#a3bffa', '#c3dafe', '#ebf8ff'];
-const GROWTH_COLORS = ['#48bb78', '#38a169', '#2f855a', '#276749', '#22543d'];
-const NEG_GROWTH_COLORS = ['#f56565', '#e53e3e', '#c53030', '#9b2c2c'];
+// Vibrant, diverse colors for different commodities
+const COMMODITY_COLORS: Record<string, string> = {
+    CORN: '#fbbf24',        // Amber/gold
+    SOYBEANS: '#34d399',    // Emerald
+    HAY: '#3b82f6',         // Blue
+    WHEAT: '#f87171',       // Red/pink
+    COTTON: '#a78bfa',      // Purple
+    RICE: '#38bdf8',        // Sky blue
+    SORGHUM: '#fb923c',     // Orange
+    BARLEY: '#8b5cf6',      // Violet
+};
+
+const GROWTH_COLORS = [palette.positive, '#34d399', '#3b82f6', '#60a5fa'];
+const NEG_GROWTH_COLORS = [palette.negative, '#ef4444', '#dc2626'];
 
 export default function EconomicsDashboard({ data, year, stateName }: EconomicsDashboardProps) {
     const METRIC = 'SALES'; // Economics focuses on Sales/Revenue
@@ -42,38 +54,71 @@ export default function EconomicsDashboard({ data, year, stateName }: EconomicsD
     }, [data, year]);
 
     if (!data.length) {
-        return <div className="p-12 text-center text-slate-400">No data available for Economics visualization.</div>;
+        return (
+            <div className="p-12 text-center">
+                <span className="material-symbols-outlined text-gray-600 text-[64px] mb-4 block">monetization_on</span>
+                <p className="text-gray-400">No data available for Economics visualization.</p>
+            </div>
+        );
     }
 
     return (
         <div className="space-y-8">
+            {/* Header */}
+            <div>
+                <h2 className="text-2xl font-bold text-white flex items-center gap-3">
+                    <span className="material-symbols-outlined text-[#19e63c] text-[32px]">monetization_on</span>
+                    Economics Dashboard
+                </h2>
+                <p className="text-gray-400 text-sm mt-1">{stateName} • {year}</p>
+            </div>
 
             {/* Row 1: Top Revenue */}
-            <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-                <h3 className="text-xl font-semibold mb-1 text-slate-800">Top Crops by Revenue</h3>
-                <p className="text-sm text-slate-500 mb-6">Market value of agricultural products sold in {stateName}, {year}</p>
+            <div className="bg-[#1a1d24] p-6 rounded-xl border border-[#2a4030]">
+                <div className="flex items-center gap-3 mb-4">
+                    <span className="material-symbols-outlined text-[#19e63c] text-[28px]">bar_chart</span>
+                    <div>
+                        <h3 className="text-xl font-semibold text-white">Top Crops by Revenue</h3>
+                        <p className="text-sm text-gray-400">Market value of agricultural products sold in {stateName}, {year}</p>
+                    </div>
+                </div>
                 <div className="h-[400px] w-full">
                     <ResponsiveContainer width="100%" height="100%">
                         <BarChart
                             layout="vertical"
                             data={topRevenueCrops}
-                            margin={{ top: 5, right: 30, left: 100, bottom: 5 }}
+                            margin={{ top: 5, right: 30, left: 120, bottom: 5 }}
                         >
-                            <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={true} stroke="#e2e8f0" />
-                            <XAxis type="number" tickFormatter={(val) => `$${(val / 1000000).toFixed(1)}M`} />
+                            <CartesianGrid strokeDasharray="3 3" stroke={palette.border} horizontal={true} vertical={true} />
+                            <XAxis 
+                                type="number" 
+                                tickFormatter={(val) => `$${(val / 1000000).toFixed(1)}M`}
+                                stroke={palette.textMuted}
+                                tick={{ fill: palette.textSecondary }}
+                            />
                             <YAxis
                                 type="category"
                                 dataKey="commodity"
-                                width={120}
-                                tick={{ fontSize: 11, fill: '#4a5568' }}
+                                width={110}
+                                tick={{ fontSize: 11, fill: palette.textSecondary }}
+                                stroke={palette.textMuted}
                             />
                             <Tooltip
                                 formatter={(val: number | undefined) => [val ? `$${val.toLocaleString()}` : '$0', 'Revenue']}
-                                contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}
+                                contentStyle={{
+                                    backgroundColor: palette.bgCard,
+                                    border: `1px solid ${palette.border}`,
+                                    borderRadius: '8px',
+                                    color: palette.textPrimary
+                                }}
+                                labelStyle={{ color: palette.textSecondary }}
                             />
-                            <Bar dataKey="value" radius={[0, 4, 4, 0]}>
-                                {topRevenueCrops.map((_, index) => (
-                                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                            <Bar dataKey="value" radius={[0, 8, 8, 0]}>
+                                {topRevenueCrops.map((entry: any) => (
+                                    <Cell 
+                                        key={`cell-${entry.commodity}`} 
+                                        fill={COMMODITY_COLORS[entry.commodity] || palette.textAccent} 
+                                    />
                                 ))}
                             </Bar>
                         </BarChart>
@@ -82,29 +127,47 @@ export default function EconomicsDashboard({ data, year, stateName }: EconomicsD
             </div>
 
             {/* Row 2: Trends */}
-            <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-                <h3 className="text-xl font-semibold mb-1 text-slate-800">Revenue Trends</h3>
-                <p className="text-sm text-slate-500 mb-6">Historical revenue performance for top commodities</p>
+            <div className="bg-[#1a1d24] p-6 rounded-xl border border-[#2a4030]">
+                <div className="flex items-center gap-3 mb-4">
+                    <span className="material-symbols-outlined text-[#19e63c] text-[28px]">show_chart</span>
+                    <div>
+                        <h3 className="text-xl font-semibold text-white">Revenue Trends</h3>
+                        <p className="text-sm text-gray-400">Historical revenue performance for top commodities</p>
+                    </div>
+                </div>
                 <div className="h-[400px] w-full">
                     <ResponsiveContainer width="100%" height="100%">
                         <LineChart
                             data={revenueTrends}
                             margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
                         >
-                            <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                            <XAxis dataKey="year" />
-                            <YAxis tickFormatter={(val) => `$${(val / 1000000).toFixed(0)}M`} />
-                            <Tooltip formatter={(val: number | undefined) => [val ? `$${val.toLocaleString()}` : '$0', 'Revenue']} />
-                            <Legend />
-                            {trendKeys.map((key, index) => (
+                            <CartesianGrid strokeDasharray="3 3" stroke={palette.border} />
+                            <XAxis dataKey="year" stroke={palette.textMuted} tick={{ fill: palette.textSecondary }} />
+                            <YAxis 
+                                tickFormatter={(val) => `$${(val / 1000000).toFixed(0)}M`}
+                                stroke={palette.textMuted}
+                                tick={{ fill: palette.textSecondary }}
+                            />
+                            <Tooltip 
+                                formatter={(val: number | undefined) => [val ? `$${val.toLocaleString()}` : '$0', 'Revenue']}
+                                contentStyle={{
+                                    backgroundColor: palette.bgCard,
+                                    border: `1px solid ${palette.border}`,
+                                    borderRadius: '8px',
+                                    color: palette.textPrimary
+                                }}
+                                labelStyle={{ color: palette.textSecondary }}
+                            />
+                            <Legend wrapperStyle={{ color: palette.textSecondary }} />
+                            {trendKeys.map((key) => (
                                 <Line
                                     key={key}
                                     type="monotone"
                                     dataKey={key}
-                                    stroke={COLORS[index % COLORS.length]}
+                                    stroke={COMMODITY_COLORS[key] || palette.textAccent}
                                     strokeWidth={3}
-                                    dot={{ r: 4, fill: COLORS[index % COLORS.length] }}
-                                    activeDot={{ r: 6 }}
+                                    dot={{ r: 3, fill: COMMODITY_COLORS[key] || palette.textAccent, strokeWidth: 0 }}
+                                    activeDot={{ r: 6, stroke: palette.bgCard, strokeWidth: 2 }}
                                 />
                             ))}
                         </LineChart>
@@ -113,33 +176,51 @@ export default function EconomicsDashboard({ data, year, stateName }: EconomicsD
             </div>
 
             {/* Row 3: Boom Crops */}
-            <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-                <h3 className="text-xl font-semibold mb-1 text-slate-800">"Boom" Crops (High Growth)</h3>
-                <p className="text-sm text-slate-500 mb-6">Top crops by 10-year revenue growth ({year - 10} vs {year})</p>
+            <div className="bg-[#1a1d24] p-6 rounded-xl border border-[#2a4030]">
+                <div className="flex items-center gap-3 mb-4">
+                    <span className="material-symbols-outlined text-[#19e63c] text-[28px]">rocket_launch</span>
+                    <div>
+                        <h3 className="text-xl font-semibold text-white">"Boom" Crops (High Growth)</h3>
+                        <p className="text-sm text-gray-400">Top crops by 10-year revenue growth ({year - 10} vs {year})</p>
+                    </div>
+                </div>
                 <div className="h-[400px] w-full">
                     <ResponsiveContainer width="100%" height="100%">
                         <BarChart
                             layout="vertical"
                             data={boomCrops}
-                            margin={{ top: 5, right: 50, left: 100, bottom: 5 }}
+                            margin={{ top: 5, right: 50, left: 120, bottom: 5 }}
                         >
-                            <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={true} stroke="#e2e8f0" />
-                            <XAxis type="number" tickFormatter={(val) => `${val.toFixed(0)}%`} />
+                            <CartesianGrid strokeDasharray="3 3" stroke={palette.border} horizontal={true} vertical={true} />
+                            <XAxis 
+                                type="number" 
+                                tickFormatter={(val) => `${val.toFixed(0)}%`}
+                                stroke={palette.textMuted}
+                                tick={{ fill: palette.textSecondary }}
+                            />
                             <YAxis
                                 type="category"
                                 dataKey="commodity"
-                                width={120}
-                                tick={{ fontSize: 11, fill: '#4a5568' }}
+                                width={110}
+                                tick={{ fontSize: 11, fill: palette.textSecondary }}
+                                stroke={palette.textMuted}
                             />
                             <Tooltip
                                 formatter={(val: number | undefined) => [val ? `${val.toFixed(1)}%` : '0%', 'Growth']}
                                 labelFormatter={(label) => `${label} (${year - 10} - ${year})`}
+                                contentStyle={{
+                                    backgroundColor: palette.bgCard,
+                                    border: `1px solid ${palette.border}`,
+                                    borderRadius: '8px',
+                                    color: palette.textPrimary
+                                }}
+                                labelStyle={{ color: palette.textSecondary }}
                             />
-                            <Bar dataKey="growth" radius={[0, 4, 4, 0]}>
-                                {boomCrops.map((entry, index) => (
+                            <Bar dataKey="growth" radius={[0, 8, 8, 0]}>
+                                {boomCrops.map((entry: any) => (
                                     <Cell
-                                        key={`cell-${index}`}
-                                        fill={entry.growth >= 0 ? GROWTH_COLORS[index % GROWTH_COLORS.length] : NEG_GROWTH_COLORS[0]}
+                                        key={`cell-${entry.commodity}`}
+                                        fill={entry.growth >= 0 ? (COMMODITY_COLORS[entry.commodity] || palette.positive) : palette.negative}
                                     />
                                 ))}
                             </Bar>

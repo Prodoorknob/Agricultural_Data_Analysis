@@ -114,20 +114,34 @@ export default function AnimalsDashboard({ data, year, stateName }: AnimalsDashb
     }, [trendData, year]);
 
     if (!allAnimalsData.length) {
-        return <div className="p-12 text-center text-slate-400">No animal data available.</div>;
+        return (
+            <div className="p-12 text-center">
+                <span className="material-symbols-outlined text-gray-600 text-[64px] mb-4 block">pets</span>
+                <p className="text-gray-400">No animal data available.</p>
+            </div>
+        );
     }
 
     return (
         <div className="space-y-6">
-            <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-wrap items-center gap-6">
+            {/* Header */}
+            <div>
+                <h2 className="text-2xl font-bold text-white flex items-center gap-3">
+                    <span className="material-symbols-outlined text-[#19e63c] text-[32px]">pets</span>
+                    Livestock & Animals Dashboard
+                </h2>
+                <p className="text-gray-400 text-sm mt-1">{stateName} • {year}</p>
+            </div>
 
+            {/* Filters */}
+            <div className="bg-[#1a1d24] p-4 rounded-xl border border-[#2a4030] flex flex-wrap items-center gap-6">
                 {/* Group Filter */}
                 <div className="flex flex-col gap-1">
-                    <label className="text-xs font-semibold text-slate-500 uppercase">Category</label>
+                    <label className="text-xs font-semibold text-gray-400 uppercase">Category</label>
                     <select
                         value={selectedGroup}
                         onChange={(e) => setSelectedGroup(e.target.value)}
-                        className="p-2 border border-slate-300 rounded shadow-sm focus:ring-2 focus:ring-blue-500 outline-none bg-slate-50 min-w-[150px]"
+                        className="bg-[#0f1117] border border-[#2a4030] text-white text-sm rounded-lg px-4 py-2 focus:ring-2 focus:ring-[#19e63c] appearance-none cursor-pointer min-w-[150px]"
                     >
                         {groups.map(g => <option key={g} value={g}>{g}</option>)}
                     </select>
@@ -135,11 +149,11 @@ export default function AnimalsDashboard({ data, year, stateName }: AnimalsDashb
 
                 {/* Commodity Filter */}
                 <div className="flex flex-col gap-1">
-                    <label className="text-xs font-semibold text-slate-500 uppercase">Livestock / Product</label>
+                    <label className="text-xs font-semibold text-gray-400 uppercase">Livestock / Product</label>
                     <select
                         value={selectedCommodity}
                         onChange={(e) => setSelectedCommodity(e.target.value)}
-                        className="p-2 border border-slate-300 rounded shadow-sm focus:ring-2 focus:ring-blue-500 outline-none min-w-[200px]"
+                        className="bg-[#0f1117] border border-[#2a4030] text-white text-sm rounded-lg px-4 py-2 focus:ring-2 focus:ring-[#19e63c] appearance-none cursor-pointer min-w-[200px]"
                         disabled={!commodities.length}
                     >
                         {commodities.map(c => <option key={c} value={c}>{c}</option>)}
@@ -150,55 +164,130 @@ export default function AnimalsDashboard({ data, year, stateName }: AnimalsDashb
 
             {/* Key Metrics */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-                    <p className="text-sm text-slate-500 font-semibold uppercase">Inventory ({year})</p>
-                    <p className="text-3xl font-bold text-slate-800 mt-2">
+                <div className="bg-[#1a1d24] p-6 rounded-xl border border-[#2a4030] relative overflow-hidden">
+                    <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-[#19e63c] to-transparent opacity-60"></div>
+                    <div className="flex items-center gap-3 mb-4">
+                        <div className="size-10 bg-[#19e63c]/20 rounded-lg flex items-center justify-center">
+                            <span className="material-symbols-outlined text-[#19e63c] text-[24px]">warehouse</span>
+                        </div>
+                        <p className="text-gray-400 text-xs font-semibold uppercase tracking-wider">Inventory ({year})</p>
+                    </div>
+                    <p className="text-3xl font-bold text-white">
                         {currentYearStats.inventory ? currentYearStats.inventory.toLocaleString() : 'N/A'}
-                        <span className="text-sm text-slate-400 font-normal ml-2">HEAD</span>
                     </p>
+                    <p className="text-sm text-gray-500 mt-1">HEAD</p>
                 </div>
-                <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-                    <p className="text-sm text-slate-500 font-semibold uppercase">Sales Revenue ({year})</p>
-                    <p className="text-3xl font-bold text-emerald-600 mt-2">
+                
+                <div className="bg-[#1a1d24] p-6 rounded-xl border border-[#2a4030] relative overflow-hidden">
+                    <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-[#19e63c] to-transparent opacity-60"></div>
+                    <div className="flex items-center gap-3 mb-4">
+                        <div className="size-10 bg-[#19e63c]/20 rounded-lg flex items-center justify-center">
+                            <span className="material-symbols-outlined text-[#19e63c] text-[24px]">monetization_on</span>
+                        </div>
+                        <p className="text-gray-400 text-xs font-semibold uppercase tracking-wider">Sales Revenue ({year})</p>
+                    </div>
+                    <p className="text-3xl font-bold text-[#19e63c]">
                         {currentYearStats.salesRevenue ? `$${currentYearStats.salesRevenue.toLocaleString()}` : 'N/A'}
                     </p>
                 </div>
-                <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-                    <p className="text-sm text-slate-500 font-semibold uppercase">Production ({year})</p>
-                    <p className="text-3xl font-bold text-blue-600 mt-2">
+                
+                <div className="bg-[#1a1d24] p-6 rounded-xl border border-[#2a4030] relative overflow-hidden">
+                    <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-[#19e63c] to-transparent opacity-60"></div>
+                    <div className="flex items-center gap-3 mb-4">
+                        <div className="size-10 bg-[#19e63c]/20 rounded-lg flex items-center justify-center">
+                            <span className="material-symbols-outlined text-[#19e63c] text-[24px]">inventory_2</span>
+                        </div>
+                        <p className="text-gray-400 text-xs font-semibold uppercase tracking-wider">Production ({year})</p>
+                    </div>
+                    <p className="text-3xl font-bold text-white">
                         {currentYearStats.production ? currentYearStats.production.toLocaleString() : 'N/A'}
-                        <span className="text-sm text-slate-400 font-normal ml-2">{currentYearStats.prodUnit}</span>
                     </p>
+                    <p className="text-sm text-gray-500 mt-1">{currentYearStats.prodUnit}</p>
                 </div>
             </div>
 
             {/* Charts */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-                    <h3 className="text-lg font-semibold mb-4 text-slate-700">{selectedCommodity} Inventory Trend</h3>
+                <div className="bg-[#1a1d24] p-6 rounded-xl border border-[#2a4030]">
+                    <div className="flex items-center gap-3 mb-4">
+                        <span className="material-symbols-outlined text-[#19e63c] text-[24px]">show_chart</span>
+                        <h3 className="text-lg font-semibold text-white">{selectedCommodity} Inventory Trend</h3>
+                    </div>
                     <div className="h-[350px]">
                         <ResponsiveContainer width="100%" height="100%">
                             <LineChart data={trendData}>
-                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                                <XAxis dataKey="year" axisLine={false} tickLine={false} />
-                                <YAxis axisLine={false} tickLine={false} tickFormatter={(val) => val >= 1000 ? `${(val / 1000).toFixed(0)}k` : val} />
-                                <Tooltip formatter={(val: any) => [val ? val.toLocaleString() : '0', 'Head']} />
-                                <Line type="monotone" dataKey="inventory" stroke="#2563eb" strokeWidth={3} dot={{ r: 3 }} />
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#2a4030" />
+                                <XAxis 
+                                    dataKey="year" 
+                                    axisLine={false} 
+                                    tickLine={false}
+                                    stroke="#718096"
+                                    tick={{ fill: '#9ca3af' }}
+                                />
+                                <YAxis 
+                                    axisLine={false} 
+                                    tickLine={false} 
+                                    tickFormatter={(val) => val >= 1000 ? `${(val / 1000).toFixed(0)}k` : val}
+                                    stroke="#718096"
+                                    tick={{ fill: '#9ca3af' }}
+                                />
+                                <Tooltip 
+                                    formatter={(val: any) => [val ? val.toLocaleString() : '0', 'Head']}
+                                    contentStyle={{
+                                        backgroundColor: '#1a1d24',
+                                        border: '1px solid #2a4030',
+                                        borderRadius: '8px',
+                                        color: '#fff'
+                                    }}
+                                    labelStyle={{ color: '#9ca3af' }}
+                                />
+                                <Line 
+                                    type="monotone" 
+                                    dataKey="inventory" 
+                                    stroke="#19e63c" 
+                                    strokeWidth={3} 
+                                    dot={{ r: 4, fill: '#19e63c', strokeWidth: 2 }}
+                                    activeDot={{ r: 6 }}
+                                />
                             </LineChart>
                         </ResponsiveContainer>
                     </div>
                 </div>
 
-                <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-                    <h3 className="text-lg font-semibold mb-4 text-slate-700">{selectedCommodity} Sales Revenue Trend</h3>
+                <div className="bg-[#1a1d24] p-6 rounded-xl border border-[#2a4030]">
+                    <div className="flex items-center gap-3 mb-4">
+                        <span className="material-symbols-outlined text-[#19e63c] text-[24px]">bar_chart</span>
+                        <h3 className="text-lg font-semibold text-white">{selectedCommodity} Sales Revenue Trend</h3>
+                    </div>
                     <div className="h-[350px]">
                         <ResponsiveContainer width="100%" height="100%">
                             <BarChart data={trendData}>
-                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                                <XAxis dataKey="year" axisLine={false} tickLine={false} />
-                                <YAxis axisLine={false} tickLine={false} tickFormatter={(val) => val >= 1000000 ? `$${(val / 1000000).toFixed(0)}M` : `$${val}`} />
-                                <Tooltip formatter={(val: any) => [`$${val.toLocaleString()}`, 'Revenue']} />
-                                <Bar dataKey="salesRevenue" fill="#10b981" radius={[4, 4, 0, 0]} />
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#2a4030" />
+                                <XAxis 
+                                    dataKey="year" 
+                                    axisLine={false} 
+                                    tickLine={false}
+                                    stroke="#718096"
+                                    tick={{ fill: '#9ca3af' }}
+                                />
+                                <YAxis 
+                                    axisLine={false} 
+                                    tickLine={false} 
+                                    tickFormatter={(val) => val >= 1000000 ? `$${(val / 1000000).toFixed(0)}M` : `$${val}`}
+                                    stroke="#718096"
+                                    tick={{ fill: '#9ca3af' }}
+                                />
+                                <Tooltip 
+                                    formatter={(val: any) => [`$${val.toLocaleString()}`, 'Revenue']}
+                                    contentStyle={{
+                                        backgroundColor: '#1a1d24',
+                                        border: '1px solid #2a4030',
+                                        borderRadius: '8px',
+                                        color: '#fff'
+                                    }}
+                                    labelStyle={{ color: '#9ca3af' }}
+                                />
+                                <Bar dataKey="salesRevenue" fill="#19e63c" radius={[8, 8, 0, 0]} />
                             </BarChart>
                         </ResponsiveContainer>
                     </div>
