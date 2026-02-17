@@ -10,20 +10,12 @@ export interface CropData {
     [key: string]: any;
 }
 
-/**
- * Clean value string to number.
- * Handles commas, and NASS specific codes (D), (Z) etc.
- */
 export function cleanValue(val: any): number {
     if (typeof val === 'number') return val;
     if (!val) return 0;
-
     const str = String(val).trim();
-
-    // NASS codes for withheld/zero
     if (/^\([A-Z]\)$/i.test(str)) return 0;
     if (['-', '--', 'NA', 'N/A', 'null', 'None'].includes(str)) return 0;
-
     try {
         return parseFloat(str.replace(/,/g, ''));
     } catch (e) {
@@ -32,282 +24,263 @@ export function cleanValue(val: any): number {
 }
 
 /**
- * Filter out totals
+ * Enhanced Filter: Source + Totals + Valid Data
  */
-export function filterTotals(data: any[]) {
+export function filterData(data: any[]): any[] {
+    if (!data || data.length === 0) return [];
+
     return data.filter(d =>
+        // 1. Source: Survey or Farm Operations Exception
+        (!d.source_desc || d.source_desc === 'SURVEY' || d.commodity_desc === 'FARM OPERATIONS' ||
+            (['CORN', 'SOYBEANS', 'WHEAT', 'COTTON'].includes(d.commodity_desc) && d.statisticcat_desc === 'SALES')) &&
+
+        // 2. Remove Totals (User Requirement)
         !d.commodity_desc?.includes('TOTAL') &&
-        !d.commodity_desc?.includes('ALL CLASSES')
+        !d.commodity_desc?.includes('ALL CLASSES') &&
+
+        // 3. Remove Domain Totals (if granular data is available)
+        // Usually we WANT domain=TOTAL for state aggregates
+        (d.domain_desc === 'TOTAL' || !d.domain_desc)
     );
 }
 
-/**
- * Get Top 10 crops by value for a specific year and metric
- */
-export function getTopCrops(
-    data: any[],
-    year: number,
-    metric: string = 'AREA HARVESTED'
-) {
-    // Filter by year and metric
-    const filtered = data.filter(d =>
+// Re-export filterSource for backward compatibility (maps to filterData now)
+export const filterSource = filterData;
+export const filterTotals = filterData;
+
+export function getTopCrops(data: any[], year: number, metric: string = 'AREA HARVESTED') {
+    const filtered = filterData(data).filter(d =>
         d.year === year &&
-        d.statisticcat_desc === metric &&
-        d.commodity_desc &&
-        !['TOTAL', 'ALL CLASSES'].includes(d.commodity_desc)
+        (metric === 'SALES' ? ['SALES', 'PRODUCTION', 'VALUE'].includes(d.statisticcat_desc) : d.statisticcat_desc === metric) &&
+        (metric === 'SALES' ? d.unit_desc === '$' : true)
     );
 
-    // Group by commodity and sum values
-    // Uses d3.rollups to sum
-    const rolledUp = d3.rollups(
-        filtered,
-        v => d3.sum(v, d => cleanValue(d.value_num || d.Value)),
-        d => d.commodity_desc
-    );
+    const commodityGroups = d3.group(filtered, d => d.commodity_desc);
+    const rolledUp: [string, number][] = [];
 
-    // Sort descending and take top 10
-    return rolledUp
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 10)
-        .map(([commodity, value]) => ({ commodity, value }));
+    commodityGroups.forEach((rows, commodity) => {
+        let relevantRows = rows;
+        if (metric === 'SALES') {
+            const hasSales = rows.some(r => r.statisticcat_desc === 'SALES');
+            if (hasSales) relevantRows = rows.filter(r => r.statisticcat_desc === 'SALES');
+            else {
+                const hasProduction = rows.some(r => r.statisticcat_desc === 'PRODUCTION');
+                if (hasProduction) relevantRows = rows.filter(r => r.statisticcat_desc === 'PRODUCTION');
+                else relevantRows = rows.filter(r => r.statisticcat_desc === 'VALUE');
+            }
+        }
+        const value = d3.sum(relevantRows, d => cleanValue(d.value_num || d.Value));
+        if (value > 0) rolledUp.push([commodity, value]);
+    });
+
+    return rolledUp.sort((a, b) => b[1] - a[1]).slice(0, 10).map(([commodity, value]) => ({ commodity, value }));
 }
 
-/**
- * Get trend data for specific commodities over time
- */
-export function getTrendData(
-    data: any[],
-    metric: string,
-    topCommodities: string[]
-) {
-    // Filter for the specific metric and selected commodities
-    const filtered = data.filter(d =>
-        d.statisticcat_desc === metric &&
-        topCommodities.includes(d.commodity_desc)
+export function getTrendData(data: any[], metric: string, topCommodities: string[]) {
+    const filtered = filterData(data).filter(d =>
+        (metric === 'SALES' ? ['SALES', 'PRODUCTION', 'VALUE'].includes(d.statisticcat_desc) : d.statisticcat_desc === metric) &&
+        topCommodities.includes(d.commodity_desc) &&
+        (metric === 'SALES' ? d.unit_desc === '$' : true)
     );
 
-    // Group by year
     const yearGroups = d3.group(filtered, d => d.year);
-
     const trendData: any[] = [];
 
     yearGroups.forEach((rows, year) => {
         const yearObj: any = { year };
-
-        // For each commodity, sum up the value for that year
         topCommodities.forEach(commodity => {
             const cropRows = rows.filter(r => r.commodity_desc === commodity);
-            const total = d3.sum(cropRows, r => cleanValue(r.value_num || r.Value));
-            yearObj[commodity] = total;
+            let relevantRows = cropRows;
+            if (metric === 'SALES') {
+                const hasSales = cropRows.some(r => r.statisticcat_desc === 'SALES');
+                if (hasSales) relevantRows = cropRows.filter(r => r.statisticcat_desc === 'SALES');
+                else {
+                    const hasProduction = cropRows.some(r => r.statisticcat_desc === 'PRODUCTION');
+                    if (hasProduction) relevantRows = cropRows.filter(r => r.statisticcat_desc === 'PRODUCTION');
+                    else relevantRows = cropRows.filter(r => r.statisticcat_desc === 'VALUE');
+                }
+            }
+            yearObj[commodity] = d3.sum(relevantRows, r => cleanValue(r.value_num || r.Value));
         });
-
         trendData.push(yearObj);
     });
 
     return trendData.sort((a, b) => a.year - b.year);
 }
 
-/**
- * processed data for the Hex Map.
- * Aggregates values by State for a specific Year and Metric.
- */
-export function getMapData(
-    data: any[],
-    year: number,
-    metric: string
-): Record<string, number> {
+export function getMapData(data: any[], year: number, metric: string): Record<string, number> {
     const mapData: Record<string, number> = {};
-
-    // Filter relevant rows
-    const filtered = data.filter(d =>
+    const filtered = filterData(data).filter(d =>
         Number(d.year) === year &&
         d.statisticcat_desc &&
         d.statisticcat_desc.toUpperCase() === metric &&
-        d.state_alpha
+        d.state_alpha && d.state_alpha !== 'US' // Exclude US total from map
     );
 
-    // Aggregate by state
     filtered.forEach(d => {
         const state = d.state_alpha;
         const val = cleanValue(d.value_num || d.Value);
-        if (mapData[state]) {
-            mapData[state] += val;
-        } else {
-            mapData[state] = val;
-        }
+        mapData[state] = (mapData[state] || 0) + val;
     });
 
     return mapData;
 }
 
-/**
- * Get "Boom" crops: Top crops by percentage growth between two years.
- */
-export function getBoomCrops(
-    data: any[],
-    metric: string,
-    endYear: number,
-    startYear: number
-) {
-    // 1. Get aggregated values for start and end years
+export function getBoomCrops(data: any[], metric: string, endYear: number, startYear: number) {
+    const cleanData = filterData(data);
     const getYearValues = (y: number) => {
-        const filtered = data.filter(d =>
+        const filtered = cleanData.filter(d =>
             d.year === y &&
-            d.statisticcat_desc === metric &&
-            !d.commodity_desc?.includes('TOTAL')
+            (metric === 'SALES' ? ['SALES', 'PRODUCTION', 'VALUE'].includes(d.statisticcat_desc) : d.statisticcat_desc === metric) &&
+            (metric === 'SALES' ? d.unit_desc === '$' : true)
         );
-        return d3.rollups(
-            filtered,
-            v => d3.sum(v, d => cleanValue(d.value_num || d.Value)),
-            d => d.commodity_desc
-        );
+        const commodityGroups = d3.group(filtered, d => d.commodity_desc);
+        const results: [string, number][] = [];
+        commodityGroups.forEach((rows, commodity) => {
+            let relevantRows = rows;
+            if (metric === 'SALES') {
+                // Same priority logic
+                const hasSales = rows.some(r => r.statisticcat_desc === 'SALES');
+                if (hasSales) relevantRows = rows.filter(r => r.statisticcat_desc === 'SALES');
+                else {
+                    const hasProduction = rows.some(r => r.statisticcat_desc === 'PRODUCTION');
+                    if (hasProduction) relevantRows = rows.filter(r => r.statisticcat_desc === 'PRODUCTION');
+                    else relevantRows = rows.filter(r => r.statisticcat_desc === 'VALUE');
+                }
+            }
+            results.push([commodity, d3.sum(relevantRows, d => cleanValue(d.value_num || d.Value))]);
+        });
+        return results;
     };
 
     const startValues = new Map(getYearValues(startYear));
     const endValues = new Map(getYearValues(endYear));
+    const growth: any[] = [];
 
-    const growth: { commodity: string, growth: number, start: number, end: number }[] = [];
-
-    // 2. Calculate growth
     endValues.forEach((endVal, commodity) => {
         const startVal = startValues.get(commodity);
-        // Filter out small values to avoid huge % jumps on tiny base
         if (startVal && startVal > 10000 && endVal > 0) {
             const pctChange = ((endVal - startVal) / startVal) * 100;
             growth.push({ commodity, growth: pctChange, start: startVal, end: endVal });
         }
     });
 
-    // 3. Sort by growth desc
     return growth.sort((a, b) => b.growth - a.growth).slice(0, 10);
 }
 
-/**
- * Get Land Use trends: Area Planted vs Area Harvested over time.
- */
 export function getLandUseTrends(data: any[]) {
-    // Filter relevant metrics
-    const relevant = data.filter(d =>
-        ['AREA PLANTED', 'AREA HARVESTED'].includes(d.statisticcat_desc) &&
-        !d.commodity_desc?.includes('TOTAL')
+    const relevant = filterData(data).filter(d =>
+        ['AREA PLANTED', 'AREA HARVESTED'].includes(d.statisticcat_desc)
     );
 
-    const yearGroups = d3.group(relevant, d => d.year);
+    // Step 1: Find crops that have BOTH AREA PLANTED and AREA HARVESTED data
+    const plantedCrops = new Set(
+        relevant.filter(d => d.statisticcat_desc === 'AREA PLANTED').map(d => d.commodity_desc)
+    );
+    const harvestedCrops = new Set(
+        relevant.filter(d => d.statisticcat_desc === 'AREA HARVESTED').map(d => d.commodity_desc)
+    );
+    const bothCrops = new Set([...plantedCrops].filter(c => harvestedCrops.has(c)));
+
+    // Step 2: Only keep rows for crops with BOTH metrics
+    const paired = relevant.filter(d => bothCrops.has(d.commodity_desc));
+
+    // Step 3: Detect multi-harvest crops (harvested/planted ratio > 1.5 in majority of years)
+    const multiHarvestCrops: string[] = [];
+    bothCrops.forEach(crop => {
+        const cropRows = paired.filter(d => d.commodity_desc === crop);
+        const years = [...new Set(cropRows.map(d => d.year))];
+        let multiCount = 0;
+        years.forEach(y => {
+            const p = d3.sum(cropRows.filter(r => r.year === y && r.statisticcat_desc === 'AREA PLANTED'), r => cleanValue(r.value_num || r.Value));
+            const h = d3.sum(cropRows.filter(r => r.year === y && r.statisticcat_desc === 'AREA HARVESTED'), r => cleanValue(r.value_num || r.Value));
+            if (p > 0 && h / p > 1.5) multiCount++;
+        });
+        if (years.length > 0 && multiCount / years.length > 0.5) {
+            multiHarvestCrops.push(crop);
+        }
+    });
+
+    // Step 4: Aggregate by year
+    const yearGroups = d3.group(paired, d => d.year);
     const trends: any[] = [];
 
     yearGroups.forEach((rows, year) => {
-        const planted = d3.sum(
-            rows.filter(r => r.statisticcat_desc === 'AREA PLANTED'),
-            r => cleanValue(r.value_num || r.Value)
-        );
-        const harvested = d3.sum(
-            rows.filter(r => r.statisticcat_desc === 'AREA HARVESTED'),
-            r => cleanValue(r.value_num || r.Value)
-        );
+        const planted = d3.sum(rows.filter(r => r.statisticcat_desc === 'AREA PLANTED'), r => cleanValue(r.value_num || r.Value));
+        const harvested = d3.sum(rows.filter(r => r.statisticcat_desc === 'AREA HARVESTED'), r => cleanValue(r.value_num || r.Value));
+        if (planted > 0 || harvested > 0) trends.push({ year, planted, harvested });
+    });
 
-        if (planted > 0 || harvested > 0) {
-            trends.push({ year, planted, harvested });
+    const sorted = trends.sort((a, b) => a.year - b.year);
+
+    // Attach metadata for UI consumption
+    (sorted as any).multiHarvestCrops = multiHarvestCrops;
+    (sorted as any).pairedCropCount = bothCrops.size;
+    (sorted as any).excludedCropCount = harvestedCrops.size - bothCrops.size;
+
+    return sorted;
+}
+
+export function getLandUseComposition(data: any[]) {
+    // Current data source lacks National totals for Cropland/Urban
+    // Trying fallback to AG LAND Asset Value? NO.
+    // Return empty for now to avoid crashes.
+    return [];
+}
+
+export function getLandUseChange(data: any[]) {
+    // Data unavailable in current ETL pipeline
+    return [];
+}
+
+export function getLaborTrends(data: any[], selectedState: string = 'INDIANA') {
+    // Fix: Explicitly filter for WAGE RATE
+    const wageData = filterData(data).filter(d => d.statisticcat_desc === 'WAGE RATE');
+    const cleanState = selectedState ? String(selectedState).toUpperCase() : 'INDIANA';
+
+    const yearGroups = d3.group(wageData, d => d.year);
+    const trends: any[] = [];
+
+    yearGroups.forEach((rows, year) => {
+        const row: any = { year };
+
+        // 1. National Avg (look for US row)
+        const national = rows.find(d => d.state_alpha === 'US');
+        if (national) {
+            row['National Avg'] = cleanValue(national.value_num || national.Value);
+        } else {
+            // Fallback: Average of all states
+            const vals = rows.filter(d => d.state_alpha !== 'US').map(d => cleanValue(d.value_num || d.Value));
+            if (vals.length) row['National Avg'] = d3.mean(vals);
         }
+
+        // 2. Selected State
+        // Ensure we check state_alpha correctly (codes involved)
+        // selectedState coming from UI is usually Code (IN)
+        const selected = rows.find(d => d.state_alpha === cleanState);
+        if (selected) row[cleanState] = cleanValue(selected.value_num || selected.Value);
+
+        // 3. Comparison States
+        ['CA', 'FL', 'HI'].forEach(st => {
+            const comp = rows.find(d => d.state_alpha === st);
+            if (comp) row[st] = cleanValue(comp.value_num || comp.Value);
+        });
+
+        trends.push(row);
     });
 
     return trends.sort((a, b) => a.year - b.year);
 }
 
-/**
- * Get National Land Use Composition over time (Cropland vs Urban)
- */
-export function getLandUseComposition(data: any[]) {
-    // Filter for "48 States" which represents the national summary
-    const national = data.filter(d => d.state_name === '48 States');
-
-    return national
-        .map(d => ({
-            year: Number(d.year),
-            Cropland: cleanValue(d.total_cropland),
-            'Urban Land': cleanValue(d.land_in_urban_areas)
-        }))
-        .sort((a, b) => a.year - b.year);
-}
-
-/**
- * Get Cropland vs Urban Land Change per State (First Year vs Last Year)
- */
-export function getLandUseChange(data: any[]) {
-    // 1. Group by state
-    // Filter out "48 States" and regions (usually they don't have standard postal codes, but here we only have state names)
-    // We'll exclude '48 States', 'Northeast', etc. if they exist. Based on inspection, '48 States' is the main aggregate.
-    const validStates = data.filter(d =>
-        d.state_name &&
-        !['48 States', 'Corn Belt', 'Appalachian', 'Delta States', 'Lake States', 'Mountain', 'Northeast', 'Northern Plains', 'Pacific', 'Southeast', 'Southern Plains'].includes(d.state_name)
+export function getOperationsTrend(data: any[]) {
+    const opsData = filterData(data).filter(d =>
+        d.commodity_desc === 'FARM OPERATIONS' && d.statisticcat_desc === 'OPERATIONS'
     );
-
-    const stateGroups = d3.group(validStates, d => d.state_name);
-    const changes: any[] = [];
-
-    stateGroups.forEach((rows, state) => {
-        // Find min and max year for this state
-        const sorted = rows.sort((a, b) => Number(a.year) - Number(b.year));
-        if (sorted.length < 2) return;
-
-        const first = sorted[0];
-        const last = sorted[sorted.length - 1];
-
-        const urbanFirst = cleanValue(first.land_in_urban_areas);
-        const urbanLast = cleanValue(last.land_in_urban_areas);
-        const cropFirst = cleanValue(first.total_cropland);
-        const cropLast = cleanValue(last.total_cropland);
-
-        if (urbanFirst > 0 && cropFirst > 0) {
-            const urbanChange = ((urbanLast - urbanFirst) / urbanFirst) * 100;
-            const cropChange = ((cropLast - cropFirst) / cropFirst) * 100;
-
-            changes.push({
-                state,
-                urbanChange,
-                cropChange,
-                urbanFirst,
-                urbanLast,
-                cropFirst,
-                cropLast
-            });
-        }
-    });
-
-    return changes;
-}
-
-/**
- * Get Labor Wage Trends for Selected State vs National vs Key States
- */
-export function getLaborTrends(data: any[], selectedState: string = 'INDIANA') {
-    // Key comparison states
-    const comparisonStates = ['CALIFORNIA', 'FLORIDA', 'HAWAII'];
-    const cleanState = selectedState ? selectedState.toUpperCase() : 'INDIANA';
-
-    // 1. Group by Year
-    const yearGroups = d3.group(data, d => d.year);
+    const yearGroups = d3.group(opsData, d => d.year);
     const trends: any[] = [];
-
     yearGroups.forEach((rows, year) => {
-        const yearNum = Number(year);
-        const yearObj: any = { year: yearNum };
-
-        // 2. Calculate National Average for this year
-        const nationalAvg = d3.mean(rows, r => cleanValue(r.wage_rate));
-        yearObj['National Avg'] = nationalAvg;
-
-        // 3. Get Selected State
-        const stateRow = rows.find(r => r.state_name.toUpperCase() === cleanState);
-        yearObj[cleanState] = stateRow ? cleanValue(stateRow.wage_rate) : null;
-
-        // 4. Get Comparison States
-        comparisonStates.forEach(s => {
-            const sRow = rows.find(r => r.state_name.toUpperCase() === s);
-            yearObj[s] = sRow ? cleanValue(sRow.wage_rate) : null;
-        });
-
-        trends.push(yearObj);
+        const totalOps = d3.sum(rows, d => cleanValue(d.value_num || d.Value));
+        trends.push({ year, operations: totalOps });
     });
-
     return trends.sort((a, b) => a.year - b.year);
 }

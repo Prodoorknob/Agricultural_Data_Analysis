@@ -1,0 +1,576 @@
+================================================================================
+DATA INTEGRITY AUDIT REPORT
+Generated: 2026-02-16 20:36:37.501321
+================================================================================
+
+[SOURCE FILE] NATIONAL.parquet
+  Total rows: 777,476
+  Columns: ['source_desc', 'sector_desc', 'group_desc', 'commodity_desc', 'statisticcat_desc', 'unit_desc', 'year', 'domain_desc', 'state_alpha', 'value_num', 'agg_level_desc', 'Value']
+  Year range: 2001 - 2025
+  Unique states: 52 (['AK', 'AL', 'AR', 'AZ', 'CA', 'CO', 'CT', 'DE', 'EN', 'FL']...)
+================================================================================
+
+[CHECK 1] CENSUS vs SURVEY DUPLICATION
+================================================================================
+  Source distribution:
+    CENSUS: 420,219 rows (54.0%)
+    SURVEY: 357,257 rows (46.0%)
+
+  WARNING: 20,624 key combinations have BOTH Census AND Survey data!
+  This could cause DOUBLE-COUNTING in aggregations.
+  Sample overlapping keys:
+commodity_desc  year state_alpha statisticcat_desc
+     FOOD FISH  2014          AL     AREA OF WATER
+     FOOD FISH  2014          AR     AREA OF WATER
+     FOOD FISH  2014          CA     AREA OF WATER
+     FOOD FISH  2014          LA     AREA OF WATER
+     FOOD FISH  2014          MS     AREA OF WATER
+     FOOD FISH  2014          NC     AREA OF WATER
+     FOOD FISH  2014          TX     AREA OF WATER
+     FOOD FISH  2019          AL     AREA OF WATER
+     FOOD FISH  2019          AR     AREA OF WATER
+     FOOD FISH  2019          CA     AREA OF WATER
+
+  Example duplicate:
+  source_desc  value_num commodity_desc  year state_alpha statisticcat_desc
+     CENSUS      756.0      FOOD FISH  2014          AL     AREA OF WATER
+     CENSUS       19.0      FOOD FISH  2014          AL     AREA OF WATER
+     SURVEY    70265.0      FOOD FISH  2014          AL     AREA OF WATER
+
+  Example duplicate:
+  source_desc  value_num commodity_desc  year state_alpha statisticcat_desc
+     CENSUS     1371.0      FOOD FISH  2014          AR     AREA OF WATER
+     CENSUS       10.0      FOOD FISH  2014          AR     AREA OF WATER
+     SURVEY    26085.0      FOOD FISH  2014          AR     AREA OF WATER
+
+  Example duplicate:
+  source_desc  value_num commodity_desc  year state_alpha statisticcat_desc
+     CENSUS       40.0      FOOD FISH  2014          CA     AREA OF WATER
+     CENSUS        4.0      FOOD FISH  2014          CA     AREA OF WATER
+     SURVEY     2665.0      FOOD FISH  2014          CA     AREA OF WATER
+================================================================================
+
+[CHECK 2] AREA HARVESTED > AREA PLANTED ANOMALIES
+================================================================================
+  Total AREA PLANTED rows: 14,005
+  Total AREA HARVESTED rows: 97,411
+
+  Comparison rows (joined): 12,281
+  Anomalies (harvested > planted): 4,326 (35.2%)
+
+  Top anomalies by ratio:
+  commodity_desc  year state_alpha  planted  harvested  ratio
+       SPINACH  2019          AZ      0.0     2765.0    inf
+       SPINACH  2017          MD      0.0     2078.0    inf
+       SPINACH  2017          CO      0.0      503.0    inf
+       SPINACH  2016          MD      0.0        5.0    inf
+        ONIONS  2014          NV      0.0        3.0    inf
+        ONIONS  2012          NV      0.0     3406.0    inf
+        ONIONS  2016          UT      0.0        6.0    inf
+        ONIONS  2016          OH      0.0       42.0    inf
+        ONIONS  2016          MI      0.0       78.0    inf
+        ONIONS  2015          UT      0.0        1.0    inf
+       SPINACH  2016          CO      0.0        2.0    inf
+       SPINACH  2015          MD      0.0     9666.0    inf
+       SPINACH  2015          CO      0.0     1314.0    inf
+     CUCUMBERS  2017          DE      0.0     2163.0    inf
+     CUCUMBERS  2017          SC      0.0     5147.0    inf
+
+  Checking aggregate level (all crops summed per year):
+  WARNING: 24 years have total harvested > total planted!
+             planted     harvested
+year                            
+2001  9.211499e+08  1.158316e+09
+2002  8.439704e+08  3.958743e+09
+2003  7.611994e+08  9.985486e+08
+2004  8.745235e+08  1.123521e+09
+2005  8.680685e+08  1.212054e+09
+2006  8.590665e+08  1.160214e+09
+2007  4.357109e+08  2.183171e+09
+2008  7.125845e+08  9.490570e+08
+2009  7.627206e+08  1.099666e+09
+2010  6.988947e+08  1.051768e+09
+2011  7.084768e+08  9.900060e+08
+2012  6.269551e+08  4.739055e+09
+2013  1.286411e+09  2.389380e+09
+2014  1.257104e+09  2.198673e+09
+2015  1.298006e+09  2.245960e+09
+2016  1.286341e+09  2.107724e+09
+2017  4.990129e+08  3.730216e+09
+2018  1.887798e+09  2.407681e+09
+2019  1.831070e+09  2.173956e+09
+2020  1.668154e+09  1.873371e+09
+2021  1.692545e+09  2.008196e+09
+2022  6.673208e+08  3.527573e+09
+2023  1.606326e+09  2.286123e+09
+2024  9.399999e+08  1.119515e+09
+================================================================================
+
+[CHECK 3] EXACT DUPLICATE ROWS
+================================================================================
+  Exact duplicate rows: 0 (0.00%)
+  Key-duplicate groups (same key, multiple rows): 9,423
+  This means the same measurement appears multiple times.
+  Sample key-duplicates:
+  source_desc  commodity_desc  year  state_alpha  statisticcat_desc         unit_desc   domain_desc   
+CENSUS       ARTICHOKES      2014  GA           AREA HARVESTED            OPERATIONS  ORGANIC STATUS    2
+                                                PRODUCTION                CWT         ORGANIC STATUS    2
+                                                SALES                     $           ORGANIC STATUS    2
+                                                                          CWT         ORGANIC STATUS    2
+                                                                          OPERATIONS  ORGANIC STATUS    2
+                                                SALES IN ORGANIC MARKETS  $           ORGANIC STATUS    2
+                                                                          CWT         ORGANIC STATUS    2
+                                                                          OPERATIONS  ORGANIC STATUS    2
+                                   US           AREA HARVESTED            OPERATIONS  ORGANIC STATUS    2
+                                                PRODUCTION                CWT         ORGANIC STATUS    2
+================================================================================
+
+[CHECK 4] NULL / MISSING VALUES
+================================================================================
+
+  value_num == 0: 59,564
+  value_num < 0: 365
+================================================================================
+
+[CHECK 5] DATA COVERAGE
+================================================================================
+  Years present: [np.int16(2001), np.int16(2002), np.int16(2003), np.int16(2004), np.int16(2005), np.int16(2006), np.int16(2007), np.int16(2008), np.int16(2009), np.int16(2010), np.int16(2011), np.int16(2012), np.int16(2013), np.int16(2014), np.int16(2015), np.int16(2016), np.int16(2017), np.int16(2018), np.int16(2019), np.int16(2020), np.int16(2021), np.int16(2022), np.int16(2023), np.int16(2024), np.int16(2025)]
+  Year gaps: []
+
+  Top 20 commodities by row count:
+    CATTLE: 46,708
+    CORN: 35,744
+    HOGS: 29,956
+    WHEAT: 29,482
+    SOYBEANS: 25,793
+    CHICKENS: 22,100
+    MILK: 17,600
+    SHEEP: 16,609
+    HAY: 15,752
+    OATS: 15,360
+    BARLEY: 15,349
+    COTTON: 14,327
+    BEANS: 13,856
+    SORGHUM: 13,815
+    POTATOES: 11,892
+    PASTURELAND: 11,827
+    AG LAND: 10,460
+    APPLES: 9,369
+    TURKEYS: 8,952
+    TOMATOES: 8,878
+
+  Available metrics:
+    SALES: 149,667
+    AREA HARVESTED: 97,411
+    PRODUCTION: 88,229
+    INVENTORY: 52,852
+    CONDITION: 34,716
+    EXPENSE: 31,673
+    PROGRESS: 27,535
+    PROGRESS, 5 YEAR AVG: 24,858
+    CONDITION, PREVIOUS YEAR: 24,014
+    CONDITION, 5 YEAR AVG: 21,164
+    PROGRESS, PREVIOUS YEAR: 19,638
+    AREA IN PRODUCTION: 16,865
+    AREA PLANTED: 14,005
+    AREA BEARING & NON-BEARING: 13,984
+    SALES IN ORGANIC MARKETS: 12,934
+    AREA: 10,428
+    SLAUGHTERED: 10,256
+    AREA BEARING: 9,926
+    STOCKS: 7,941
+    AREA NON-BEARING: 7,732
+    OPERATIONS: 5,838
+    RECEIPTS: 5,487
+    SALES FOR SLAUGHTER: 4,848
+    GROSS INCOME: 3,715
+    SALES IN CONVENTIONAL MARKETS: 3,659
+    INVENTORY, AVG: 3,372
+    LOSS, DEATH: 3,347
+    SALES & DISTRIBUTION: 3,328
+    ASSET VALUE: 3,136
+    INVENTORY, PEAK: 2,849
+    AREA OPERATED: 2,769
+    VALUE: 2,578
+    SHIPMENTS IN: 2,518
+    CONDEMNED, POST-MORTEM: 2,381
+    FARM USE: 2,258
+    AREA GROWN: 2,056
+    CAPACITY: 2,029
+    AREA IRRIGATED: 1,820
+    WORKERS: 1,763
+    LOSS: 1,626
+    DISTRIBUTION: 1,572
+    GAIN: 1,204
+    FAT TEST: 1,162
+    CALF CROP: 1,149
+    MILKFAT: 1,137
+    FARROWED: 1,135
+    PIG CROP: 1,135
+    SUPPLIES: 1,040
+    AREA OF WATER: 957
+    SUPPLIES, PREVIOUS YEAR: 948
+    NET INCOME: 894
+    FACILITIES: 878
+    LOSS, DEADOUT: 876
+    PUMPS: 837
+    AREA NOT HARVESTED: 770
+    LAMB CROP: 737
+    SHORN: 737
+    PLACEMENTS: 700
+    SUPPLIES, 5 YEAR AVG: 689
+    WELLS: 651
+    TAPS: 642
+    TENANTS: 616
+    LOSS, DEATH & RENDERED: 573
+    SAMPLES: 541
+    WATER APPLIED: 538
+    DAMAGE: 478
+    MOLT COMPLETED: 472
+    BEING MOLTED: 472
+    INVENTORY, MAX: 438
+    ADDED & REPLACED: 438
+    DEBT: 424
+    DEVICES: 423
+    PUMPING CAPACITY: 391
+    EGGS SET: 386
+    TANKS: 372
+    PONDS: 366
+    RACEWAYS: 362
+    OPERATING PRESSURE: 351
+    ACTIVE GINS: 350
+    SHRINK: 344
+    CONDEMNED, POST-MORTEM, OTHER REASONS: 339
+    CONDEMNED, POST-MORTEM, SEPTICAEMIA: 338
+    CONDEMNED, POST-MORTEM, CONTAMINATION: 338
+    CONDEMNED, POST-MORTEM, AIRSACCULITIS: 337
+    CONDEMNED, POST-MORTEM, OVERSCALD: 337
+    CONDEMNED, POST-MORTEM, BRUISES: 337
+    CONDEMNED, POST-MORTEM, SYNOVITIS: 336
+    GINNED BALES: 336
+    CONDEMNED, POST-MORTEM, TUMORS: 335
+    CONDEMNED, POST-MORTEM, LEUKOSIS: 335
+    CONDEMNED, POST-MORTEM, CADAVER: 334
+    VOLUME: 315
+    CONDEMNED, POST-MORTEM, ALL CAUSES: 315
+    DAMAGE, PREVIOUS YEAR: 314
+    LOSS, DEATH, PREVIOUS YEAR: 311
+    DISAPPEARANCE, OTHER: 301
+    SUCROSE: 276
+    CAGES: 258
+    USAGE: 232
+    HATCHED: 219
+    AREA IRRIGATED PREVIOUS CENSUS YEAR: 214
+    LOSS, DEATH, 5 YEAR AVG: 188
+    DEPTH TO BOWLS: 186
+    DEPTH TO WATER: 186
+    WELL DEPTH: 186
+    HEIGHT, AVG: 180
+    OTHER SALE: 166
+    SEED FOR PLANTING: 166
+    HEIGHT, AVG, PREVIOUS YEAR: 159
+    AREA CERTIFIED: 154
+    DISAPPEARANCE: 153
+    FEEDLOTS: 150
+    START DATE, MIN: 145
+    END DATE, MAX: 145
+    AREA RENTED: 144
+    YEARS RENTED TO TENANT, AVG: 144
+    MILL SALE: 142
+    WATER RECEIVED: 140
+    END DATE, AVG: 134
+    REPAYMENTS: 132
+    START DATE, AVG: 123
+    BRED: 110
+    ACTIVITY: 110
+    CLIPPED: 103
+    ACTIVITY, PREVIOUS YEAR: 102
+    HEIGHT, AVG, 5 YEAR AVG: 98
+    NUT SET: 96
+    LENGTH OF SEASON, AVG: 96
+    MOISTURE: 95
+    WORKERS, AVG: 94
+    ENGINE SIZE: 93
+    PUMPING LIFT: 93
+    NUT SET, PREVIOUS YEAR: 90
+    MOISTURE, PREVIOUS YEAR: 87
+    DAMAGE, 5 YEAR AVG: 82
+    RECEIVING: 82
+    AREA IN PRODUCTION PREVIOUS CENSUS YEAR: 77
+    RECEIVING, PREVIOUS YEAR: 74
+    ACCESSIBILITY, PREVIOUS YEAR: 72
+    ACCESSIBILITY: 72
+    ACCESSIBILITY, 5 YEAR AVG: 72
+    AREA CROPLAND: 70
+    MOISTURE, 5 YEAR AVG: 65
+    NUT SET, 5 YEAR AVG: 58
+    ACTIVITY, 5 YEAR AVG: 52
+    AREA PLANTED, NET: 49
+    PARTNERS, AVG: 46
+    AREA FILLED: 45
+    CONDEMNED, POST-MORTEM, UNKNOWN CAUSES: 45
+    RECEIVING, 5 YEAR AVG: 42
+    SOURCE: 27
+    MOVEMENT, 5 YEAR AVG: 24
+    MOVEMENT, PREVIOUS YEAR: 24
+    MOVEMENT: 24
+    SOURCE, PREVIOUS YEAR: 20
+    AVAILABILITY, PREVIOUS YEAR: 18
+    AVAILABILITY, 5 YEAR AVG: 18
+    AVAILABILITY: 18
+    AREA EQUIPPED FOR IRRIGATION: 14
+    PENS: 8
+    INFESTATION: 8
+    SOURCE, 5 YEAR AVG: 8
+    FRUIT SIZE: 6
+    CONDUCT BUSINESS: 5
+    TOTAL AREA: 4
+    START DATE: 2
+    AREA FLOODED: 2
+    BLOOM DATE: 2
+    FRUIT SIZE, PREVIOUS YEAR: 2
+    FRUIT SIZE, 5 YEAR AVG: 2
+
+  Sectors:
+    CROPS: 494,362
+    ANIMALS & PRODUCTS: 208,173
+    ECONOMICS: 74,941
+================================================================================
+
+[CHECK 6] STATE vs NATIONAL CONSISTENCY
+================================================================================
+  Aggregation levels:
+    STATE: 729,590
+    NATIONAL: 47,886
+
+  Consistency check: CORN, 2025, AREA HARVESTED
+    Sum of states: 222,661,000
+    National total: 222,661,000
+    Difference: 0.0%
+    OK: Within 5% tolerance.
+================================================================================
+
+[CHECK 7] DOMAIN-LEVEL DUPLICATION
+================================================================================
+  Domain distribution:
+    TOTAL: 496,545
+    ORGANIC STATUS: 109,537
+    ECONOMIC CLASS: 18,337
+    AREA OPERATED: 17,035
+    NAICS CLASSIFICATION: 16,953
+    FARM SALES: 16,477
+    IRRIGATION STATUS: 7,532
+    CONCENTRATION: 6,988
+    AREA HARVESTED: 5,823
+    SALES OF FLORICULTURE: 4,107
+    WATER SOURCE: 4,011
+    IRRIGATION METHOD, PRIMARY: 3,568
+    SALES: 3,566
+    EXPENSE: 3,326
+    AREA BEARING & NON-BEARING: 2,643
+    INVENTORY OF MILK COWS: 2,367
+    NAICS CLASSIFICATION AND SALES: 2,349
+    FARM SALES AND SALES: 2,349
+    ECONOMIC CLASS AND SALES: 2,349
+    AREA OPERATED AND SALES: 2,349
+    INVENTORY OF BEEF COWS: 2,171
+    INVENTORY OF SHEEP, INCL LAMBS: 1,792
+    INVENTORY OF CATTLE, INCL CALVES: 1,775
+    CAPACITY: 1,714
+    INVENTORY OF HOGS: 1,491
+    AREA IRRIGATED, HARVESTED: 1,381
+    AREA HARVESTED, FRESH MARKET & PROCESSING: 1,272
+    INVENTORY OF COWS: 1,245
+    SALES OF HOGS: 1,245
+    INVENTORY: 1,106
+    SALES OF CATTLE, INCL CALVES: 1,033
+    INVENTORY OF EWES GE 1 YEAR OLD: 1,000
+    AREA IN PRODUCTION: 939
+    AREA OPERATED AND AREA HARVESTED: 927
+    NAICS CLASSIFICATION AND AREA HARVESTED: 927
+    FARM SALES AND AREA HARVESTED: 927
+    ECONOMIC CLASS AND AREA HARVESTED: 927
+    RECEIPTS: 900
+    PRODUCERS: 626
+    FARM SALES AND EXPENSE: 584
+    AREA OPERATED AND EXPENSE: 584
+    ECONOMIC CLASS AND EXPENSE: 584
+    NAICS CLASSIFICATION AND EXPENSE: 584
+    WELLS USED: 558
+    INVENTORY OF LAYERS, TABLE: 510
+    SALES OF CATTLE GE 500 LBS: 498
+    INVENTORY OF CATTLE, (EXCL COWS): 498
+    SALES OF CALVES: 498
+    AREA IRRIGATED: 496
+    ROW WIDTH: 490
+    LABOR: 465
+    SALES OF CATTLE ON FEED: 462
+    INVENTORY OF CATTLE ON FEED: 454
+    LANDLORDS, NON-OPERATING: 439
+    AREA GROWN: 400
+    IRRIGATION IMPROVEMENTS: 386
+    AREA CROPLAND, HARVESTED: 385
+    LANDLORDS, COMBINED: 334
+    LANDLORDS, OPERATING: 316
+    VALUE: 310
+    NET GAIN: 310
+    NET LOSS: 310
+    INVENTORY OF BREEDING HOGS: 300
+    INVENTORY OF MARKET HOGS: 300
+    PUMPING CAPACITY: 298
+    FARM SALES AND SALES OF CATTLE, INCL CALVES: 298
+    ECONOMIC CLASS AND SALES OF CATTLE, INCL CALVES: 298
+    AREA OPERATED AND SALES OF CATTLE, INCL CALVES: 298
+    NAICS CLASSIFICATION AND SALES OF CATTLE, INCL CALVES: 298
+    FARM SALES AND SALES OF HOGS: 294
+    AREA OPERATED AND SALES OF HOGS: 294
+    ECONOMIC CLASS AND SALES OF HOGS: 294
+    NAICS CLASSIFICATION AND SALES OF HOGS: 294
+    WATER APPLIED: 279
+    IRRIGATION DISCONTINUANCE: 263
+    OPERATING PRESSURE: 258
+    AREA OPERATED AND IRRIGATION STATUS: 248
+    LANDLORDS, COMBINED, AREA RENTED OUT: 236
+    LANDLORDS, COMBINED, TENANTS: 234
+    LANDLORDS, NON-OPERATING, TENANTS: 228
+    LANDLORDS, NON-OPERATING, AREA RENTED OUT: 228
+    LANDLORDS, COMBINED, VALUE OF LAND & BUILDINGS: 218
+    LANDLORDS, OPERATING, TENANTS: 214
+    LANDLORDS, NON-OPERATING, OWNERSHIP TYPE: 214
+    LANDLORDS, OPERATING, AREA RENTED OUT: 214
+    LANDLORDS, NON-OPERATING, VALUE OF LAND & BUILDINGS: 208
+    TAPS: 192
+    ORGANIC STATUS AND YEARS CERTIFIED ORGANIC: 187
+    IRRIGATION INFORMATION: 186
+    EXPENSE, PRIMARY FUNDING ASSISTANCE: 186
+    IRRIGATION METHOD: 186
+    EXPENSE, PRIMARY PURPOSE: 186
+    DEPTH TO WATER: 186
+    FARM SALES AND WATER SOURCE: 186
+    IRRIGATION INTERRUPTION: 184
+    LANDLORDS, OPERATING, VALUE OF LAND & BUILDINGS: 182
+    WATER MGMT: 177
+    BALES GINNED: 175
+    AREA OPERATED AND AREA CROPLAND, HARVESTED: 155
+    AREA IRRIGATED, BEARING & NON-BEARING: 151
+    AREA OPERATED AND INVENTORY OF CATTLE, INCL CALVES: 149
+    AREA OPERATED AND INVENTORY OF MILK COWS: 149
+    ECONOMIC CLASS AND INVENTORY OF BEEF COWS: 149
+    AREA OPERATED AND INVENTORY OF BEEF COWS: 149
+    FARM SALES AND INVENTORY OF MILK COWS: 149
+    ECONOMIC CLASS AND INVENTORY OF MILK COWS: 149
+    FARM SALES AND INVENTORY OF CATTLE, INCL CALVES: 149
+    FARM SALES AND INVENTORY OF BEEF COWS: 149
+    NAICS CLASSIFICATION AND INVENTORY OF CATTLE, INCL CALVES: 149
+    NAICS CLASSIFICATION AND INVENTORY OF BEEF COWS: 149
+    NAICS CLASSIFICATION AND INVENTORY OF MILK COWS: 149
+    ECONOMIC CLASS AND INVENTORY OF CATTLE, INCL CALVES: 149
+    ECONOMIC CLASS AND INVENTORY: 149
+    AREA OPERATED AND INVENTORY: 149
+    FARM SALES AND INVENTORY OF HOGS: 149
+    NAICS CLASSIFICATION AND INVENTORY OF HOGS: 149
+    AREA OPERATED AND INVENTORY OF HOGS: 149
+    FARM SALES AND INVENTORY: 149
+    ECONOMIC CLASS AND INVENTORY OF HOGS: 149
+    NAICS CLASSIFICATION AND INVENTORY: 149
+    AREA PRACTICED: 146
+    PLANT POPULATION: 117
+    ORGANIC STATUS AND AREA COVERED: 110
+    FARM SALES AND AREA BEARING & NON-BEARING: 96
+    NAICS CLASSIFICATION AND AREA HARVESTED, FRESH MARKET & PROCESSING: 96
+    FARM SALES AND AREA HARVESTED, FRESH MARKET & PROCESSING: 96
+    AREA OPERATED AND AREA HARVESTED, FRESH MARKET & PROCESSING: 96
+    NAICS CLASSIFICATION AND AREA BEARING & NON-BEARING: 96
+    AREA OPERATED AND AREA BEARING & NON-BEARING: 96
+    ECONOMIC CLASS AND AREA BEARING & NON-BEARING: 96
+    ECONOMIC CLASS AND AREA HARVESTED, FRESH MARKET & PROCESSING: 96
+    IRRIGATION OR DRAINAGE IMPROVEMENTS: 93
+    WELL DEPTH: 93
+    DEPTH TO BOWLS: 93
+    FARM SALES AND IRRIGATION STATUS: 93
+    IRRIGATION SCHEDULING: 93
+    PUMPS USED: 93
+    AREA OPERATED AND NET GAIN: 73
+    NAICS CLASSIFICATION AND NET LOSS: 73
+    AREA OPERATED AND LABOR: 73
+    ECONOMIC CLASS AND LABOR: 73
+    FARM SALES AND LABOR: 73
+    NAICS CLASSIFICATION AND LABOR: 73
+    FARM SALES AND NAICS CLASSIFICATION: 73
+    FARM SALES AND VALUE: 73
+    ECONOMIC CLASS AND VALUE: 73
+    AREA OPERATED AND VALUE: 73
+    ECONOMIC CLASS AND NAICS CLASSIFICATION: 73
+    NAICS CLASSIFICATION AND VALUE: 73
+    AREA OPERATED AND NAICS CLASSIFICATION: 73
+    ECONOMIC CLASS AND AREA OPERATED: 73
+    NAICS CLASSIFICATION AND AREA OPERATED: 73
+    AREA OPERATED AND NET LOSS: 73
+    FARM SALES AND AREA OPERATED: 73
+    FARM SALES AND NET GAIN: 73
+    ECONOMIC CLASS AND NET GAIN: 73
+    NAICS CLASSIFICATION AND NET GAIN: 73
+    FARM SALES AND NET LOSS: 73
+    ECONOMIC CLASS AND NET LOSS: 73
+    ORGANIC STATUS AND ORGANIC AREA: 66
+    AREA: 62
+    COMMODITIES (INCL VALUE-ADDED): 51
+    IRRIGATION EQUIPMENT, IDLE: 28
+    AREA EQUIPPED FOR IRRIGATION: 28
+    IRRIGATION EQUIPMENT: 28
+    TYPOLOGY: 20
+    AREA EQUIPPED FOR IRRIGATION AND IRRIGATION STATUS: 14
+    TYPE OF OPERATION: 3
+
+  Keys with BOTH domain=TOTAL and granular domains: 35,922
+  WARNING: If not filtered properly, domain=TOTAL + granular = DOUBLE COUNTING
+  The filterData() function uses: (d.domain_desc === 'TOTAL' || !d.domain_desc)
+  This CORRECTLY keeps only TOTAL domain rows (the aggregated view).
+================================================================================
+
+[CHECK 8] SIMULATING filterData() LOGIC
+================================================================================
+  After source filter (SURVEY + exceptions): 369,208 / 777,476 (47.5%)
+  After removing TOTAL/ALL CLASSES commodities: 369,208 (removed 0)
+  After domain filter (TOTAL only): 348,587 (removed 20,621)
+
+  Final filtered dataset: 348,587 rows (44.8% of original)
+
+  Post-filter aggregate check (harvested > planted by year):
+  WARNING: 24 years still have harvested > planted after filtering!
+             planted     harvested
+year                            
+2001  9.211499e+08  1.158316e+09
+2002  8.439704e+08  1.056123e+09
+2003  7.611994e+08  9.985486e+08
+2004  8.745235e+08  1.123521e+09
+2005  8.680685e+08  1.212054e+09
+2006  8.590665e+08  1.160214e+09
+2007  4.357109e+08  5.871289e+08
+2008  7.125845e+08  9.456979e+08
+2009  7.627206e+08  1.099305e+09
+2010  6.988947e+08  1.051768e+09
+2011  7.084768e+08  9.871732e+08
+2012  6.269520e+08  1.175959e+09
+2013  1.286405e+09  2.062055e+09
+2014  1.257098e+09  2.145462e+09
+2015  1.298000e+09  2.217051e+09
+2016  1.286334e+09  2.084190e+09
+2017  4.990110e+08  8.598354e+08
+2018  1.887791e+09  2.145615e+09
+2019  1.831061e+09  2.156048e+09
+2020  1.668147e+09  1.873371e+09
+2021  1.692538e+09  1.987115e+09
+2022  6.673192e+08  8.237972e+08
+2023  1.606319e+09  2.033990e+09
+2024  9.399963e+08  1.119515e+09
+================================================================================
+
+[SUMMARY]
+================================================================================
+Review the checks above for any WARNINGs.
+Key areas to investigate:
+  1. Census/Survey overlap -> filterData() keeps SURVEY only (+ exceptions)
+  2. Harvested > Planted -> May be normal for some crops (e.g., multi-harvest crops)
+  3. Key duplicates -> aggregate_national.py should deduplicate via groupby sum
+  4. Domain duplication -> filterData() keeps domain_desc='TOTAL' only
