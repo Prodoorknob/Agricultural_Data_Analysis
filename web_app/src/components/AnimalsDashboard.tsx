@@ -81,11 +81,11 @@ export default function AnimalsDashboard({ data, year, stateName }: AnimalsDashb
                 r => cleanValue(r.value_num || r.Value)
             );
 
-            // Sales ($)
-            const salesRevenue = d3.sum(
+            // Sales ($) — use max to get aggregate total, avoiding sub-domain double-counting
+            const salesRevenue = d3.max(
                 rows.filter(r => r.statisticcat_desc === 'SALES' && r.unit_desc === '$'),
                 r => cleanValue(r.value_num || r.Value)
-            );
+            ) || 0;
 
             // Production (LB or generic)
             const production = d3.sum(
@@ -177,7 +177,7 @@ export default function AnimalsDashboard({ data, year, stateName }: AnimalsDashb
                     </p>
                     <p className="text-sm text-gray-500 mt-1">HEAD</p>
                 </div>
-                
+
                 <div className="bg-[#1a1d24] p-6 rounded-xl border border-[#2a4030] relative overflow-hidden">
                     <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-[#19e63c] to-transparent opacity-60"></div>
                     <div className="flex items-center gap-3 mb-4">
@@ -190,7 +190,7 @@ export default function AnimalsDashboard({ data, year, stateName }: AnimalsDashb
                         {currentYearStats.salesRevenue ? `$${currentYearStats.salesRevenue.toLocaleString()}` : 'N/A'}
                     </p>
                 </div>
-                
+
                 <div className="bg-[#1a1d24] p-6 rounded-xl border border-[#2a4030] relative overflow-hidden">
                     <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-[#19e63c] to-transparent opacity-60"></div>
                     <div className="flex items-center gap-3 mb-4">
@@ -217,21 +217,21 @@ export default function AnimalsDashboard({ data, year, stateName }: AnimalsDashb
                         <ResponsiveContainer width="100%" height="100%">
                             <LineChart data={trendData}>
                                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#2a4030" />
-                                <XAxis 
-                                    dataKey="year" 
-                                    axisLine={false} 
+                                <XAxis
+                                    dataKey="year"
+                                    axisLine={false}
                                     tickLine={false}
                                     stroke="#718096"
                                     tick={{ fill: '#9ca3af' }}
                                 />
-                                <YAxis 
-                                    axisLine={false} 
-                                    tickLine={false} 
+                                <YAxis
+                                    axisLine={false}
+                                    tickLine={false}
                                     tickFormatter={(val) => val >= 1000 ? `${(val / 1000).toFixed(0)}k` : val}
                                     stroke="#718096"
                                     tick={{ fill: '#9ca3af' }}
                                 />
-                                <Tooltip 
+                                <Tooltip
                                     formatter={(val: any) => [val ? val.toLocaleString() : '0', 'Head']}
                                     contentStyle={{
                                         backgroundColor: '#1a1d24',
@@ -241,11 +241,11 @@ export default function AnimalsDashboard({ data, year, stateName }: AnimalsDashb
                                     }}
                                     labelStyle={{ color: '#9ca3af' }}
                                 />
-                                <Line 
-                                    type="monotone" 
-                                    dataKey="inventory" 
-                                    stroke="#19e63c" 
-                                    strokeWidth={3} 
+                                <Line
+                                    type="monotone"
+                                    dataKey="inventory"
+                                    stroke="#19e63c"
+                                    strokeWidth={3}
                                     dot={{ r: 4, fill: '#19e63c', strokeWidth: 2 }}
                                     activeDot={{ r: 6 }}
                                 />
@@ -263,21 +263,21 @@ export default function AnimalsDashboard({ data, year, stateName }: AnimalsDashb
                         <ResponsiveContainer width="100%" height="100%">
                             <BarChart data={trendData}>
                                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#2a4030" />
-                                <XAxis 
-                                    dataKey="year" 
-                                    axisLine={false} 
+                                <XAxis
+                                    dataKey="year"
+                                    axisLine={false}
                                     tickLine={false}
                                     stroke="#718096"
                                     tick={{ fill: '#9ca3af' }}
                                 />
-                                <YAxis 
-                                    axisLine={false} 
-                                    tickLine={false} 
+                                <YAxis
+                                    axisLine={false}
+                                    tickLine={false}
                                     tickFormatter={(val) => val >= 1000000 ? `$${(val / 1000000).toFixed(0)}M` : `$${val}`}
                                     stroke="#718096"
                                     tick={{ fill: '#9ca3af' }}
                                 />
-                                <Tooltip 
+                                <Tooltip
                                     formatter={(val: any) => [`$${val.toLocaleString()}`, 'Revenue']}
                                     contentStyle={{
                                         backgroundColor: '#1a1d24',

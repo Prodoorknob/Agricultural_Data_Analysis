@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Price Received &amp; Revenue Proxy Analysis - QuickStats</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script>
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#19e63c",
+                        "primary-dark": "#14b830",
+                        "primary-light": "#e0fce4",
+                        "background-light": "#f8fcf9",
+                        "background-dark": "#112114",
+                        "surface-light": "#ffffff",
+                        "text-main": "#0e1b10",
+                        "text-sub": "#4e975a",
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "sans-serif"],
+                        "body": ["Inter", "sans-serif"],
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "2xl": "1rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+        body { font-family: 'Inter', sans-serif; }
+        .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+        /* Custom scrollbar for table */
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f1f1; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-text-main min-h-screen flex flex-col font-display antialiased">
+<!-- Top Navigation -->
+<header class="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-[#e7f3e9]">
+<div class="px-6 lg:px-12 py-3 flex items-center justify-between">
+<div class="flex items-center gap-8">
+<div class="flex items-center gap-3 text-[#0e1b10]">
+<div class="size-8 bg-primary/20 rounded-lg flex items-center justify-center text-primary">
+<span class="material-symbols-outlined">agriculture</span>
+</div>
+<h2 class="text-[#0e1b10] text-xl font-bold tracking-tight">QuickStats</h2>
+</div>
+<nav class="hidden md:flex items-center gap-8">
+<a class="text-text-main text-sm font-medium hover:text-primary transition-colors" href="#">Crops</a>
+<a class="text-text-main text-sm font-medium hover:text-primary transition-colors" href="#">Livestock</a>
+<a class="text-text-main text-sm font-medium hover:text-primary transition-colors" href="#">Dairy</a>
+<a class="text-text-main text-sm font-medium hover:text-primary transition-colors" href="#">Demographics</a>
+<a class="text-primary text-sm font-bold border-b-2 border-primary py-4 -my-4" href="#">Economics</a>
+</nav>
+</div>
+<div class="flex items-center gap-4">
+<div class="relative hidden lg:block">
+<span class="absolute inset-y-0 left-0 flex items-center pl-3 text-text-sub">
+<span class="material-symbols-outlined text-[20px]">search</span>
+</span>
+<input class="block w-64 rounded-lg border-0 bg-[#e7f3e9] py-2 pl-10 pr-4 text-sm text-text-main placeholder:text-text-sub focus:ring-2 focus:ring-primary focus:bg-white transition-all" placeholder="Search data, reports..." type="text"/>
+</div>
+<button class="relative p-2 text-text-main hover:bg-[#e7f3e9] rounded-lg transition-colors">
+<span class="material-symbols-outlined">notifications</span>
+<span class="absolute top-2 right-2 h-2 w-2 rounded-full bg-red-500 ring-2 ring-white"></span>
+</button>
+<button class="h-9 w-9 overflow-hidden rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center">
+<img class="h-full w-full object-cover" data-alt="User profile photo showing a smiling professional man" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDuEt-0o_VdJSYaO3_-CnG3L9im9IQnN-NB47mFgkYEMb8L_87pneU0tYfRI_hqr_mmtiNLuET4UUEVIMYYPubQP20VkBbgqfifpRnfHKaXCFphG0hDlOJW_O-QuJgc4hL1dleijlbdF6knat_V3nAPBqQCDdtRy9_lG7tFEL6MN5EFDXbcS0oBkH6c_cu7IXnzXBrTFL89282jg0uwb8IKdvYsL_ZQ1baCSpAgt3IgG0DySRgTq7pVsTCrsXeMmNzHjTsJO8Xo09H5"/>
+</button>
+</div>
+</div>
+</header>
+<!-- Main Content Area -->
+<main class="flex-1 px-6 lg:px-12 py-8 max-w-[1600px] mx-auto w-full">
+<!-- Breadcrumbs & Title Header -->
+<div class="mb-8">
+<div class="flex items-center gap-2 text-sm text-text-sub mb-2">
+<a class="hover:text-primary hover:underline" href="#">Home</a>
+<span class="material-symbols-outlined text-[14px]">chevron_right</span>
+<a class="hover:text-primary hover:underline" href="#">Economics</a>
+<span class="material-symbols-outlined text-[14px]">chevron_right</span>
+<span class="font-semibold text-text-main">Price &amp; Revenue Analysis</span>
+</div>
+<div class="flex flex-col md:flex-row md:items-end justify-between gap-4">
+<div>
+<h1 class="text-3xl font-black tracking-tight text-text-main">Price Received &amp; Revenue Proxy Analysis</h1>
+<p class="text-text-sub mt-1 max-w-2xl">Comprehensive time-series and distribution analysis for agricultural commodities. Identifying price regimes and revenue volatility.</p>
+</div>
+<div class="flex items-center gap-3">
+<span class="text-xs font-medium text-text-sub bg-white px-3 py-1.5 rounded-full border border-gray-200 shadow-sm flex items-center gap-1">
+<span class="w-2 h-2 rounded-full bg-primary animate-pulse"></span>
+                        Last updated: Oct 24, 2023
+                    </span>
+<button class="flex items-center gap-2 bg-white border border-gray-200 hover:border-primary/50 text-text-main text-sm font-semibold px-4 py-2 rounded-lg shadow-sm transition-all hover:shadow-md">
+<span class="material-symbols-outlined text-[18px]">download</span>
+                        Export Report
+                    </button>
+</div>
+</div>
+</div>
+<!-- Global Filter Bar -->
+<div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 mb-6 flex flex-wrap items-end gap-4">
+<div class="flex-1 min-w-[200px]">
+<label class="block text-xs font-semibold text-text-sub mb-1.5 uppercase tracking-wider">Commodity</label>
+<div class="relative">
+<select class="w-full appearance-none bg-[#f8fcf9] border border-[#d0e7d4] text-text-main text-sm rounded-lg focus:ring-primary focus:border-primary block p-2.5 pr-8 font-medium">
+<option selected="">Corn (Grain)</option>
+<option>Soybeans</option>
+<option>Wheat (Winter)</option>
+<option>Milk (Class III)</option>
+</select>
+<div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-text-sub">
+<span class="material-symbols-outlined">expand_more</span>
+</div>
+</div>
+</div>
+<div class="flex-1 min-w-[200px]">
+<label class="block text-xs font-semibold text-text-sub mb-1.5 uppercase tracking-wider">Geography</label>
+<div class="relative">
+<select class="w-full appearance-none bg-[#f8fcf9] border border-[#d0e7d4] text-text-main text-sm rounded-lg focus:ring-primary focus:border-primary block p-2.5 pr-8 font-medium">
+<option>United States (National)</option>
+<option>Iowa</option>
+<option>Illinois</option>
+<option>Nebraska</option>
+</select>
+<div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-text-sub">
+<span class="material-symbols-outlined">expand_more</span>
+</div>
+</div>
+</div>
+<div class="flex-1 min-w-[200px]">
+<label class="block text-xs font-semibold text-text-sub mb-1.5 uppercase tracking-wider">Time Period</label>
+<div class="relative">
+<select class="w-full appearance-none bg-[#f8fcf9] border border-[#d0e7d4] text-text-main text-sm rounded-lg focus:ring-primary focus:border-primary block p-2.5 pr-8 font-medium">
+<option>Last 5 Years (2018-2023)</option>
+<option>Last 10 Years</option>
+<option>YTD 2023</option>
+</select>
+<div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-text-sub">
+<span class="material-symbols-outlined">date_range</span>
+</div>
+</div>
+</div>
+<button class="bg-primary hover:bg-primary-dark text-black font-bold py-2.5 px-6 rounded-lg transition-colors shadow-sm shadow-primary/30 h-[42px] flex items-center justify-center">
+                Update View
+            </button>
+</div>
+<!-- KPI Cards Grid -->
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+<!-- Card 1 -->
+<div class="bg-white p-5 rounded-xl border border-gray-100 shadow-sm relative group overflow-hidden">
+<div class="absolute right-0 top-0 h-full w-1 bg-primary"></div>
+<div class="flex justify-between items-start mb-2">
+<p class="text-xs font-semibold uppercase text-text-sub tracking-wider">Avg Price Received</p>
+<span class="bg-green-100 text-green-700 text-xs font-bold px-2 py-0.5 rounded flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">trending_up</span> +2.4%
+                    </span>
+</div>
+<h3 class="text-3xl font-bold text-text-main tracking-tight">$6.50<span class="text-lg text-text-sub font-medium">/bu</span></h3>
+<p class="text-xs text-text-sub mt-2">vs. $6.35 prev. month</p>
+</div>
+<!-- Card 2 -->
+<div class="bg-white p-5 rounded-xl border border-gray-100 shadow-sm relative overflow-hidden">
+<div class="flex justify-between items-start mb-2">
+<p class="text-xs font-semibold uppercase text-text-sub tracking-wider">Revenue Proxy (Est)</p>
+<span class="bg-green-100 text-green-700 text-xs font-bold px-2 py-0.5 rounded flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">trending_up</span> +5.1%
+                    </span>
+</div>
+<h3 class="text-3xl font-bold text-text-main tracking-tight">$142.8<span class="text-lg text-text-sub font-medium">B</span></h3>
+<p class="text-xs text-text-sub mt-2">Aggregated annual estimate</p>
+</div>
+<!-- Card 3 -->
+<div class="bg-white p-5 rounded-xl border border-gray-100 shadow-sm relative overflow-hidden">
+<div class="flex justify-between items-start mb-2">
+<p class="text-xs font-semibold uppercase text-text-sub tracking-wider">Value per Acre</p>
+<span class="bg-red-50 text-red-600 text-xs font-bold px-2 py-0.5 rounded flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">trending_down</span> -1.2%
+                    </span>
+</div>
+<h3 class="text-3xl font-bold text-text-main tracking-tight">$890<span class="text-lg text-text-sub font-medium">/acre</span></h3>
+<p class="text-xs text-text-sub mt-2">Yield adjusted revenue</p>
+</div>
+<!-- Card 4 -->
+<div class="bg-white p-5 rounded-xl border border-gray-100 shadow-sm relative overflow-hidden">
+<div class="flex justify-between items-start mb-2">
+<p class="text-xs font-semibold uppercase text-text-sub tracking-wider">Price Volatility (CV)</p>
+<span class="bg-gray-100 text-gray-600 text-xs font-bold px-2 py-0.5 rounded">Stable</span>
+</div>
+<h3 class="text-3xl font-bold text-text-main tracking-tight">12.4<span class="text-lg text-text-sub font-medium">%</span></h3>
+<p class="text-xs text-text-sub mt-2">Coefficient of Variation (30d)</p>
+</div>
+</div>
+<!-- Main Chart Section -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+<!-- Time Series Chart -->
+<div class="lg:col-span-2 bg-white p-6 rounded-xl border border-gray-100 shadow-sm flex flex-col">
+<div class="flex items-center justify-between mb-6">
+<div>
+<h3 class="text-lg font-bold text-text-main">Historical Price vs. Revenue</h3>
+<p class="text-sm text-text-sub">Price Received (Line) vs. Monthly Revenue Proxy (Bar)</p>
+</div>
+<div class="flex gap-2">
+<button class="px-3 py-1 text-xs font-medium bg-[#e7f3e9] text-primary rounded-md">Monthly</button>
+<button class="px-3 py-1 text-xs font-medium text-text-sub hover:bg-gray-50 rounded-md">Quarterly</button>
+<button class="px-3 py-1 text-xs font-medium text-text-sub hover:bg-gray-50 rounded-md">Annually</button>
+</div>
+</div>
+<!-- Custom CSS Chart Implementation -->
+<div class="flex-1 relative h-80 w-full mt-4">
+<!-- Y Axis Left -->
+<div class="absolute left-0 top-0 bottom-8 w-8 flex flex-col justify-between text-xs text-text-sub text-right pr-2">
+<span>$8.00</span>
+<span>$7.00</span>
+<span>$6.00</span>
+<span>$5.00</span>
+<span>$4.00</span>
+<span>$3.00</span>
+</div>
+<!-- Y Axis Right -->
+<div class="absolute right-0 top-0 bottom-8 w-8 flex flex-col justify-between text-xs text-text-sub pl-2">
+<span>$20B</span>
+<span>$16B</span>
+<span>$12B</span>
+<span>$8B</span>
+<span>$4B</span>
+<span>$0</span>
+</div>
+<!-- Chart Area -->
+<div class="absolute left-10 right-10 top-0 bottom-8 border-l border-b border-gray-200">
+<!-- Grid Lines -->
+<div class="absolute top-[0%] left-0 right-0 h-px bg-gray-50"></div>
+<div class="absolute top-[20%] left-0 right-0 h-px bg-gray-50"></div>
+<div class="absolute top-[40%] left-0 right-0 h-px bg-gray-50"></div>
+<div class="absolute top-[60%] left-0 right-0 h-px bg-gray-50"></div>
+<div class="absolute top-[80%] left-0 right-0 h-px bg-gray-50"></div>
+<!-- Bars (Revenue Proxy) -->
+<div class="absolute bottom-0 left-[5%] w-[5%] h-[40%] bg-primary/20 rounded-t-sm hover:bg-primary/30 transition-colors group cursor-pointer">
+<div class="opacity-0 group-hover:opacity-100 absolute -top-12 left-1/2 -translate-x-1/2 bg-black text-white text-xs px-2 py-1 rounded pointer-events-none whitespace-nowrap z-10">Rev: $8.2B</div>
+</div>
+<div class="absolute bottom-0 left-[15%] w-[5%] h-[45%] bg-primary/20 rounded-t-sm hover:bg-primary/30 transition-colors group cursor-pointer"></div>
+<div class="absolute bottom-0 left-[25%] w-[5%] h-[60%] bg-primary/20 rounded-t-sm hover:bg-primary/30 transition-colors group cursor-pointer"></div>
+<div class="absolute bottom-0 left-[35%] w-[5%] h-[55%] bg-primary/20 rounded-t-sm hover:bg-primary/30 transition-colors group cursor-pointer"></div>
+<div class="absolute bottom-0 left-[45%] w-[5%] h-[65%] bg-primary/20 rounded-t-sm hover:bg-primary/30 transition-colors group cursor-pointer">
+<div class="opacity-0 group-hover:opacity-100 absolute -top-12 left-1/2 -translate-x-1/2 bg-black text-white text-xs px-2 py-1 rounded pointer-events-none whitespace-nowrap z-10">Rev: $13.5B</div>
+</div>
+<div class="absolute bottom-0 left-[55%] w-[5%] h-[75%] bg-primary/20 rounded-t-sm hover:bg-primary/30 transition-colors group cursor-pointer"></div>
+<div class="absolute bottom-0 left-[65%] w-[5%] h-[70%] bg-primary/20 rounded-t-sm hover:bg-primary/30 transition-colors group cursor-pointer"></div>
+<div class="absolute bottom-0 left-[75%] w-[5%] h-[80%] bg-primary/20 rounded-t-sm hover:bg-primary/30 transition-colors group cursor-pointer"></div>
+<div class="absolute bottom-0 left-[85%] w-[5%] h-[85%] bg-primary/20 rounded-t-sm hover:bg-primary/30 transition-colors group cursor-pointer">
+<div class="opacity-0 group-hover:opacity-100 absolute -top-12 left-1/2 -translate-x-1/2 bg-black text-white text-xs px-2 py-1 rounded pointer-events-none whitespace-nowrap z-10">Rev: $17.1B</div>
+</div>
+<div class="absolute bottom-0 left-[95%] w-[5%] h-[82%] bg-primary/20 rounded-t-sm hover:bg-primary/30 transition-colors group cursor-pointer"></div>
+<!-- Line (Price) - SVG Overlay -->
+<svg class="absolute inset-0 w-full h-full overflow-visible" preserveaspectratio="none">
+<defs>
+<lineargradient id="lineGradient" x1="0" x2="0" y1="0" y2="1">
+<stop offset="0%" stop-color="#19e63c" stop-opacity="0.5"></stop>
+<stop offset="100%" stop-color="#19e63c" stop-opacity="0"></stop>
+</lineargradient>
+</defs>
+<path class="drop-shadow-md" d="M0,200 L50,180 L150,160 L250,120 L350,130 L450,100 L550,80 L650,90 L750,60 L850,50 L950,55" fill="none" stroke="#19e63c" stroke-width="3" vector-effect="non-scaling-stroke"></path>
+<!-- Points -->
+<circle class="hover:scale-150 transition-transform origin-center cursor-pointer" cx="5%" cy="65%" fill="#fff" r="4" stroke="#19e63c" stroke-width="2"></circle>
+<circle class="hover:scale-150 transition-transform origin-center cursor-pointer" cx="45%" cy="35%" fill="#fff" r="4" stroke="#19e63c" stroke-width="2"></circle>
+<circle class="hover:scale-150 transition-transform origin-center cursor-pointer" cx="85%" cy="20%" fill="#fff" r="4" stroke="#19e63c" stroke-width="2"></circle>
+</svg>
+</div>
+<!-- X Axis -->
+<div class="absolute bottom-0 left-10 right-10 flex justify-between text-xs text-text-sub pt-2">
+<span>Jan '23</span>
+<span>Mar '23</span>
+<span>May '23</span>
+<span>Jul '23</span>
+<span>Sep '23</span>
+<span>Nov '23</span>
+</div>
+</div>
+<!-- Legend -->
+<div class="flex items-center justify-center gap-6 mt-2">
+<div class="flex items-center gap-2">
+<span class="w-3 h-3 rounded-full bg-primary"></span>
+<span class="text-xs font-medium text-text-main">Price Received</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="w-3 h-3 rounded-sm bg-primary/30"></span>
+<span class="text-xs font-medium text-text-main">Revenue Proxy</span>
+</div>
+</div>
+</div>
+<!-- Distribution Panel -->
+<div class="lg:col-span-1 flex flex-col gap-6">
+<!-- Price Regime -->
+<div class="bg-white p-6 rounded-xl border border-gray-100 shadow-sm flex-1">
+<div class="flex items-center justify-between mb-4">
+<h3 class="text-lg font-bold text-text-main">Price Regime</h3>
+<span class="material-symbols-outlined text-text-sub text-[20px]">info</span>
+</div>
+<p class="text-sm text-text-sub mb-6">Current price positioning relative to 5-year distribution quantiles.</p>
+<div class="relative h-64 w-full flex items-end justify-center px-4">
+<!-- Y Axis labels (hidden for simplicity, relying on bands) -->
+<!-- Regime Bands Background -->
+<div class="absolute inset-x-12 top-0 bottom-8 flex flex-col">
+<div class="flex-1 bg-red-50 border-b border-dashed border-red-200 relative">
+<span class="absolute right-2 top-2 text-[10px] text-red-400 font-bold uppercase">High Regime (&gt;90%)</span>
+</div>
+<div class="h-[40%] bg-green-50 border-b border-dashed border-green-200 relative">
+<span class="absolute right-2 top-2 text-[10px] text-green-600 font-bold uppercase">Normal Range</span>
+</div>
+<div class="flex-1 bg-blue-50 relative">
+<span class="absolute right-2 top-2 text-[10px] text-blue-400 font-bold uppercase">Low Regime (&lt;10%)</span>
+</div>
+</div>
+<!-- Current Price Indicator Line -->
+<div class="absolute left-8 right-8 top-[30%] border-t-2 border-text-main border-dashed z-10 flex items-center">
+<div class="bg-text-main text-white text-xs font-bold px-2 py-0.5 rounded-r ml-[-8px]">Current: $6.50</div>
+</div>
+</div>
+</div>
+<!-- Volatility Gauge (Simplified) -->
+<div class="bg-white p-6 rounded-xl border border-gray-100 shadow-sm">
+<h3 class="text-sm font-bold text-text-main mb-3">Volatility Index (CV)</h3>
+<div class="flex items-center gap-4">
+<div class="relative w-full h-3 bg-gray-100 rounded-full overflow-hidden">
+<div class="absolute left-0 top-0 h-full w-[35%] bg-gradient-to-r from-green-400 to-primary"></div>
+</div>
+<span class="text-sm font-bold text-text-main whitespace-nowrap">Low (0.35)</span>
+</div>
+<p class="text-xs text-text-sub mt-2">Prices are showing lower than average variance over the selected period.</p>
+</div>
+</div>
+</div>
+<!-- Data Table -->
+<div class="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+<div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
+<h3 class="text-lg font-bold text-text-main">Raw Data <span class="font-normal text-text-sub text-sm ml-2">(Monthly Breakdown)</span></h3>
+<div class="flex gap-2">
+<button class="p-1.5 text-text-sub hover:text-primary hover:bg-white rounded transition-colors">
+<span class="material-symbols-outlined text-[20px]">filter_list</span>
+</button>
+<button class="p-1.5 text-text-sub hover:text-primary hover:bg-white rounded transition-colors">
+<span class="material-symbols-outlined text-[20px]">more_vert</span>
+</button>
+</div>
+</div>
+<div class="overflow-x-auto">
+<table class="w-full text-sm text-left">
+<thead class="text-xs text-text-sub uppercase bg-gray-50 border-b border-gray-100">
+<tr>
+<th class="px-6 py-3 font-semibold" scope="col">Period</th>
+<th class="px-6 py-3 font-semibold text-right" scope="col">Price Received ($)</th>
+<th class="px-6 py-3 font-semibold text-right" scope="col">Production (M Bu)</th>
+<th class="px-6 py-3 font-semibold text-right" scope="col">Revenue Proxy ($M)</th>
+<th class="px-6 py-3 font-semibold text-center" scope="col">Trend</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-gray-100">
+<tr class="bg-white hover:bg-gray-50 transition-colors">
+<td class="px-6 py-4 font-medium text-text-main">Nov 2023</td>
+<td class="px-6 py-4 text-right font-mono text-text-main">$6.50</td>
+<td class="px-6 py-4 text-right font-mono text-text-sub">1,240</td>
+<td class="px-6 py-4 text-right font-mono font-semibold text-text-main">$8,060</td>
+<td class="px-6 py-4 text-center">
+<span class="bg-green-100 text-green-700 text-[10px] font-bold px-2 py-1 rounded-full uppercase">Up</span>
+</td>
+</tr>
+<tr class="bg-white hover:bg-gray-50 transition-colors">
+<td class="px-6 py-4 font-medium text-text-main">Oct 2023</td>
+<td class="px-6 py-4 text-right font-mono text-text-main">$6.35</td>
+<td class="px-6 py-4 text-right font-mono text-text-sub">1,215</td>
+<td class="px-6 py-4 text-right font-mono font-semibold text-text-main">$7,715</td>
+<td class="px-6 py-4 text-center">
+<span class="bg-gray-100 text-gray-600 text-[10px] font-bold px-2 py-1 rounded-full uppercase">Flat</span>
+</td>
+</tr>
+<tr class="bg-white hover:bg-gray-50 transition-colors">
+<td class="px-6 py-4 font-medium text-text-main">Sep 2023</td>
+<td class="px-6 py-4 text-right font-mono text-text-main">$6.10</td>
+<td class="px-6 py-4 text-right font-mono text-text-sub">1,180</td>
+<td class="px-6 py-4 text-right font-mono font-semibold text-text-main">$7,198</td>
+<td class="px-6 py-4 text-center">
+<span class="bg-red-50 text-red-600 text-[10px] font-bold px-2 py-1 rounded-full uppercase">Down</span>
+</td>
+</tr>
+<tr class="bg-white hover:bg-gray-50 transition-colors">
+<td class="px-6 py-4 font-medium text-text-main">Aug 2023</td>
+<td class="px-6 py-4 text-right font-mono text-text-main">$6.25</td>
+<td class="px-6 py-4 text-right font-mono text-text-sub">1,195</td>
+<td class="px-6 py-4 text-right font-mono font-semibold text-text-main">$7,468</td>
+<td class="px-6 py-4 text-center">
+<span class="bg-green-100 text-green-700 text-[10px] font-bold px-2 py-1 rounded-full uppercase">Up</span>
+</td>
+</tr>
+</tbody>
+</table>
+<div class="px-6 py-3 border-t border-gray-100 bg-gray-50 flex justify-center">
+<button class="text-xs font-semibold text-primary hover:text-primary-dark transition-colors uppercase tracking-wide">View Full Dataset</button>
+</div>
+</div>
+</div>
+</main>
+<!-- Footer -->
+<footer class="bg-white border-t border-gray-200 mt-12 py-8">
+<div class="px-6 lg:px-12 max-w-[1600px] mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
+<div class="text-sm text-text-sub">
+                © 2023 QuickStats Analytics. Data sourced from <a class="text-primary hover:underline" href="#">USDA NASS</a>.
+            </div>
+<div class="flex gap-6">
+<a class="text-sm text-text-sub hover:text-primary transition-colors" href="#">Privacy Policy</a>
+<a class="text-sm text-text-sub hover:text-primary transition-colors" href="#">Terms of Service</a>
+<a class="text-sm text-text-sub hover:text-primary transition-colors" href="#">Help Center</a>
+</div>
+</div>
+</footer>
+</body></html>

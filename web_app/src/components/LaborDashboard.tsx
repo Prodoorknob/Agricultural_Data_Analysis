@@ -89,73 +89,79 @@ export default function LaborDashboard({ data, year, stateName }: LaborDashboard
                 </div>
             </div>
 
-            {/* Row 1: Wage Trends (PRESERVED) */}
-            <div className="bg-[#1a1d24] p-6 rounded-xl border border-[#2a4030]">
-                <div className="flex items-center gap-3 mb-4">
-                    <span className="material-symbols-outlined text-[#19e63c] text-[28px]">trending_up</span>
-                    <div>
-                        <h3 className="text-xl font-semibold text-white">Farm Labor Wage Trends</h3>
-                        <p className="text-sm text-gray-400">{stateName} vs. National Average & Key States</p>
+            {/* Row 1: Wage Trends */}
+            {(() => {
+                const compStates: string[] = (laborTrends as any).comparisonStates || ['CA', 'TX', 'IA'];
+                const compColors = ['#60a5fa', '#a78bfa', '#f59e0b'];
+                return (
+                    <div className="bg-[#1a1d24] p-6 rounded-xl border border-[#2a4030]">
+                        <div className="flex items-center gap-3 mb-4">
+                            <span className="material-symbols-outlined text-[#19e63c] text-[28px]">trending_up</span>
+                            <div>
+                                <h3 className="text-xl font-semibold text-white">Farm Labor Wage Trends</h3>
+                                <p className="text-sm text-gray-400">{stateName} vs. National Average &amp; Regional Peers ({compStates.join(', ')})</p>
+                            </div>
+                        </div>
+                        <div className="h-[500px] w-full">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <LineChart
+                                    data={laborTrends}
+                                    margin={{ top: 10, right: 30, left: 10, bottom: 0 }}
+                                >
+                                    <CartesianGrid strokeDasharray="3 3" stroke="#2a4030" vertical={false} />
+                                    <XAxis dataKey="year" stroke="#718096" tick={{ fill: '#9ca3af' }} />
+                                    <YAxis
+                                        domain={['auto', 'auto']}
+                                        tickFormatter={(val) => `$${val}`}
+                                        label={{
+                                            value: 'Wage Rate ($/hour)',
+                                            angle: -90,
+                                            position: 'insideLeft',
+                                            style: { fill: '#9ca3af' }
+                                        }}
+                                        stroke="#718096"
+                                        tick={{ fill: '#9ca3af' }}
+                                    />
+                                    <Tooltip
+                                        formatter={(val: number | string | Array<number | string> | undefined) => {
+                                            if (val === undefined || val === null) return ['N/A', 'Wage Rate'];
+                                            if (typeof val === 'number') return [`$${val.toFixed(2)}`, 'Wage Rate'];
+                                            return [val, 'Wage Rate'];
+                                        }}
+                                        contentStyle={{
+                                            backgroundColor: '#1a1d24',
+                                            border: '1px solid #2a4030',
+                                            borderRadius: '8px',
+                                            color: '#fff'
+                                        }}
+                                        labelStyle={{ color: '#9ca3af' }}
+                                    />
+                                    <Legend wrapperStyle={{ color: '#9ca3af' }} />
+
+                                    {/* Dynamic Regional Comparison States (Dotted) */}
+                                    {compStates.map((st, i) => (
+                                        <Line key={st} type="monotone" dataKey={st} stroke={compColors[i % compColors.length]} strokeDasharray="3 3" dot={false} strokeWidth={2} name={st} />
+                                    ))}
+
+                                    {/* National Average (Dashed Bold) */}
+                                    <Line type="monotone" dataKey="National Avg" stroke="#3b82f6" strokeDasharray="5 5" strokeWidth={3} dot={{ r: 4 }} name="National Avg" />
+
+                                    {/* Selected State (Solid Bold Green) */}
+                                    <Line
+                                        type="monotone"
+                                        dataKey={stateName.toUpperCase()}
+                                        stroke="#19e63c"
+                                        strokeWidth={4}
+                                        dot={{ r: 6, strokeWidth: 2, fill: '#0f1117' }}
+                                        activeDot={{ r: 8 }}
+                                        name={`${stateName} (Selected)`}
+                                    />
+                                </LineChart>
+                            </ResponsiveContainer>
+                        </div>
                     </div>
-                </div>
-                <div className="h-[500px] w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                        <LineChart
-                            data={laborTrends}
-                            margin={{ top: 10, right: 30, left: 10, bottom: 0 }}
-                        >
-                            <CartesianGrid strokeDasharray="3 3" stroke="#2a4030" vertical={false} />
-                            <XAxis dataKey="year" stroke="#718096" tick={{ fill: '#9ca3af' }} />
-                            <YAxis
-                                domain={['auto', 'auto']}
-                                tickFormatter={(val) => `$${val}`}
-                                label={{ 
-                                    value: 'Wage Rate ($/hour)', 
-                                    angle: -90, 
-                                    position: 'insideLeft',
-                                    style: { fill: '#9ca3af' }
-                                }}
-                                stroke="#718096"
-                                tick={{ fill: '#9ca3af' }}
-                            />
-                            <Tooltip
-                                formatter={(val: number | string | Array<number | string> | undefined) => {
-                                    if (val === undefined || val === null) return ['N/A', 'Wage Rate'];
-                                    if (typeof val === 'number') return [`$${val.toFixed(2)}`, 'Wage Rate'];
-                                    return [val, 'Wage Rate'];
-                                }}
-                                contentStyle={{
-                                    backgroundColor: '#1a1d24',
-                                    border: '1px solid #2a4030',
-                                    borderRadius: '8px',
-                                    color: '#fff'
-                                }}
-                                labelStyle={{ color: '#9ca3af' }}
-                            />
-                            <Legend wrapperStyle={{ color: '#9ca3af' }} />
-
-                            {/* Comparison States (Dotted) */}
-                            <Line type="monotone" dataKey="CA" stroke="#60a5fa" strokeDasharray="3 3" dot={false} strokeWidth={2} name="CA" />
-                            <Line type="monotone" dataKey="FL" stroke="#60a5fa" strokeDasharray="3 3" dot={false} strokeWidth={2} name="FL" />
-                            <Line type="monotone" dataKey="HI" stroke="#60a5fa" strokeDasharray="3 3" dot={false} strokeWidth={2} name="HI" />
-
-                            {/* National Average (Dashed Bold) */}
-                            <Line type="monotone" dataKey="National Avg" stroke="#3b82f6" strokeDasharray="5 5" strokeWidth={3} dot={{ r: 4 }} name="National Avg" />
-
-                            {/* Selected State (Solid Bold Green) */}
-                            <Line
-                                type="monotone"
-                                dataKey={stateName.toUpperCase()}
-                                stroke="#19e63c"
-                                strokeWidth={4}
-                                dot={{ r: 6, strokeWidth: 2, fill: '#0f1117' }}
-                                activeDot={{ r: 8 }}
-                                name={`${stateName} (Selected)`}
-                            />
-                        </LineChart>
-                    </ResponsiveContainer>
-                </div>
-            </div>
+                );
+            })()}
 
             {/* Row 2: Operations Trends */}
             {opsTrends.length > 0 && (
@@ -174,9 +180,9 @@ export default function LaborDashboard({ data, year, stateName }: LaborDashboard
                                 <XAxis dataKey="year" stroke="#718096" tick={{ fill: '#9ca3af' }} />
                                 <YAxis
                                     tickFormatter={(val) => new Intl.NumberFormat('en-US', { notation: "compact", compactDisplay: "short" }).format(val)}
-                                    label={{ 
-                                        value: 'Number of Operations', 
-                                        angle: -90, 
+                                    label={{
+                                        value: 'Number of Operations',
+                                        angle: -90,
                                         position: 'insideLeft',
                                         style: { fill: '#9ca3af' }
                                     }}

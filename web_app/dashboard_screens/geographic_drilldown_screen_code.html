@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Geographic Concentration &amp; Map View - QuickStats</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#19e63c",
+                        "background-light": "#f6f8f6",
+                        "background-dark": "#112114",
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "sans-serif"],
+                        "sans": ["Inter", "sans-serif"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+        /* Custom scrollbar for table */
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background-color: #cbd5e1;
+            border-radius: 20px;
+        }
+        .mapbox-placeholder {
+            background-image: url("data:image/svg+xml,%3Csvg width='100%25' height='100%25' viewBox='0 0 800 500' xmlns='http://www.w3.org/2000/svg'%3E%3Crect width='100%25' height='100%25' fill='%23e7f3e9'/%3E%3Cpath d='M150,100 L250,80 L350,120 L450,90 L600,150 L650,250 L550,350 L400,380 L250,350 L100,250 Z' fill='%23d0e7d4' stroke='%234e975a' stroke-width='2'/%3E%3Cpath d='M250,80 L300,150 L250,200 L180,180 Z' fill='%23bbf7c6' stroke='%234e975a' stroke-width='1'/%3E%3Cpath d='M350,120 L400,180 L350,250 L300,150 Z' fill='%2386efac' stroke='%234e975a' stroke-width='1'/%3E%3Cpath d='M450,90 L500,160 L450,220 L400,180 Z' fill='%234ade80' stroke='%234e975a' stroke-width='1'/%3E%3Cpath d='M600,150 L550,220 L500,160 Z' fill='%2322c55e' stroke='%234e975a' stroke-width='1'/%3E%3Cpath d='M250,200 L350,250 L250,350 L180,280 Z' fill='%2319e63c' stroke='%234e975a' stroke-width='1'/%3E%3Cpath d='M350,250 L450,220 L550,350 L400,380 Z' fill='%2316a34a' stroke='%234e975a' stroke-width='1'/%3E%3C/svg%3E");
+        }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-[#0e1b10] font-display min-h-screen flex flex-col overflow-x-hidden">
+<!-- Top Navigation -->
+<header class="flex flex-col bg-[#f8fcf9] border-b border-[#e7f3e9]">
+<div class="flex items-center justify-between px-6 py-3 lg:px-10">
+<div class="flex items-center gap-8">
+<div class="flex items-center gap-4 text-[#0e1b10]">
+<div class="size-6 text-primary">
+<span class="material-symbols-outlined text-[28px]">agriculture</span>
+</div>
+<h2 class="text-[#0e1b10] text-xl font-bold leading-tight tracking-[-0.015em]">QuickStats</h2>
+</div>
+<nav class="hidden md:flex items-center gap-9">
+<a class="text-[#0e1b10] text-sm font-medium hover:text-primary transition-colors" href="#">Crops</a>
+<a class="text-[#0e1b10] text-sm font-medium hover:text-primary transition-colors" href="#">Livestock</a>
+<a class="text-[#0e1b10] text-sm font-medium hover:text-primary transition-colors" href="#">Demographics</a>
+<a class="text-[#0e1b10] text-sm font-medium hover:text-primary transition-colors" href="#">Economics</a>
+</nav>
+</div>
+<div class="flex items-center gap-6">
+<label class="hidden sm:flex flex-col min-w-40 h-10 w-64">
+<div class="flex w-full flex-1 items-stretch rounded-lg h-full bg-[#e7f3e9] focus-within:ring-2 focus-within:ring-primary/50 transition-shadow">
+<div class="text-[#4e975a] flex items-center justify-center pl-3">
+<span class="material-symbols-outlined text-[20px]">search</span>
+</div>
+<input class="flex w-full bg-transparent border-none text-[#0e1b10] placeholder:text-[#4e975a] px-3 text-sm focus:ring-0" placeholder="Search data..."/>
+</div>
+</label>
+<button class="bg-center bg-no-repeat bg-cover rounded-full size-10 ring-2 ring-white shadow-sm" data-alt="User profile avatar" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuD4aBc1eW1xpSP-weZOHHhqeTiGhI91y23Vh1O711NCoOl_yuxZ3Lv9Y1ATnBYGBZ9DFmG5_lT5oiAy7zOikvobLWFCtbmepe8uRppKxL8YxZywjINfpFA9hASrLjVUA9sdGhIF77c0U86q_IuzfXAIfM_-C2xVBxl-pK7nrOGaAolSjkmAaVTl306jbuq60BP_8x6h2bzGJxDEhZiGcmJLj6An9wVXXlpc2FwX7h0FDYXBKsBTvrMXbpR0FJcyehVWOX2fHWS1pcwu");'></button>
+</div>
+</div>
+<!-- Breadcrumbs & Title Area -->
+<div class="px-6 py-4 lg:px-10 border-t border-[#e7f3e9]">
+<div class="flex flex-wrap gap-2 items-center text-sm mb-4">
+<a class="text-[#4e975a] font-medium hover:underline" href="#">Home</a>
+<span class="text-[#4e975a] material-symbols-outlined text-[16px]">chevron_right</span>
+<a class="text-[#4e975a] font-medium hover:underline" href="#">Crops</a>
+<span class="text-[#4e975a] material-symbols-outlined text-[16px]">chevron_right</span>
+<a class="text-[#4e975a] font-medium hover:underline" href="#">Corn</a>
+<span class="text-[#4e975a] material-symbols-outlined text-[16px]">chevron_right</span>
+<span class="text-[#0e1b10] font-semibold">Geo Analysis</span>
+</div>
+<div class="flex flex-col md:flex-row md:items-end justify-between gap-6">
+<div>
+<h1 class="text-[#0e1b10] text-3xl md:text-4xl font-black tracking-[-0.033em] mb-2">Geographic Concentration</h1>
+<p class="text-[#4e975a] text-base">Analyze production distribution across US counties and states.</p>
+</div>
+<!-- Main Controls -->
+<div class="flex flex-wrap gap-3 items-center">
+<!-- Year Picker -->
+<div class="relative">
+<select class="appearance-none bg-white border border-[#d0e7d4] text-[#0e1b10] rounded-lg py-2 pl-3 pr-10 text-sm font-medium focus:ring-primary focus:border-primary cursor-pointer shadow-sm">
+<option>2023</option>
+<option>2022</option>
+<option>2021</option>
+</select>
+<div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-[#4e975a]">
+<span class="material-symbols-outlined text-[20px]">calendar_today</span>
+</div>
+</div>
+<!-- Measure Dropdown -->
+<div class="relative">
+<select class="appearance-none bg-white border border-[#d0e7d4] text-[#0e1b10] rounded-lg py-2 pl-3 pr-10 text-sm font-medium focus:ring-primary focus:border-primary cursor-pointer shadow-sm">
+<option>Production (Bushels)</option>
+<option>Acres Harvested</option>
+<option>Yield (Bu/Acre)</option>
+</select>
+<div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-[#4e975a]">
+<span class="material-symbols-outlined text-[20px]">expand_more</span>
+</div>
+</div>
+<!-- Granularity Toggle -->
+<div class="bg-[#e7f3e9] p-1 rounded-lg flex gap-1">
+<button class="px-3 py-1.5 rounded-md text-sm font-medium bg-white shadow text-[#0e1b10]">County</button>
+<button class="px-3 py-1.5 rounded-md text-sm font-medium text-[#4e975a] hover:bg-white/50">State</button>
+</div>
+<!-- Normalization Toggle -->
+<div class="bg-[#e7f3e9] p-1 rounded-lg flex gap-1">
+<button class="px-3 py-1.5 rounded-md text-sm font-medium bg-primary text-[#0e1b10] shadow">Absolute</button>
+<button class="px-3 py-1.5 rounded-md text-sm font-medium text-[#4e975a] hover:bg-white/50">Per Acre</button>
+</div>
+</div>
+</div>
+</div>
+</header>
+<!-- Main Content Area -->
+<main class="flex-1 px-6 py-6 lg:px-10 w-full max-w-[1600px] mx-auto flex flex-col gap-6">
+<!-- Top Row: Map and Table Split -->
+<div class="grid grid-cols-1 xl:grid-cols-12 gap-6 h-auto xl:h-[600px]">
+<!-- Map Card (Left) -->
+<div class="xl:col-span-8 bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-[#e7f3e9] flex flex-col overflow-hidden relative group">
+<div class="p-4 border-b border-[#f0f0f0] flex justify-between items-center bg-white z-10">
+<h3 class="font-bold text-[#0e1b10] flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">public</span>
+                        Corn for Grain: Production by County (2023)
+                    </h3>
+<div class="flex gap-2">
+<button class="p-1.5 text-[#4e975a] hover:bg-[#e7f3e9] rounded-md transition-colors" title="Download Map Image">
+<span class="material-symbols-outlined text-[20px]">download</span>
+</button>
+<button class="p-1.5 text-[#4e975a] hover:bg-[#e7f3e9] rounded-md transition-colors" title="Expand View">
+<span class="material-symbols-outlined text-[20px]">open_in_full</span>
+</button>
+</div>
+</div>
+<!-- Map Area -->
+<div class="relative flex-1 bg-[#f8fcf9] w-full h-full">
+<!-- Map SVG Placeholder using CSS background -->
+<div class="absolute inset-0 mapbox-placeholder bg-cover bg-center" data-alt="Choropleth map of US showing corn production concentration" data-location="USA" style=""></div>
+<!-- Floating Map Controls -->
+<div class="absolute top-4 left-4 flex flex-col gap-1 bg-white rounded-lg shadow-md border border-[#e7f3e9]">
+<button class="p-2 hover:bg-[#f8fcf9] rounded-t-lg border-b border-[#f0f0f0] text-[#0e1b10]">
+<span class="material-symbols-outlined text-[20px]">add</span>
+</button>
+<button class="p-2 hover:bg-[#f8fcf9] rounded-b-lg text-[#0e1b10]">
+<span class="material-symbols-outlined text-[20px]">remove</span>
+</button>
+</div>
+<div class="absolute top-4 left-16 bg-white px-3 py-1.5 rounded-lg shadow-md border border-[#e7f3e9] text-xs font-medium cursor-pointer hover:bg-[#f8fcf9]">
+                        Reset View
+                    </div>
+<!-- Legend -->
+<div class="absolute bottom-4 right-4 bg-white/95 backdrop-blur-sm p-3 rounded-lg shadow-lg border border-[#e7f3e9] max-w-[200px]">
+<p class="text-xs font-semibold text-[#0e1b10] mb-2">Production (Bushels)</p>
+<div class="h-2 w-full rounded-full bg-gradient-to-r from-[#e7f3e9] via-[#4ade80] to-[#15803d] mb-1"></div>
+<div class="flex justify-between text-[10px] text-[#4e975a]">
+<span>0</span>
+<span>25M</span>
+<span>70M+</span>
+</div>
+</div>
+<!-- Tooltip Example (Positioned absolutely for demo) -->
+<div class="hidden md:block absolute top-[40%] left-[55%] bg-white p-3 rounded-lg shadow-xl border border-[#e7f3e9] z-20 w-48 animate-pulse">
+<div class="flex justify-between items-start mb-1">
+<h4 class="font-bold text-sm text-[#0e1b10]">De Kalb County, IL</h4>
+<span class="bg-primary/20 text-[#064e3b] text-[10px] px-1.5 py-0.5 rounded font-bold">#5</span>
+</div>
+<div class="text-xs text-[#6b7280]">Production</div>
+<div class="text-lg font-bold text-[#16a34a]">24.1M <span class="text-xs font-normal text-[#6b7280]">bu</span></div>
+<div class="text-[10px] text-[#4e975a] mt-1 flex items-center gap-1">
+<span class="material-symbols-outlined text-[12px] rotate-180">arrow_drop_down</span>
+                            1.2% from prev year
+                        </div>
+</div>
+</div>
+</div>
+<!-- Rank Table Card (Right) -->
+<div class="xl:col-span-4 bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-[#e7f3e9] flex flex-col h-full">
+<div class="p-4 border-b border-[#f0f0f0] flex flex-col gap-3">
+<div class="flex justify-between items-center">
+<h3 class="font-bold text-[#0e1b10]">Top Regions</h3>
+<a class="text-sm text-primary font-medium hover:underline" href="#">View Full Report</a>
+</div>
+<!-- Table Search -->
+<div class="relative">
+<span class="absolute inset-y-0 left-0 flex items-center pl-2 text-[#9ca3af]">
+<span class="material-symbols-outlined text-[18px]">search</span>
+</span>
+<input class="w-full bg-[#f8fcf9] border border-[#d0e7d4] text-sm rounded-md py-1.5 pl-8 pr-3 focus:ring-primary focus:border-primary placeholder:text-[#9ca3af]" placeholder="Filter by county..." type="text"/>
+</div>
+</div>
+<div class="overflow-y-auto flex-1 custom-scrollbar">
+<table class="w-full text-sm text-left">
+<thead class="text-xs text-[#6b7280] bg-[#f8fcf9] sticky top-0 z-10">
+<tr>
+<th class="px-4 py-3 font-semibold w-12 text-center">#</th>
+<th class="px-2 py-3 font-semibold">Region</th>
+<th class="px-2 py-3 font-semibold text-right">Value (M)</th>
+<th class="px-2 py-3 font-semibold text-right">YoY</th>
+<th class="px-4 py-3 font-semibold text-right">Trend</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-[#f0f0f0]">
+<!-- Row 1 -->
+<tr class="hover:bg-[#f8fcf9] group transition-colors">
+<td class="px-4 py-3 text-center font-medium text-[#9ca3af]">1</td>
+<td class="px-2 py-3 font-semibold text-[#0e1b10]">McLean, IL</td>
+<td class="px-2 py-3 text-right font-mono text-[#0e1b10]">71.4</td>
+<td class="px-2 py-3 text-right">
+<span class="inline-flex items-center text-xs font-medium text-green-600 bg-green-50 px-1.5 py-0.5 rounded">
+<span class="material-symbols-outlined text-[12px] mr-0.5">arrow_upward</span> 4.5%
+                                    </span>
+</td>
+<td class="px-4 py-3 text-right">
+<!-- Sparkline SVG -->
+<svg class="inline-block" fill="none" height="16" viewbox="0 0 40 16" width="40">
+<path d="M1 12L8 8L16 10L24 4L32 6L39 1" stroke="#16a34a" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"></path>
+</svg>
+</td>
+</tr>
+<!-- Row 2 -->
+<tr class="hover:bg-[#f8fcf9] group transition-colors">
+<td class="px-4 py-3 text-center font-medium text-[#9ca3af]">2</td>
+<td class="px-2 py-3 font-semibold text-[#0e1b10]">Iroquois, IL</td>
+<td class="px-2 py-3 text-right font-mono text-[#0e1b10]">68.2</td>
+<td class="px-2 py-3 text-right">
+<span class="inline-flex items-center text-xs font-medium text-red-600 bg-red-50 px-1.5 py-0.5 rounded">
+<span class="material-symbols-outlined text-[12px] mr-0.5">arrow_downward</span> 1.2%
+                                    </span>
+</td>
+<td class="px-4 py-3 text-right">
+<svg class="inline-block" fill="none" height="16" viewbox="0 0 40 16" width="40">
+<path d="M1 8L8 10L16 6L24 8L32 4L39 12" stroke="#ef4444" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"></path>
+</svg>
+</td>
+</tr>
+<!-- Row 3 -->
+<tr class="hover:bg-[#f8fcf9] group transition-colors">
+<td class="px-4 py-3 text-center font-medium text-[#9ca3af]">3</td>
+<td class="px-2 py-3 font-semibold text-[#0e1b10]">Kossuth, IA</td>
+<td class="px-2 py-3 text-right font-mono text-[#0e1b10]">62.1</td>
+<td class="px-2 py-3 text-right">
+<span class="inline-flex items-center text-xs font-medium text-green-600 bg-green-50 px-1.5 py-0.5 rounded">
+<span class="material-symbols-outlined text-[12px] mr-0.5">arrow_upward</span> 0.8%
+                                    </span>
+</td>
+<td class="px-4 py-3 text-right">
+<svg class="inline-block" fill="none" height="16" viewbox="0 0 40 16" width="40">
+<path d="M1 10L8 8L16 8L24 6L32 4L39 2" stroke="#16a34a" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"></path>
+</svg>
+</td>
+</tr>
+<!-- Row 4 -->
+<tr class="hover:bg-[#f8fcf9] group transition-colors">
+<td class="px-4 py-3 text-center font-medium text-[#9ca3af]">4</td>
+<td class="px-2 py-3 font-semibold text-[#0e1b10]">Livingston, IL</td>
+<td class="px-2 py-3 text-right font-mono text-[#0e1b10]">59.8</td>
+<td class="px-2 py-3 text-right">
+<span class="inline-flex items-center text-xs font-medium text-green-600 bg-green-50 px-1.5 py-0.5 rounded">
+<span class="material-symbols-outlined text-[12px] mr-0.5">arrow_upward</span> 2.1%
+                                    </span>
+</td>
+<td class="px-4 py-3 text-right">
+<svg class="inline-block" fill="none" height="16" viewbox="0 0 40 16" width="40">
+<path d="M1 14L8 10L16 12L24 6L32 4L39 2" stroke="#16a34a" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"></path>
+</svg>
+</td>
+</tr>
+<!-- Row 5 -->
+<tr class="hover:bg-[#f8fcf9] group transition-colors">
+<td class="px-4 py-3 text-center font-medium text-[#9ca3af]">5</td>
+<td class="px-2 py-3 font-semibold text-[#0e1b10]">De Kalb, IL</td>
+<td class="px-2 py-3 text-right font-mono text-[#0e1b10]">58.4</td>
+<td class="px-2 py-3 text-right">
+<span class="inline-flex items-center text-xs font-medium text-red-600 bg-red-50 px-1.5 py-0.5 rounded">
+<span class="material-symbols-outlined text-[12px] mr-0.5">arrow_downward</span> 0.5%
+                                    </span>
+</td>
+<td class="px-4 py-3 text-right">
+<svg class="inline-block" fill="none" height="16" viewbox="0 0 40 16" width="40">
+<path d="M1 6L8 8L16 6L24 8L32 8L39 10" stroke="#ef4444" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"></path>
+</svg>
+</td>
+</tr>
+<!-- Row 6 -->
+<tr class="hover:bg-[#f8fcf9] group transition-colors">
+<td class="px-4 py-3 text-center font-medium text-[#9ca3af]">6</td>
+<td class="px-2 py-3 font-semibold text-[#0e1b10]">Champaign, IL</td>
+<td class="px-2 py-3 text-right font-mono text-[#0e1b10]">57.9</td>
+<td class="px-2 py-3 text-right">
+<span class="inline-flex items-center text-xs font-medium text-green-600 bg-green-50 px-1.5 py-0.5 rounded">
+<span class="material-symbols-outlined text-[12px] mr-0.5">arrow_upward</span> 3.2%
+                                    </span>
+</td>
+<td class="px-4 py-3 text-right">
+<svg class="inline-block" fill="none" height="16" viewbox="0 0 40 16" width="40">
+<path d="M1 12L8 10L16 8L24 6L32 4L39 2" stroke="#16a34a" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"></path>
+</svg>
+</td>
+</tr>
+<!-- Row 7 -->
+<tr class="hover:bg-[#f8fcf9] group transition-colors">
+<td class="px-4 py-3 text-center font-medium text-[#9ca3af]">7</td>
+<td class="px-2 py-3 font-semibold text-[#0e1b10]">Potu., IA</td>
+<td class="px-2 py-3 text-right font-mono text-[#0e1b10]">56.2</td>
+<td class="px-2 py-3 text-right">
+<span class="inline-flex items-center text-xs font-medium text-green-600 bg-green-50 px-1.5 py-0.5 rounded">
+<span class="material-symbols-outlined text-[12px] mr-0.5">arrow_upward</span> 1.5%
+                                    </span>
+</td>
+<td class="px-4 py-3 text-right">
+<svg class="inline-block" fill="none" height="16" viewbox="0 0 40 16" width="40">
+<path d="M1 10L8 10L16 8L24 6L32 5L39 3" stroke="#16a34a" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"></path>
+</svg>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+<!-- Bottom Row: Concentration Metrics -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+<!-- HHI Gauge Card -->
+<div class="bg-white p-6 rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-[#e7f3e9] flex flex-col justify-between">
+<div>
+<div class="flex items-center gap-2 mb-1">
+<span class="material-symbols-outlined text-[#4e975a] text-[20px]">speed</span>
+<h3 class="font-bold text-[#0e1b10]">Market Concentration</h3>
+</div>
+<p class="text-xs text-[#6b7280]">Herfindahl–Hirschman Index (HHI)</p>
+</div>
+<div class="flex items-center justify-center py-4 relative">
+<!-- Simple CSS Gauge visual -->
+<div class="relative w-48 h-24 overflow-hidden">
+<div class="absolute top-0 left-0 w-48 h-48 rounded-full border-[12px] border-[#e7f3e9] border-b-0 border-l-0 border-r-0 rotate-180"></div>
+<!-- Active arc -->
+<div class="absolute top-0 left-0 w-48 h-48 rounded-full border-[12px] border-transparent border-t-[#4e975a] border-r-transparent rotate-[220deg]"></div>
+<!-- Needle -->
+<div class="absolute bottom-0 left-1/2 w-1 h-20 bg-[#0e1b10] origin-bottom transform -rotate-[45deg] rounded-full"></div>
+<div class="absolute bottom-0 left-1/2 w-4 h-4 bg-[#0e1b10] -ml-2 rounded-full"></div>
+</div>
+</div>
+<div class="text-center">
+<div class="text-3xl font-black text-[#0e1b10]">1,240</div>
+<div class="text-sm font-medium text-[#4e975a]">Moderate Concentration</div>
+<p class="text-xs text-[#6b7280] mt-1">Production is somewhat distributed.</p>
+</div>
+</div>
+<!-- Share Statistics -->
+<div class="bg-white p-6 rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-[#e7f3e9] flex flex-col justify-center gap-6">
+<div>
+<h3 class="font-bold text-[#0e1b10] mb-4">Top Producer Share</h3>
+<div class="space-y-5">
+<!-- Top 5 -->
+<div>
+<div class="flex justify-between text-sm mb-1">
+<span class="font-medium text-[#0e1b10]">Top 5 Counties</span>
+<span class="font-bold text-[#0e1b10]">14.2%</span>
+</div>
+<div class="w-full bg-[#f0f0f0] rounded-full h-2.5">
+<div class="bg-primary h-2.5 rounded-full" style="width: 14.2%"></div>
+</div>
+<p class="text-[10px] text-[#6b7280] mt-1">Of total US Corn Production</p>
+</div>
+<!-- Top 10 -->
+<div>
+<div class="flex justify-between text-sm mb-1">
+<span class="font-medium text-[#0e1b10]">Top 10 Counties</span>
+<span class="font-bold text-[#0e1b10]">21.8%</span>
+</div>
+<div class="w-full bg-[#f0f0f0] rounded-full h-2.5">
+<div class="bg-primary/70 h-2.5 rounded-full" style="width: 21.8%"></div>
+</div>
+</div>
+</div>
+</div>
+<div class="pt-4 border-t border-[#f0f0f0]">
+<div class="flex items-start gap-3">
+<div class="p-2 bg-[#e7f3e9] rounded-lg text-primary">
+<span class="material-symbols-outlined">analytics</span>
+</div>
+<div>
+<p class="text-xs font-medium text-[#0e1b10]">Insight</p>
+<p class="text-xs text-[#6b7280] leading-snug">The top 10 counties account for over 1/5th of national supply, indicating significant regional reliance.</p>
+</div>
+</div>
+</div>
+</div>
+<!-- Lorenz Curve (Distribution) -->
+<div class="bg-white p-6 rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-[#e7f3e9] flex flex-col">
+<div class="flex justify-between items-start mb-4">
+<div>
+<h3 class="font-bold text-[#0e1b10]">Distribution Inequality</h3>
+<p class="text-xs text-[#6b7280]">Lorenz Curve Analysis</p>
+</div>
+<button class="text-[#4e975a] hover:bg-[#e7f3e9] p-1 rounded">
+<span class="material-symbols-outlined text-[20px]">info</span>
+</button>
+</div>
+<div class="flex-1 flex items-end justify-center px-4 pb-2">
+<!-- Simple SVG Line Chart for Lorenz Curve -->
+<div class="w-full aspect-[2/1] relative">
+<svg class="w-full h-full overflow-visible" viewbox="0 0 100 50">
+<!-- Axis lines -->
+<line stroke="#e5e7eb" stroke-width="1" x1="0" x2="100" y1="50" y2="50"></line>
+<line stroke="#e5e7eb" stroke-width="1" x1="0" x2="0" y1="0" y2="50"></line>
+<!-- Perfect Equality Line (dashed) -->
+<line stroke="#9ca3af" stroke-dasharray="2,2" stroke-width="1" x1="0" x2="100" y1="50" y2="0"></line>
+<!-- Actual Curve -->
+<path d="M0,50 Q60,50 100,0" fill="none" stroke="#16a34a" stroke-width="2"></path>
+<!-- Fill Area -->
+<path d="M0,50 Q60,50 100,0 L100,50 Z" fill="url(#gradientFill)" opacity="0.2"></path>
+<defs>
+<lineargradient id="gradientFill" x1="0" x2="0" y1="0" y2="1">
+<stop offset="0%" stop-color="#19e63c"></stop>
+<stop offset="100%" stop-color="#ffffff"></stop>
+</lineargradient>
+</defs>
+</svg>
+<div class="absolute bottom-[-20px] left-0 text-[10px] text-[#6b7280]">0%</div>
+<div class="absolute bottom-[-20px] right-0 text-[10px] text-[#6b7280]">100% Counties</div>
+<div class="absolute top-0 left-[-25px] text-[10px] text-[#6b7280]">100%</div>
+</div>
+</div>
+<div class="text-center mt-4">
+<p class="text-xs text-[#0e1b10] font-medium">Gini Coefficient: <span class="font-bold">0.42</span></p>
+</div>
+</div>
+</div>
+</main>
+</body></html>

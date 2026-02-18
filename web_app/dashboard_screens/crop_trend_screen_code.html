@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Agriculture Trend Explorer &amp; Decomposition</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#19e63c",
+                        "background-light": "#f6f8f6",
+                        "background-dark": "#112114",
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "sans-serif"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+        /* Custom scrollbar for cleaner look */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+        .chart-grid {
+            background-image: linear-gradient(to right, #e2e8f0 1px, transparent 1px),
+                              linear-gradient(to bottom, #e2e8f0 1px, transparent 1px);
+            background-size: 40px 40px;
+        }
+        .dark .chart-grid {
+            background-image: linear-gradient(to right, #334155 1px, transparent 1px),
+                              linear-gradient(to bottom, #334155 1px, transparent 1px);
+        }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 font-display antialiased overflow-x-hidden">
+<!-- Top Navigation (Adapted from provided component) -->
+<header class="sticky top-0 z-50 flex items-center justify-between whitespace-nowrap border-b border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-background-dark/80 backdrop-blur-md px-10 py-3">
+<div class="flex items-center gap-8">
+<div class="flex items-center gap-4">
+<div class="size-8 text-primary">
+<span class="material-symbols-outlined text-4xl">agriculture</span>
+</div>
+<h2 class="text-xl font-bold tracking-tight">QuickStats Ag Dashboard</h2>
+</div>
+<nav class="hidden md:flex items-center gap-6">
+<a class="text-sm font-medium hover:text-primary transition-colors" href="#">Executive Snapshot</a>
+<a class="text-sm font-bold text-primary" href="#">Trend Explorer</a>
+<a class="text-sm font-medium hover:text-primary transition-colors" href="#">Geospatial View</a>
+<a class="text-sm font-medium hover:text-primary transition-colors" href="#">Reports</a>
+</nav>
+</div>
+<div class="flex items-center gap-6">
+<div class="relative hidden sm:block">
+<span class="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
+<span class="material-symbols-outlined text-[20px]">search</span>
+</span>
+<input class="w-64 rounded-lg border-0 bg-slate-100 dark:bg-slate-800 py-2 pl-10 pr-4 text-sm focus:ring-2 focus:ring-primary placeholder:text-slate-400" placeholder="Search crops, regions..." type="text"/>
+</div>
+<div class="h-10 w-10 rounded-full bg-slate-200 dark:bg-slate-700 bg-cover bg-center border-2 border-slate-100 dark:border-slate-600" data-alt="User profile picture" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuALPR9VFxD5h7QVsyBPBlKWZg2yY8DscvaOqGhCeMiOfasAy17WVqCLg9lXSqBRfvNkMwg32f9i6FUV-1D2QV7XRP8rAnI0dmGkHjgCDMOVp2VmFsAItyv3kVr729KabDlwTa1YkUzd3uhDGC_YFBE1JwAjSRx-04W49Yeks7l20V04BCml2QB1hMUXNlV0aCqwdEmnniid8tboyuZMRYWFfm4DRFzGmXALy0Od6a2WDGRtfZpcDVB15lZt0pjPxGs2wMG8GZxQdf4H');"></div>
+</div>
+</header>
+<main class="min-h-screen pb-12">
+<!-- Global Filter Bar -->
+<section class="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-10 py-4 shadow-sm">
+<div class="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
+<div class="flex flex-col gap-1">
+<div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+<span>Home</span>
+<span class="material-symbols-outlined text-[16px]">chevron_right</span>
+<span>Dashboard</span>
+<span class="material-symbols-outlined text-[16px]">chevron_right</span>
+<span class="text-primary font-medium">Trend Explorer</span>
+</div>
+<h1 class="text-3xl font-black tracking-tight">Agriculture Trend Explorer</h1>
+</div>
+<div class="flex flex-wrap gap-3 items-center">
+<div class="group relative">
+<button class="flex h-10 items-center justify-between gap-3 rounded-lg bg-slate-100 dark:bg-slate-800 px-4 text-sm font-medium hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-[180px]">
+<span>Geography: National</span>
+<span class="material-symbols-outlined text-[20px]">expand_more</span>
+</button>
+</div>
+<div class="group relative">
+<button class="flex h-10 items-center justify-between gap-3 rounded-lg bg-slate-100 dark:bg-slate-800 px-4 text-sm font-medium hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-[200px]">
+<span>Commodity: Crops</span>
+<span class="material-symbols-outlined text-[20px]">expand_more</span>
+</button>
+</div>
+<div class="group relative">
+<button class="flex h-10 items-center justify-between gap-3 rounded-lg border border-primary/30 bg-primary/10 px-4 text-sm font-medium text-primary-dark hover:bg-primary/20 transition-colors min-w-[200px]">
+<span class="text-slate-900 dark:text-white">Specific: <span class="font-bold text-primary">Corn</span></span>
+<span class="material-symbols-outlined text-[20px] text-primary">expand_more</span>
+</button>
+</div>
+<div class="h-8 w-px bg-slate-300 dark:bg-slate-700 mx-2 hidden xl:block"></div>
+<button class="flex h-10 items-center gap-2 rounded-lg bg-slate-900 dark:bg-white px-5 text-sm font-bold text-white dark:text-slate-900 hover:opacity-90 transition-opacity shadow-lg shadow-primary/20">
+<span class="material-symbols-outlined text-[20px]">download</span>
+<span>Export Data</span>
+</button>
+</div>
+</div>
+</section>
+<div class="px-6 lg:px-10 py-8 grid grid-cols-12 gap-6">
+<!-- Main Chart Section -->
+<div class="col-span-12 lg:col-span-9 flex flex-col gap-6">
+<!-- Primary Time Series Card -->
+<div class="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 p-6">
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+<div>
+<h3 class="text-lg font-bold flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">show_chart</span>
+                                Production Trend Analysis
+                            </h3>
+<p class="text-sm text-slate-500 dark:text-slate-400">Historical production volume over time (Bushels)</p>
+</div>
+<!-- Chart Controls -->
+<div class="flex items-center bg-slate-100 dark:bg-slate-800 rounded-lg p-1">
+<button class="px-3 py-1.5 text-xs font-medium rounded bg-white dark:bg-slate-700 shadow-sm text-primary">Absolute</button>
+<button class="px-3 py-1.5 text-xs font-medium rounded text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors">YoY %</button>
+<button class="px-3 py-1.5 text-xs font-medium rounded text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors">MoM %</button>
+<button class="px-3 py-1.5 text-xs font-medium rounded text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors">Rolling Mean</button>
+</div>
+</div>
+<!-- Main Chart Area Placeholder -->
+<div class="relative h-[350px] w-full rounded-lg chart-grid border border-slate-100 dark:border-slate-800 overflow-hidden group">
+<!-- Simulated Chart Path -->
+<svg class="absolute inset-0 h-full w-full" preserveaspectratio="none">
+<defs>
+<lineargradient id="chartGradient" x1="0" x2="0" y1="0" y2="1">
+<stop offset="0%" stop-color="#19e63c" stop-opacity="0.4"></stop>
+<stop offset="100%" stop-color="#19e63c" stop-opacity="0"></stop>
+</lineargradient>
+</defs>
+<path d="M0,300 C100,280 200,320 300,200 C400,100 500,150 600,120 C700,90 800,50 900,80 C1000,110 1100,60 1200,40 V350 H0 Z" fill="url(#chartGradient)"></path>
+<path d="M0,300 C100,280 200,320 300,200 C400,100 500,150 600,120 C700,90 800,50 900,80 C1000,110 1100,60 1200,40" fill="none" stroke="#19e63c" stroke-width="3"></path>
+</svg>
+<!-- Interactive Tooltip Simulation -->
+<div class="absolute left-[60%] top-[25%] flex flex-col gap-1 rounded-lg bg-slate-900 text-white p-3 text-xs shadow-xl pointer-events-none transform -translate-x-1/2">
+<div class="font-bold text-slate-300">Aug 2021</div>
+<div class="flex justify-between gap-4">
+<span>Volume:</span>
+<span class="font-mono font-bold text-primary">14.2B Bu</span>
+</div>
+<div class="flex justify-between gap-4 text-slate-400">
+<span>vs Prev Year:</span>
+<span class="font-mono text-green-400">+4.2%</span>
+</div>
+</div>
+<div class="absolute left-[60%] top-0 bottom-0 w-px border-l border-dashed border-slate-400 pointer-events-none"></div>
+<div class="absolute left-[60%] top-[34%] size-3 rounded-full bg-primary border-2 border-white dark:border-slate-900 shadow-md transform -translate-x-1/2 -translate-y-1/2"></div>
+</div>
+<!-- X-Axis Labels -->
+<div class="flex justify-between mt-2 text-xs text-slate-400 font-medium px-2">
+<span>2015</span>
+<span>2016</span>
+<span>2017</span>
+<span>2018</span>
+<span>2019</span>
+<span>2020</span>
+<span>2021</span>
+<span>2022</span>
+<span>2023</span>
+</div>
+</div>
+<!-- Decomposition Panel -->
+<div class="flex flex-col gap-4">
+<div class="flex items-center justify-between">
+<h3 class="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+<span class="material-symbols-outlined text-slate-400">hub</span>
+                            Trend Drivers Decomposition
+                        </h3>
+<div class="flex gap-2">
+<span class="inline-flex items-center rounded-full bg-blue-100 dark:bg-blue-900 px-2.5 py-0.5 text-xs font-medium text-blue-800 dark:text-blue-200">
+                                Yield-Driven
+                             </span>
+<span class="inline-flex items-center rounded-full bg-amber-100 dark:bg-amber-900 px-2.5 py-0.5 text-xs font-medium text-amber-800 dark:text-amber-200">
+                                Acreage-Driven
+                             </span>
+</div>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+<!-- Sub Chart 1: Yield -->
+<div class="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 p-5">
+<div class="flex items-start justify-between mb-4">
+<div>
+<h4 class="font-semibold text-sm text-slate-500 uppercase tracking-wider">Yield Trend</h4>
+<div class="text-2xl font-bold mt-1">177.0 <span class="text-sm font-normal text-slate-400">Bu/Acre</span></div>
+</div>
+<span class="material-symbols-outlined text-green-500 bg-green-50 dark:bg-green-900/30 p-1.5 rounded-lg">trending_up</span>
+</div>
+<!-- Mini Line Chart -->
+<div class="h-24 w-full relative">
+<svg class="absolute inset-0 h-full w-full" preserveaspectratio="none">
+<path d="M0,80 C30,75 60,60 90,65 C120,70 150,40 180,30 C210,20 240,25 270,10" fill="none" stroke="#3b82f6" stroke-width="2.5"></path>
+<!-- Area under curve -->
+<path d="M0,80 C30,75 60,60 90,65 C120,70 150,40 180,30 C210,20 240,25 270,10 V100 H0 Z" fill="#3b82f6" fill-opacity="0.1"></path>
+</svg>
+</div>
+<div class="mt-2 flex items-center justify-between text-xs">
+<span class="text-slate-400">Last 10 Years</span>
+<span class="text-green-600 font-medium">+2.1% YoY</span>
+</div>
+</div>
+<!-- Sub Chart 2: Acres -->
+<div class="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 p-5">
+<div class="flex items-start justify-between mb-4">
+<div>
+<h4 class="font-semibold text-sm text-slate-500 uppercase tracking-wider">Harvested Acres</h4>
+<div class="text-2xl font-bold mt-1">85.4M <span class="text-sm font-normal text-slate-400">Acres</span></div>
+</div>
+<span class="material-symbols-outlined text-amber-500 bg-amber-50 dark:bg-amber-900/30 p-1.5 rounded-lg">trending_flat</span>
+</div>
+<!-- Mini Line Chart -->
+<div class="h-24 w-full relative">
+<svg class="absolute inset-0 h-full w-full" preserveaspectratio="none">
+<path d="M0,40 C30,45 60,30 90,35 C120,40 150,45 180,42 C210,38 240,50 270,55" fill="none" stroke="#f59e0b" stroke-width="2.5"></path>
+<path d="M0,40 C30,45 60,30 90,35 C120,40 150,45 180,42 C210,38 240,50 270,55 V100 H0 Z" fill="#f59e0b" fill-opacity="0.1"></path>
+</svg>
+</div>
+<div class="mt-2 flex items-center justify-between text-xs">
+<span class="text-slate-400">Last 10 Years</span>
+<span class="text-amber-600 font-medium">-0.4% YoY</span>
+</div>
+</div>
+<!-- Sub Chart 3: Driver Contribution -->
+<div class="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 p-5">
+<div class="flex items-start justify-between mb-4">
+<div>
+<h4 class="font-semibold text-sm text-slate-500 uppercase tracking-wider">Driver Analysis</h4>
+<div class="text-2xl font-bold mt-1">Yield-Led <span class="text-sm font-normal text-slate-400">Growth</span></div>
+</div>
+<span class="material-symbols-outlined text-purple-500 bg-purple-50 dark:bg-purple-900/30 p-1.5 rounded-lg">pie_chart</span>
+</div>
+<!-- Stacked Bar / Contribution Chart Simulation -->
+<div class="h-24 w-full flex items-end gap-2 px-2">
+<div class="w-1/5 bg-slate-100 dark:bg-slate-800 rounded-t-sm h-full relative group">
+<div class="absolute bottom-0 w-full bg-blue-500 rounded-t-sm h-[60%]"></div>
+<div class="absolute bottom-[60%] w-full bg-amber-400 h-[20%]"></div>
+</div>
+<div class="w-1/5 bg-slate-100 dark:bg-slate-800 rounded-t-sm h-full relative group">
+<div class="absolute bottom-0 w-full bg-blue-500 rounded-t-sm h-[65%]"></div>
+<div class="absolute bottom-[65%] w-full bg-amber-400 h-[15%]"></div>
+</div>
+<div class="w-1/5 bg-slate-100 dark:bg-slate-800 rounded-t-sm h-full relative group">
+<div class="absolute bottom-0 w-full bg-blue-500 rounded-t-sm h-[75%]"></div>
+<div class="absolute bottom-[75%] w-full bg-amber-400 h-[10%]"></div>
+</div>
+<div class="w-1/5 bg-slate-100 dark:bg-slate-800 rounded-t-sm h-full relative group">
+<div class="absolute bottom-0 w-full bg-blue-500 rounded-t-sm h-[80%]"></div>
+<div class="absolute bottom-[80%] w-full bg-amber-400 h-[15%]"></div>
+</div>
+<div class="w-1/5 bg-slate-100 dark:bg-slate-800 rounded-t-sm h-full relative group">
+<div class="absolute bottom-0 w-full bg-blue-500 rounded-t-sm h-[85%]"></div>
+<div class="absolute bottom-[85%] w-full bg-amber-400 h-[5%]"></div>
+</div>
+</div>
+<div class="mt-2 flex items-center justify-between text-xs">
+<span class="text-slate-400">Contribution over time</span>
+<span class="text-slate-600 dark:text-slate-300 font-medium">Current: 85% Yield</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Sidebar / Volatility Section -->
+<div class="col-span-12 lg:col-span-3 flex flex-col gap-6">
+<!-- Stability Score Card -->
+<div class="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 p-6">
+<h3 class="font-bold text-lg mb-4 flex items-center gap-2">
+<span class="material-symbols-outlined text-slate-400">speed</span>
+                        Stability Score
+                    </h3>
+<div class="relative size-40 mx-auto my-4">
+<svg class="size-full -rotate-90" viewbox="0 0 36 36">
+<!-- Background Circle -->
+<path class="text-slate-100 dark:text-slate-800" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" stroke-width="3"></path>
+<!-- Progress Circle -->
+<path class="text-primary" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" stroke-dasharray="85, 100" stroke-linecap="round" stroke-width="3"></path>
+</svg>
+<div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-center">
+<div class="text-3xl font-black text-slate-900 dark:text-white">8.5</div>
+<div class="text-xs font-medium text-slate-400 uppercase">High</div>
+</div>
+</div>
+<p class="text-center text-sm text-slate-500 mb-6">Based on 10-year historical yield variance.</p>
+<div class="space-y-4">
+<div>
+<div class="flex justify-between text-sm mb-1">
+<span class="text-slate-500">Yield Volatility</span>
+<span class="font-bold">Low (3.2%)</span>
+</div>
+<div class="h-1.5 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+<div class="h-full bg-primary w-[32%] rounded-full"></div>
+</div>
+</div>
+<div>
+<div class="flex justify-between text-sm mb-1">
+<span class="text-slate-500">Price Volatility</span>
+<span class="font-bold">Med (12.5%)</span>
+</div>
+<div class="h-1.5 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+<div class="h-full bg-amber-400 w-[65%] rounded-full"></div>
+</div>
+</div>
+</div>
+</div>
+<!-- Rolling Deviation Widget -->
+<div class="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 p-6 flex-1">
+<h3 class="font-bold text-lg mb-2 flex items-center gap-2">
+<span class="material-symbols-outlined text-slate-400">analytics</span>
+                        Volatility Index
+                    </h3>
+<p class="text-sm text-slate-500 dark:text-slate-400 mb-4">Rolling Standard Deviation (30-day)</p>
+<div class="flex items-end gap-1 h-20 mb-4">
+<div class="w-1/6 bg-slate-200 dark:bg-slate-700 rounded-t h-[20%]"></div>
+<div class="w-1/6 bg-slate-200 dark:bg-slate-700 rounded-t h-[35%]"></div>
+<div class="w-1/6 bg-slate-200 dark:bg-slate-700 rounded-t h-[60%]"></div>
+<div class="w-1/6 bg-slate-200 dark:bg-slate-700 rounded-t h-[30%]"></div>
+<div class="w-1/6 bg-slate-200 dark:bg-slate-700 rounded-t h-[45%]"></div>
+<div class="w-1/6 bg-primary rounded-t h-[25%] relative group">
+<div class="absolute -top-6 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-[10px] px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity">12%</div>
+</div>
+</div>
+<div class="bg-primary/5 border border-primary/20 rounded-lg p-3">
+<div class="flex items-start gap-2">
+<span class="material-symbols-outlined text-primary text-sm mt-0.5">info</span>
+<p class="text-xs text-slate-600 dark:text-slate-300">
+                                Current volatility is <strong>15% lower</strong> than the 5-year average for this season.
+                            </p>
+</div>
+</div>
+</div>
+<!-- Regional Heatmap Mini -->
+<div class="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 p-0 overflow-hidden relative group h-48">
+<img alt="Aerial view of green agricultural fields pattern" class="w-full h-full object-cover opacity-80 group-hover:scale-105 transition-transform duration-500" data-alt="Abstract aerial map of crop fields" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBvd259m4TAn4vzq3jljSOgvPSbcN-aYdxHYSKP_CRjp5mMapZ838ZodSEMyUPnQWq1P9hl5AS1N8uPlQr5-AvaLcbIsVXoLzdebDuYrss11bEvlv9s6A6ca8Ms_9mUx9L2C39dylrAto4jTpHx5yRvmwRHGBvBq2TbuYb9pHxWGEiYwTeMIE8C73U8WYF5kEehVw2RuprrSq0xyzbVI38C6p4pbv-xm-lr7qkNWOehZ5O8U3cEZryCcfBgvsInnuS2HqIUkAT-LiQ7"/>
+<div class="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent flex flex-col justify-end p-4">
+<h3 class="font-bold text-white text-lg flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">map</span>
+                            Top Region
+                        </h3>
+<p class="text-slate-300 text-sm">Iowa (North Central)</p>
+</div>
+</div>
+</div>
+</div>
+</main>
+</body></html>

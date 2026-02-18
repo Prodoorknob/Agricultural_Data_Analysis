@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Executive Snapshot Agriculture Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#19e63c",
+                        "primary-dark": "#14b830",
+                        "background-light": "#f6f8f6",
+                        "background-dark": "#112114",
+                        "surface-light": "#ffffff",
+                        "surface-dark": "#1a2e1e",
+                        "text-main": "#0e1b10",
+                        "text-muted": "#4e975a",
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "sans-serif"]
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.5rem",
+                        "lg": "0.75rem",
+                        "xl": "1rem",
+                        "full": "9999px"
+                    },
+                },
+            },
+        }
+    </script>
+<style>
+        /* Custom scrollbar for better aesthetics */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8; 
+        }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-text-main font-display min-h-screen flex flex-col overflow-x-hidden">
+<!-- Top Navigation & Header -->
+<header class="bg-surface-light dark:bg-surface-dark border-b border-[#e7f3e9] dark:border-[#2a4030] sticky top-0 z-30 shadow-sm">
+<div class="px-6 py-3 flex items-center justify-between">
+<div class="flex items-center gap-4">
+<div class="size-8 text-primary">
+<svg fill="none" viewbox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
+<path d="M39.5563 34.1455V13.8546C39.5563 15.708 36.8773 17.3437 32.7927 18.3189C30.2914 18.916 27.263 19.2655 24 19.2655C20.737 19.2655 17.7086 18.916 15.2073 18.3189C11.1227 17.3437 8.44365 15.708 8.44365 13.8546V34.1455C8.44365 35.9988 11.1227 37.6346 15.2073 38.6098C17.7086 39.2069 20.737 39.5564 24 39.5564C27.263 39.5564 30.2914 39.2069 32.7927 38.6098C36.8773 37.6346 39.5563 35.9988 39.5563 34.1455Z" fill="currentColor"></path>
+<path clip-rule="evenodd" d="M10.4485 13.8519C10.4749 13.9271 10.6203 14.246 11.379 14.7361C12.298 15.3298 13.7492 15.9145 15.6717 16.3735C18.0007 16.9296 20.8712 17.2655 24 17.2655C27.1288 17.2655 29.9993 16.9296 32.3283 16.3735C34.2508 15.9145 35.702 15.3298 36.621 14.7361C37.3796 14.246 37.5251 13.9271 37.5515 13.8519C37.5287 13.7876 37.4333 13.5973 37.0635 13.2931C36.5266 12.8516 35.6288 12.3647 34.343 11.9175C31.79 11.0295 28.1333 10.4437 24 10.4437C19.8667 10.4437 16.2099 11.0295 13.657 11.9175C12.3712 12.3647 11.4734 12.8516 10.9365 13.2931C10.5667 13.5973 10.4713 13.7876 10.4485 13.8519ZM37.5563 18.7877C36.3176 19.3925 34.8502 19.8839 33.2571 20.2642C30.5836 20.9025 27.3973 21.2655 24 21.2655C20.6027 21.2655 17.4164 20.9025 14.7429 20.2642C13.1498 19.8839 11.6824 19.3925 10.4436 18.7877V34.1275C10.4515 34.1545 10.5427 34.4867 11.379 35.027C12.298 35.6207 13.7492 36.2054 15.6717 36.6644C18.0007 37.2205 20.8712 37.5564 24 37.5564C27.1288 37.5564 29.9993 37.2205 32.3283 36.6644C34.2508 36.2054 35.702 35.6207 36.621 35.027C37.4573 34.4867 37.5485 34.1546 37.5563 34.1275V18.7877ZM41.5563 13.8546V34.1455C41.5563 36.1078 40.158 37.5042 38.7915 38.3869C37.3498 39.3182 35.4192 40.0389 33.2571 40.5551C30.5836 41.1934 27.3973 41.5564 24 41.5564C20.6027 41.5564 17.4164 41.1934 14.7429 40.5551C12.5808 40.0389 10.6502 39.3182 9.20848 38.3869C7.84205 37.5042 6.44365 36.1078 6.44365 34.1455L6.44365 13.8546C6.44365 12.2684 7.37223 11.0454 8.39581 10.2036C9.43325 9.3505 10.8137 8.67141 12.343 8.13948C15.4203 7.06909 19.5418 6.44366 24 6.44366C28.4582 6.44366 32.5797 7.06909 35.657 8.13948C37.1863 8.67141 38.5667 9.3505 39.6042 10.2036C40.6278 11.0454 41.5563 12.2684 41.5563 13.8546Z" fill="currentColor" fill-rule="evenodd"></path>
+</svg>
+</div>
+<h1 class="text-xl font-bold tracking-tight text-text-main">QuickStats<span class="font-normal text-text-muted"> Executive Snapshot</span></h1>
+</div>
+<div class="flex items-center gap-6">
+<nav class="hidden md:flex items-center gap-6 text-sm font-medium text-text-muted">
+<a class="text-text-main hover:text-primary transition-colors" href="#">Dashboard</a>
+<a class="hover:text-primary transition-colors" href="#">Regional Analysis</a>
+<a class="hover:text-primary transition-colors" href="#">Reports</a>
+</nav>
+<div class="h-8 w-[1px] bg-[#e7f3e9] dark:bg-[#2a4030]"></div>
+<div class="flex items-center gap-3">
+<button class="size-9 flex items-center justify-center rounded-full hover:bg-[#e7f3e9] dark:hover:bg-[#2a4030] text-text-muted transition-colors">
+<span class="material-symbols-outlined text-[20px]">search</span>
+</button>
+<button class="size-9 flex items-center justify-center rounded-full hover:bg-[#e7f3e9] dark:hover:bg-[#2a4030] text-text-muted transition-colors">
+<span class="material-symbols-outlined text-[20px]">notifications</span>
+</button>
+<div class="size-9 rounded-full bg-cover bg-center border border-[#e7f3e9] dark:border-[#2a4030]" data-alt="User profile avatar showing a professional business person" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuDZS8N6R3yj3N7_m9fpotNZTdoCW6X9ivdUD2ASbqdqt8mvBOxyMFJRn9sEuGTEAbbBSuqp7USO1JY93eUpXSegNdtGVe3ZJgMhd1uHlk4_xI_KU1v8cEC4x23FzNndBstZUoxl1Fsasw8y1ttb2K_agQ2nc_zcsgrpQEvMsfxQZlZZjXxknLd6SudJaloYfrWictglkQ8ss-RQkh8qHcyDsyKxi9nu_S2kSMJGQ601sRymQDvhKZzA6hjuVgN-RD4taHliYHBDF9-W')"></div>
+</div>
+</div>
+</div>
+<!-- Global Filters Toolbar -->
+<div class="px-6 py-3 bg-[#fbfdfb] dark:bg-[#15281a] border-b border-[#e7f3e9] dark:border-[#2a4030] flex flex-wrap xl:flex-nowrap items-center justify-between gap-4">
+<div class="flex flex-wrap items-center gap-3 text-sm">
+<!-- Geo Filter -->
+<div class="relative group">
+<button class="flex items-center gap-2 bg-white dark:bg-surface-dark border border-[#d0e7d4] dark:border-[#2a4030] rounded-lg px-3 py-1.5 hover:border-primary transition-colors text-text-main">
+<span class="material-symbols-outlined text-[18px] text-text-muted">public</span>
+<span class="font-medium">USA / Midwest</span>
+<span class="material-symbols-outlined text-[18px] text-text-muted">expand_more</span>
+</button>
+</div>
+<!-- Commodity Filter -->
+<div class="relative group">
+<button class="flex items-center gap-2 bg-white dark:bg-surface-dark border border-[#d0e7d4] dark:border-[#2a4030] rounded-lg px-3 py-1.5 hover:border-primary transition-colors text-text-main">
+<span class="material-symbols-outlined text-[18px] text-text-muted">spa</span>
+<span class="font-medium">Corn, Soybeans</span>
+<span class="bg-primary/10 text-primary-dark text-xs px-1.5 py-0.5 rounded-full font-bold">+2</span>
+<span class="material-symbols-outlined text-[18px] text-text-muted">expand_more</span>
+</button>
+</div>
+<!-- Sector Toggle -->
+<div class="flex items-center bg-[#e7f3e9] dark:bg-[#2a4030] rounded-lg p-0.5">
+<button class="px-3 py-1 rounded-md text-xs font-semibold bg-white dark:bg-surface-dark text-text-main shadow-sm">Crops</button>
+<button class="px-3 py-1 rounded-md text-xs font-medium text-text-muted hover:text-text-main">Livestock</button>
+</div>
+<!-- Time Grain -->
+<div class="flex items-center bg-[#e7f3e9] dark:bg-[#2a4030] rounded-lg p-0.5 ml-2">
+<button class="px-3 py-1 rounded-md text-xs font-semibold bg-white dark:bg-surface-dark text-text-main shadow-sm">Yearly</button>
+<button class="px-3 py-1 rounded-md text-xs font-medium text-text-muted hover:text-text-main">Quarterly</button>
+</div>
+</div>
+<div class="flex items-center gap-4 ml-auto">
+<label class="flex items-center gap-2 cursor-pointer group">
+<div class="relative">
+<input checked="" class="sr-only peer" type="checkbox"/>
+<div class="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
+</div>
+<span class="text-sm font-medium text-text-main">Normalize Units</span>
+</label>
+<button class="flex items-center gap-2 bg-primary hover:bg-primary-dark text-text-main text-sm font-bold py-1.5 px-4 rounded-lg transition-colors shadow-sm shadow-primary/20">
+<span class="material-symbols-outlined text-[18px]">download</span>
+                    Export
+                </button>
+</div>
+</div>
+</header>
+<main class="flex-1 p-6 md:p-8 max-w-[1600px] mx-auto w-full flex flex-col gap-8">
+<!-- Context & Measures Rail -->
+<div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+<div class="flex items-center gap-2 overflow-x-auto pb-2 md:pb-0 no-scrollbar">
+<span class="text-sm font-medium text-text-muted mr-2 whitespace-nowrap">Active View:</span>
+<button class="whitespace-nowrap px-4 py-1.5 rounded-full bg-primary/10 text-primary-dark border border-primary/20 text-sm font-bold flex items-center gap-2">
+                    Production
+                    <span class="material-symbols-outlined text-[16px]">check</span>
+</button>
+<button class="whitespace-nowrap px-4 py-1.5 rounded-full bg-white dark:bg-surface-dark border border-[#e7f3e9] dark:border-[#2a4030] text-text-muted hover:text-text-main hover:border-primary/50 text-sm font-medium transition-all">
+                    Yield
+                </button>
+<button class="whitespace-nowrap px-4 py-1.5 rounded-full bg-white dark:bg-surface-dark border border-[#e7f3e9] dark:border-[#2a4030] text-text-muted hover:text-text-main hover:border-primary/50 text-sm font-medium transition-all">
+                    Harvested Acres
+                </button>
+<button class="whitespace-nowrap px-4 py-1.5 rounded-full bg-white dark:bg-surface-dark border border-[#e7f3e9] dark:border-[#2a4030] text-text-muted hover:text-text-main hover:border-primary/50 text-sm font-medium transition-all">
+                    Price Received
+                </button>
+</div>
+<div class="flex items-center gap-2">
+<span class="text-xs font-medium text-text-muted uppercase tracking-wider">Filters:</span>
+<div class="flex items-center gap-2">
+<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-[#e7f3e9] dark:bg-[#2a4030] text-text-main text-xs font-medium border border-[#d0e7d4] dark:border-[#3e5744]">
+                        Region: Midwest
+                        <button class="hover:text-red-500"><span class="material-symbols-outlined text-[14px]">close</span></button>
+</span>
+<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-[#e7f3e9] dark:bg-[#2a4030] text-text-main text-xs font-medium border border-[#d0e7d4] dark:border-[#3e5744]">
+                        Crop: Corn
+                        <button class="hover:text-red-500"><span class="material-symbols-outlined text-[14px]">close</span></button>
+</span>
+</div>
+</div>
+</div>
+<!-- Row 1: KPI Tiles -->
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+<!-- Tile 1 -->
+<div class="bg-surface-light dark:bg-surface-dark p-4 rounded-xl border border-[#e7f3e9] dark:border-[#2a4030] shadow-[0_2px_8px_rgba(0,0,0,0.04)] flex flex-col justify-between h-32 hover:border-primary/50 transition-colors group">
+<div class="flex justify-between items-start">
+<h3 class="text-sm font-medium text-text-muted">Latest Production</h3>
+<span class="material-symbols-outlined text-text-muted/30 group-hover:text-primary transition-colors">inventory_2</span>
+</div>
+<div>
+<div class="text-2xl font-bold text-text-main tracking-tight">14.2B <span class="text-base font-normal text-text-muted">Bu</span></div>
+<div class="flex items-center gap-1.5 mt-1">
+<span class="flex items-center text-xs font-bold text-primary-dark bg-primary/10 px-1.5 py-0.5 rounded">
+<span class="material-symbols-outlined text-[14px]">trending_up</span> 4.2%
+                        </span>
+<span class="text-xs text-text-muted">vs last year</span>
+</div>
+</div>
+</div>
+<!-- Tile 2 -->
+<div class="bg-surface-light dark:bg-surface-dark p-4 rounded-xl border border-[#e7f3e9] dark:border-[#2a4030] shadow-[0_2px_8px_rgba(0,0,0,0.04)] flex flex-col justify-between h-32 hover:border-primary/50 transition-colors group">
+<div class="flex justify-between items-start">
+<h3 class="text-sm font-medium text-text-muted">Avg Yield</h3>
+<span class="material-symbols-outlined text-text-muted/30 group-hover:text-primary transition-colors">grass</span>
+</div>
+<div>
+<div class="text-2xl font-bold text-text-main tracking-tight">177.0 <span class="text-base font-normal text-text-muted">Bu/Ac</span></div>
+<div class="flex items-center gap-1.5 mt-1">
+<span class="flex items-center text-xs font-bold text-orange-600 bg-orange-100 dark:bg-orange-900/30 px-1.5 py-0.5 rounded">
+<span class="material-symbols-outlined text-[14px]">trending_down</span> 1.2%
+                        </span>
+<span class="text-xs text-text-muted">vs last year</span>
+</div>
+</div>
+</div>
+<!-- Tile 3 -->
+<div class="bg-surface-light dark:bg-surface-dark p-4 rounded-xl border border-[#e7f3e9] dark:border-[#2a4030] shadow-[0_2px_8px_rgba(0,0,0,0.04)] flex flex-col justify-between h-32 hover:border-primary/50 transition-colors group">
+<div class="flex justify-between items-start">
+<h3 class="text-sm font-medium text-text-muted">Harvested Acres</h3>
+<span class="material-symbols-outlined text-text-muted/30 group-hover:text-primary transition-colors">landscape</span>
+</div>
+<div>
+<div class="text-2xl font-bold text-text-main tracking-tight">89.4M <span class="text-base font-normal text-text-muted">Ac</span></div>
+<div class="flex items-center gap-1.5 mt-1">
+<span class="flex items-center text-xs font-bold text-primary-dark bg-primary/10 px-1.5 py-0.5 rounded">
+<span class="material-symbols-outlined text-[14px]">trending_up</span> 2.0%
+                        </span>
+<span class="text-xs text-text-muted">vs last year</span>
+</div>
+</div>
+</div>
+<!-- Tile 4 -->
+<div class="bg-surface-light dark:bg-surface-dark p-4 rounded-xl border border-[#e7f3e9] dark:border-[#2a4030] shadow-[0_2px_8px_rgba(0,0,0,0.04)] flex flex-col justify-between h-32 hover:border-primary/50 transition-colors group">
+<div class="flex justify-between items-start">
+<h3 class="text-sm font-medium text-text-muted">Price Received</h3>
+<span class="material-symbols-outlined text-text-muted/30 group-hover:text-primary transition-colors">attach_money</span>
+</div>
+<div>
+<div class="text-2xl font-bold text-text-main tracking-tight">$6.50 <span class="text-base font-normal text-text-muted">/Bu</span></div>
+<div class="flex items-center gap-1.5 mt-1">
+<span class="flex items-center text-xs font-bold text-primary-dark bg-primary/10 px-1.5 py-0.5 rounded">
+<span class="material-symbols-outlined text-[14px]">trending_up</span> 12.5%
+                        </span>
+<span class="text-xs text-text-muted">vs last year</span>
+</div>
+</div>
+</div>
+<!-- Tile 5 -->
+<div class="bg-surface-light dark:bg-surface-dark p-4 rounded-xl border border-[#e7f3e9] dark:border-[#2a4030] shadow-[0_2px_8px_rgba(0,0,0,0.04)] flex flex-col justify-between h-32 hover:border-primary/50 transition-colors group">
+<div class="flex justify-between items-start">
+<h3 class="text-sm font-medium text-text-muted">Planted Acres</h3>
+<span class="material-symbols-outlined text-text-muted/30 group-hover:text-primary transition-colors">agriculture</span>
+</div>
+<div>
+<div class="text-2xl font-bold text-text-main tracking-tight">94.1M <span class="text-base font-normal text-text-muted">Ac</span></div>
+<div class="flex items-center gap-1.5 mt-1">
+<span class="flex items-center text-xs font-bold text-gray-500 bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded">
+<span class="material-symbols-outlined text-[14px]">remove</span> 0.0%
+                        </span>
+<span class="text-xs text-text-muted">vs last year</span>
+</div>
+</div>
+</div>
+<!-- Tile 6 -->
+<div class="bg-surface-light dark:bg-surface-dark p-4 rounded-xl border border-[#e7f3e9] dark:border-[#2a4030] shadow-[0_2px_8px_rgba(0,0,0,0.04)] flex flex-col justify-between h-32 hover:border-primary/50 transition-colors group">
+<div class="flex justify-between items-start">
+<h3 class="text-sm font-medium text-text-muted">5-Yr Avg Index</h3>
+<span class="material-symbols-outlined text-text-muted/30 group-hover:text-primary transition-colors">bar_chart</span>
+</div>
+<div>
+<div class="text-2xl font-bold text-text-main tracking-tight">104.2</div>
+<div class="flex items-center gap-1.5 mt-1">
+<span class="flex items-center text-xs font-bold text-primary-dark bg-primary/10 px-1.5 py-0.5 rounded">
+                            Above Avg
+                        </span>
+<span class="text-xs text-text-muted">Baseline 100</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Row 2: Trend Sparklines -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+<!-- Sparkline Card 1 -->
+<div class="bg-surface-light dark:bg-surface-dark rounded-xl border border-[#e7f3e9] dark:border-[#2a4030] shadow-[0_2px_12px_rgba(0,0,0,0.03)] overflow-hidden">
+<div class="p-5 flex justify-between items-start">
+<div>
+<h3 class="font-semibold text-text-main">Production Trend</h3>
+<p class="text-xs text-text-muted mt-0.5">10-Year Historical Data</p>
+</div>
+<div class="text-right">
+<p class="text-lg font-bold text-text-main">14.2B</p>
+<p class="text-xs text-primary-dark font-medium">+4% YoY</p>
+</div>
+</div>
+<div class="relative h-40 w-full bg-gradient-to-b from-[#f8fcf9] to-white dark:from-[#1a2e1e] dark:to-[#112114]">
+<!-- Simulated Sparkline SVG -->
+<svg class="absolute inset-0 w-full h-full p-4" preserveaspectratio="none" viewbox="0 0 300 100">
+<!-- High/Low Band -->
+<path d="M0,70 L30,65 L60,60 L90,65 L120,55 L150,50 L180,55 L210,45 L240,40 L270,35 L300,30 L300,80 L270,85 L240,90 L210,85 L180,90 L150,95 L120,90 L90,95 L60,90 L30,95 L0,90 Z" fill="rgba(25, 230, 60, 0.1)" stroke="none"></path>
+<!-- Trend Line -->
+<path d="M0,80 L30,75 L60,70 L90,78 L120,60 L150,55 L180,65 L210,50 L240,45 L270,40 L300,35" fill="none" stroke="#19e63c" stroke-width="2.5" vector-effect="non-scaling-stroke"></path>
+<!-- Dots -->
+<circle cx="300" cy="35" fill="#19e63c" r="3"></circle>
+</svg>
+</div>
+</div>
+<!-- Sparkline Card 2 -->
+<div class="bg-surface-light dark:bg-surface-dark rounded-xl border border-[#e7f3e9] dark:border-[#2a4030] shadow-[0_2px_12px_rgba(0,0,0,0.03)] overflow-hidden">
+<div class="p-5 flex justify-between items-start">
+<div>
+<h3 class="font-semibold text-text-main">Yield Trend</h3>
+<p class="text-xs text-text-muted mt-0.5">Bushels per Acre</p>
+</div>
+<div class="text-right">
+<p class="text-lg font-bold text-text-main">177.0</p>
+<p class="text-xs text-orange-600 font-medium">-1.2% YoY</p>
+</div>
+</div>
+<div class="relative h-40 w-full bg-gradient-to-b from-[#f8fcf9] to-white dark:from-[#1a2e1e] dark:to-[#112114]">
+<svg class="absolute inset-0 w-full h-full p-4" preserveaspectratio="none" viewbox="0 0 300 100">
+<!-- High/Low Band -->
+<path d="M0,60 L40,55 L80,50 L120,52 L160,48 L200,45 L240,42 L280,40 L300,38 L300,75 L280,78 L240,80 L200,82 L160,85 L120,88 L80,85 L40,88 L0,90 Z" fill="rgba(100, 116, 139, 0.1)" stroke="none"></path>
+<!-- Trend Line -->
+<path d="M0,75 L40,70 L80,60 L120,65 L160,55 L200,50 L240,55 L280,65 L300,68" fill="none" stroke="#4e975a" stroke-width="2.5" vector-effect="non-scaling-stroke"></path>
+<circle cx="300" cy="68" fill="#4e975a" r="3"></circle>
+</svg>
+</div>
+</div>
+<!-- Sparkline Card 3 -->
+<div class="bg-surface-light dark:bg-surface-dark rounded-xl border border-[#e7f3e9] dark:border-[#2a4030] shadow-[0_2px_12px_rgba(0,0,0,0.03)] overflow-hidden">
+<div class="p-5 flex justify-between items-start">
+<div>
+<h3 class="font-semibold text-text-main">Price Trend</h3>
+<p class="text-xs text-text-muted mt-0.5">High Volatility Detected</p>
+</div>
+<div class="text-right">
+<p class="text-lg font-bold text-text-main">$6.50</p>
+<p class="text-xs text-primary-dark font-medium">+12.5% YoY</p>
+</div>
+</div>
+<div class="relative h-40 w-full bg-gradient-to-b from-[#f8fcf9] to-white dark:from-[#1a2e1e] dark:to-[#112114]">
+<svg class="absolute inset-0 w-full h-full p-4" preserveaspectratio="none" viewbox="0 0 300 100">
+<!-- High/Low Band Wide -->
+<path d="M0,50 L30,40 L60,35 L90,45 L120,30 L150,25 L180,35 L210,20 L240,15 L270,25 L300,20 L300,90 L270,95 L240,85 L210,90 L180,95 L150,85 L120,90 L90,80 L60,85 L30,90 L0,85 Z" fill="rgba(25, 230, 60, 0.05)" stroke="none"></path>
+<!-- Trend Line -->
+<path d="M0,70 L30,65 L60,55 L90,60 L120,45 L150,40 L180,50 L210,35 L240,30 L270,40 L300,25" fill="none" stroke="#0e1b10" stroke-dasharray="4 2" stroke-width="2" vector-effect="non-scaling-stroke"></path>
+<path d="M0,70 L30,65 L60,55 L90,60 L120,45 L150,40 L180,50 L210,35 L240,30 L270,40 L300,25" fill="none" stroke="#19e63c" stroke-width="2.5" vector-effect="non-scaling-stroke"></path>
+<circle cx="300" cy="25" fill="#19e63c" r="3"></circle>
+</svg>
+</div>
+</div>
+</div>
+<!-- Row 3: Insights & Callouts -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+<!-- Insight 1: Top Mover -->
+<div class="bg-surface-light dark:bg-surface-dark p-6 rounded-xl border border-[#e7f3e9] dark:border-[#2a4030] flex flex-col h-full">
+<div class="flex items-center gap-2 mb-4">
+<div class="p-2 rounded-lg bg-primary/10 text-primary-dark">
+<span class="material-symbols-outlined text-[20px]">moving</span>
+</div>
+<h3 class="font-bold text-text-main">Top Mover</h3>
+</div>
+<div class="flex-1 flex flex-col justify-center">
+<div class="flex items-end gap-2 mb-2">
+<span class="text-3xl font-bold text-text-main">Kansas</span>
+<span class="text-sm font-medium text-text-muted mb-1.5">Wheat</span>
+</div>
+<div class="w-full bg-gray-100 dark:bg-gray-800 h-2 rounded-full overflow-hidden mb-2">
+<div class="bg-primary h-full rounded-full" style="width: 85%"></div>
+</div>
+<div class="flex justify-between items-center text-sm">
+<span class="text-text-muted">Production Increase</span>
+<span class="font-bold text-primary-dark">+15%</span>
+</div>
+</div>
+</div>
+<!-- Insight 2: Largest Contributor -->
+<div class="bg-surface-light dark:bg-surface-dark p-6 rounded-xl border border-[#e7f3e9] dark:border-[#2a4030] flex flex-col h-full">
+<div class="flex items-center justify-between mb-4">
+<div class="flex items-center gap-2">
+<div class="p-2 rounded-lg bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400">
+<span class="material-symbols-outlined text-[20px]">pie_chart</span>
+</div>
+<h3 class="font-bold text-text-main">Largest Contributor</h3>
+</div>
+</div>
+<div class="flex items-center gap-6">
+<div class="relative size-24 shrink-0 rounded-full bg-[conic-gradient(#19e63c_65%,#e2e8f0_65%)]" data-alt="Donut chart showing 65% contribution">
+<div class="absolute inset-4 bg-surface-light dark:bg-surface-dark rounded-full flex items-center justify-center">
+<span class="text-sm font-bold">65%</span>
+</div>
+</div>
+<div class="flex flex-col gap-2">
+<div class="flex items-center gap-2">
+<span class="size-3 rounded-full bg-primary"></span>
+<span class="text-sm font-medium text-text-main">Iowa (Corn)</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="size-3 rounded-full bg-slate-200 dark:bg-slate-700"></span>
+<span class="text-sm font-medium text-text-muted">Others</span>
+</div>
+<p class="text-xs text-text-muted mt-1">Driving regional volume.</p>
+</div>
+</div>
+</div>
+<!-- Insight 3: Mix Shift -->
+<div class="bg-surface-light dark:bg-surface-dark p-6 rounded-xl border border-[#e7f3e9] dark:border-[#2a4030] flex flex-col h-full">
+<div class="flex items-center gap-2 mb-4">
+<div class="p-2 rounded-lg bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400">
+<span class="material-symbols-outlined text-[20px]">swap_horiz</span>
+</div>
+<h3 class="font-bold text-text-main">Mix Shift</h3>
+</div>
+<div class="flex-1 flex flex-col justify-center">
+<p class="text-sm font-medium text-text-main mb-3">Soybean acreage overtaking Corn in Southern Midwest.</p>
+<div class="flex h-8 w-full rounded-md overflow-hidden">
+<div class="bg-primary/80 h-full flex items-center justify-center text-[10px] font-bold text-white w-[55%]">Soy 55%</div>
+<div class="bg-slate-300 dark:bg-slate-600 h-full flex items-center justify-center text-[10px] font-bold text-slate-700 dark:text-slate-200 w-[45%]">Corn 45%</div>
+</div>
+<div class="flex justify-between items-center text-xs text-text-muted mt-2">
+<span>Prev: 48% Soy</span>
+<span class="flex items-center text-primary-dark font-bold"><span class="material-symbols-outlined text-[14px]">arrow_upward</span> 7% Shift</span>
+</div>
+</div>
+</div>
+</div>
+</main>
+</body></html>

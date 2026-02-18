@@ -12,14 +12,17 @@ export interface CropData {
 
 export function cleanValue(val: any): number {
     if (typeof val === 'number') return val;
-    if (!val) return 0;
+    if (!val) return NaN;
     const str = String(val).trim();
-    if (/^\([A-Z]\)$/i.test(str)) return 0;
-    if (['-', '--', 'NA', 'N/A', 'null', 'None'].includes(str)) return 0;
+    if (str === '' || str === '0') return 0;
+    // USDA suppression codes: (D)=Withheld, (Z)=<half unit, (S)=too few reports, etc.
+    if (/^\([A-Z]\)$/i.test(str)) return NaN;
+    if (['-', '--', 'NA', 'N/A', 'null', 'None'].includes(str)) return NaN;
     try {
-        return parseFloat(str.replace(/,/g, ''));
+        const parsed = parseFloat(str.replace(/,/g, ''));
+        return isNaN(parsed) ? NaN : parsed;
     } catch (e) {
-        return 0;
+        return NaN;
     }
 }
 
@@ -29,20 +32,42 @@ export function cleanValue(val: any): number {
 export function filterData(data: any[]): any[] {
     if (!data || data.length === 0) return [];
 
-    return data.filter(d =>
-        // 1. Source: Survey or Farm Operations Exception or Revenue Data Exception
+    // Step 1: Apply non-source filters (totals, domain)
+    const basicFiltered = data.filter(d =>
+        // Source: Survey or Farm Operations Exception or Revenue Data Exception
         (!d.source_desc || d.source_desc === 'SURVEY' || d.commodity_desc === 'FARM OPERATIONS' ||
-            // CRITICAL: Allow CENSUS revenue data (SALES with $ unit) for ALL crops since SURVEY lacks dollar revenue
+            // Allow CENSUS revenue data (SALES with $ unit) for crops where SURVEY lacks dollar revenue
             (d.statisticcat_desc === 'SALES' && d.unit_desc === '$')) &&
 
-        // 2. Remove Totals (User Requirement)
+        // Remove Totals (User Requirement)
         !d.commodity_desc?.includes('TOTAL') &&
         !d.commodity_desc?.includes('ALL CLASSES') &&
 
-        // 3. Remove Domain Totals (if granular data is available)
-        // Usually we WANT domain=TOTAL for state aggregates
+        // Remove Domain Totals — keep only domain=TOTAL for aggregates
         (d.domain_desc === 'TOTAL' || !d.domain_desc)
     );
+
+    // Step 2: Deduplicate Census/Survey overlap — prefer SURVEY when both exist
+    const keyMap = new Map<string, any[]>();
+    basicFiltered.forEach(d => {
+        const key = `${d.state_alpha || ''}|${d.year || ''}|${d.commodity_desc || ''}|${d.statisticcat_desc || ''}|${d.unit_desc || ''}`;
+        if (!keyMap.has(key)) keyMap.set(key, []);
+        keyMap.get(key)!.push(d);
+    });
+
+    const result: any[] = [];
+    keyMap.forEach((rows) => {
+        const hasSurvey = rows.some(r => r.source_desc === 'SURVEY');
+        const hasCensus = rows.some(r => r.source_desc === 'CENSUS');
+        if (hasSurvey && hasCensus) {
+            // Overlap detected: keep only SURVEY rows
+            result.push(...rows.filter(r => r.source_desc === 'SURVEY'));
+        } else {
+            result.push(...rows);
+        }
+    });
+
+    return result;
 }
 
 // Re-export filterSource for backward compatibility (maps to filterData now)
@@ -121,7 +146,9 @@ export function getMapData(data: any[], year: number, metric: string): Record<st
     filtered.forEach(d => {
         const state = d.state_alpha;
         const val = cleanValue(d.value_num || d.Value);
-        mapData[state] = (mapData[state] || 0) + val;
+        if (!isNaN(val)) {
+            mapData[state] = (mapData[state] || 0) + val;
+        }
     });
 
     return mapData;
@@ -158,9 +185,17 @@ export function getBoomCrops(data: any[], metric: string, endYear: number, start
     const endValues = new Map(getYearValues(endYear));
     const growth: any[] = [];
 
+    // Use median of start-year values as threshold to exclude tiny/niche crops
+    const allStartVals = Array.from(startValues.values()).filter(v => v > 0).sort((a, b) => a - b);
+    const medianThreshold = allStartVals.length > 0
+        ? allStartVals[Math.floor(allStartVals.length / 2)]
+        : 10000;
+    // Use at least 10k and at most the median to balance inclusivity
+    const minThreshold = Math.max(10000, medianThreshold * 0.25);
+
     endValues.forEach((endVal, commodity) => {
         const startVal = startValues.get(commodity);
-        if (startVal && startVal > 10000 && endVal > 0) {
+        if (startVal && startVal > minThreshold && endVal > 0) {
             const pctChange = ((endVal - startVal) / startVal) * 100;
             growth.push({ commodity, growth: pctChange, start: startVal, end: endVal });
         }
@@ -234,10 +269,34 @@ export function getLandUseChange(data: any[]) {
     return [];
 }
 
+// Region-based agricultural peer comparison for labor wages
+const LABOR_REGION_PEERS: Record<string, string[]> = {
+    // Corn Belt
+    'IA': ['IL', 'NE', 'MN'], 'IL': ['IA', 'IN', 'MO'], 'IN': ['OH', 'IL', 'KY'],
+    'OH': ['IN', 'MI', 'PA'], 'MO': ['IL', 'IA', 'KS'],
+    // Great Plains
+    'KS': ['NE', 'OK', 'CO'], 'NE': ['IA', 'KS', 'SD'], 'ND': ['SD', 'MN', 'MT'],
+    'SD': ['ND', 'NE', 'MN'], 'OK': ['KS', 'TX', 'AR'],
+    // Southeast
+    'GA': ['AL', 'SC', 'FL'], 'AL': ['GA', 'MS', 'TN'], 'MS': ['AL', 'AR', 'LA'],
+    'NC': ['SC', 'VA', 'GA'], 'SC': ['NC', 'GA', 'VA'],
+    // West
+    'CA': ['WA', 'OR', 'AZ'], 'WA': ['OR', 'CA', 'ID'], 'OR': ['WA', 'CA', 'ID'],
+    'TX': ['OK', 'KS', 'NM'], 'CO': ['KS', 'NE', 'WY'],
+    // Northeast
+    'NY': ['PA', 'NJ', 'VT'], 'PA': ['NY', 'OH', 'NJ'], 'WI': ['MN', 'IA', 'MI'],
+    'MN': ['WI', 'IA', 'ND'], 'MI': ['OH', 'WI', 'IN'],
+    // Other
+    'FL': ['GA', 'AL', 'SC'], 'AR': ['MO', 'MS', 'OK'], 'LA': ['MS', 'AR', 'TX'],
+    'MT': ['ND', 'WY', 'ID'], 'ID': ['WA', 'OR', 'MT'], 'AZ': ['CA', 'NM', 'CO'],
+};
+
 export function getLaborTrends(data: any[], selectedState: string = 'INDIANA') {
-    // Fix: Explicitly filter for WAGE RATE
     const wageData = filterData(data).filter(d => d.statisticcat_desc === 'WAGE RATE');
     const cleanState = selectedState ? String(selectedState).toUpperCase() : 'INDIANA';
+
+    // Pick region-appropriate comparison states
+    const comparisonStates = LABOR_REGION_PEERS[cleanState] || ['CA', 'TX', 'IA'];
 
     const yearGroups = d3.group(wageData, d => d.year);
     const trends: any[] = [];
@@ -250,19 +309,18 @@ export function getLaborTrends(data: any[], selectedState: string = 'INDIANA') {
         if (national) {
             row['National Avg'] = cleanValue(national.value_num || national.Value);
         } else {
-            // Fallback: Average of all states
-            const vals = rows.filter(d => d.state_alpha !== 'US').map(d => cleanValue(d.value_num || d.Value));
+            const vals = rows.filter(d => d.state_alpha !== 'US')
+                .map(d => cleanValue(d.value_num || d.Value))
+                .filter(v => !isNaN(v));
             if (vals.length) row['National Avg'] = d3.mean(vals);
         }
 
         // 2. Selected State
-        // Ensure we check state_alpha correctly (codes involved)
-        // selectedState coming from UI is usually Code (IN)
         const selected = rows.find(d => d.state_alpha === cleanState);
         if (selected) row[cleanState] = cleanValue(selected.value_num || selected.Value);
 
-        // 3. Comparison States
-        ['CA', 'FL', 'HI'].forEach(st => {
+        // 3. Region comparison states (dynamic)
+        comparisonStates.forEach(st => {
             const comp = rows.find(d => d.state_alpha === st);
             if (comp) row[st] = cleanValue(comp.value_num || comp.Value);
         });
@@ -270,7 +328,10 @@ export function getLaborTrends(data: any[], selectedState: string = 'INDIANA') {
         trends.push(row);
     });
 
-    return trends.sort((a, b) => a.year - b.year);
+    // Attach comparison states as metadata for the UI to read
+    const sorted = trends.sort((a, b) => a.year - b.year);
+    (sorted as any).comparisonStates = comparisonStates;
+    return sorted;
 }
 
 export function getOperationsTrend(data: any[]) {
@@ -443,4 +504,90 @@ export function getCommodityStory(data: any[], commodity: string) {
     });
 
     return { story, anomalies, anomalyYears: Array.from(anomalyYears) };
+}
+
+// ─── Crop Condition Trends ───────────────────────────────────────
+/**
+ * Extracts weekly CONDITION data for crops.
+ * Returns percentage distribution for each condition level per year.
+ * CONDITION data has values like GOOD=45, FAIR=30, etc. (% of crop in each state)
+ */
+export function getCropConditionTrends(data: any[], commodity?: string) {
+    const condData = filterData(data).filter(d =>
+        d.statisticcat_desc === 'CONDITION' &&
+        d.sector_desc === 'CROPS' &&
+        (!commodity || d.commodity_desc === commodity)
+    );
+
+    if (!condData.length) return [];
+
+    // Group by year and unit_desc (which contains the condition level)
+    const yearGroups = d3.group(condData, d => d.year);
+    const trends: any[] = [];
+
+    yearGroups.forEach((rows, year) => {
+        const conditionLevels: Record<string, number[]> = {
+            'EXCELLENT': [], 'GOOD': [], 'FAIR': [], 'POOR': [], 'VERY POOR': []
+        };
+
+        rows.forEach(r => {
+            const level = String(r.unit_desc || '').toUpperCase().trim();
+            const val = cleanValue(r.value_num || r.Value);
+            if (conditionLevels[level] !== undefined && !isNaN(val)) {
+                conditionLevels[level].push(val);
+            }
+        });
+
+        // Average across weeks/states for each level
+        const entry: any = { year };
+        let hasData = false;
+        Object.entries(conditionLevels).forEach(([level, vals]) => {
+            const avg = vals.length > 0 ? (d3.mean(vals) || 0) : 0;
+            entry[level.toLowerCase().replace(/ /g, '_')] = Math.round(avg);
+            if (avg > 0) hasData = true;
+        });
+
+        if (hasData) trends.push(entry);
+    });
+
+    return trends.sort((a, b) => a.year - b.year);
+}
+
+// ─── Crop Progress Trends ────────────────────────────────────────
+/**
+ * Extracts PROGRESS data (planting, harvesting progress %) by year.
+ * Returns latest year's weekly progress if available, otherwise annual summary.
+ */
+export function getCropProgressSummary(data: any[]) {
+    const progData = filterData(data).filter(d =>
+        d.statisticcat_desc === 'PROGRESS' &&
+        d.sector_desc === 'CROPS'
+    );
+
+    if (!progData.length) return [];
+
+    // Summarize: which crop has what progress % by year
+    const yearGroups = d3.group(progData, d => d.year);
+    const trends: any[] = [];
+
+    yearGroups.forEach((rows, year) => {
+        const commodityGroups = d3.group(rows, d => d.commodity_desc);
+        const yearEntry: any = { year, crops: [] };
+
+        commodityGroups.forEach((cRows, commodity) => {
+            // Get the latest progress value for this commodity-year
+            const latestVal = d3.max(cRows, r => cleanValue(r.value_num || r.Value));
+            if (latestVal && !isNaN(latestVal) && latestVal > 0) {
+                yearEntry.crops.push({ commodity, progress: latestVal });
+            }
+        });
+
+        if (yearEntry.crops.length > 0) {
+            // Sort crops by progress to show the top ones
+            yearEntry.crops.sort((a: any, b: any) => b.progress - a.progress);
+            trends.push(yearEntry);
+        }
+    });
+
+    return trends.sort((a, b) => a.year - b.year);
 }

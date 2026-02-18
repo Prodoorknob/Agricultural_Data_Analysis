@@ -12,10 +12,10 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { US_STATES } from '../utils/serviceData';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
-  BarChart, Bar, Cell
+  BarChart, Bar, Cell, AreaChart, Area
 } from 'recharts';
 import { fetchStateData, fetchNationalCrops, fetchLandUseData, fetchLaborData } from '../utils/serviceData';
-import { getMapData, getLandUseTrends, getBoomCrops, filterData } from '../utils/processData';
+import { getMapData, getLandUseTrends, getBoomCrops, filterData, getCropConditionTrends, getCropProgressSummary } from '../utils/processData';
 
 // --- Types ---
 type ViewMode = 'OVERVIEW' | 'CROPS' | 'ANIMALS' | 'LAND' | 'LABOR' | 'ECONOMICS';
@@ -204,8 +204,8 @@ export default function Home() {
             <button
               onClick={() => setViewMode('OVERVIEW')}
               className={`text-sm font-medium transition-colors pb-1 ${viewMode === 'OVERVIEW'
-                  ? 'text-[#19e63c] border-b-2 border-[#19e63c]'
-                  : 'text-gray-400 hover:text-white'
+                ? 'text-[#19e63c] border-b-2 border-[#19e63c]'
+                : 'text-gray-400 hover:text-white'
                 }`}
             >
               Dashboard
@@ -213,8 +213,8 @@ export default function Home() {
             <button
               onClick={() => setViewMode('CROPS')}
               className={`text-sm font-medium transition-colors pb-1 ${viewMode === 'CROPS'
-                  ? 'text-[#19e63c] border-b-2 border-[#19e63c]'
-                  : 'text-gray-400 hover:text-white'
+                ? 'text-[#19e63c] border-b-2 border-[#19e63c]'
+                : 'text-gray-400 hover:text-white'
                 }`}
             >
               Crops
@@ -222,8 +222,8 @@ export default function Home() {
             <button
               onClick={() => setViewMode('ANIMALS')}
               className={`text-sm font-medium transition-colors pb-1 ${viewMode === 'ANIMALS'
-                  ? 'text-[#19e63c] border-b-2 border-[#19e63c]'
-                  : 'text-gray-400 hover:text-white'
+                ? 'text-[#19e63c] border-b-2 border-[#19e63c]'
+                : 'text-gray-400 hover:text-white'
                 }`}
             >
               Livestock
@@ -231,8 +231,8 @@ export default function Home() {
             <button
               onClick={() => setViewMode('LAND')}
               className={`text-sm font-medium transition-colors pb-1 ${viewMode === 'LAND'
-                  ? 'text-[#19e63c] border-b-2 border-[#19e63c]'
-                  : 'text-gray-400 hover:text-white'
+                ? 'text-[#19e63c] border-b-2 border-[#19e63c]'
+                : 'text-gray-400 hover:text-white'
                 }`}
             >
               Land & Area
@@ -240,8 +240,8 @@ export default function Home() {
             <button
               onClick={() => setViewMode('LABOR')}
               className={`text-sm font-medium transition-colors pb-1 ${viewMode === 'LABOR'
-                  ? 'text-[#19e63c] border-b-2 border-[#19e63c]'
-                  : 'text-gray-400 hover:text-white'
+                ? 'text-[#19e63c] border-b-2 border-[#19e63c]'
+                : 'text-gray-400 hover:text-white'
                 }`}
             >
               Labor
@@ -249,8 +249,8 @@ export default function Home() {
             <button
               onClick={() => setViewMode('ECONOMICS')}
               className={`text-sm font-medium transition-colors pb-1 ${viewMode === 'ECONOMICS'
-                  ? 'text-[#19e63c] border-b-2 border-[#19e63c]'
-                  : 'text-gray-400 hover:text-white'
+                ? 'text-[#19e63c] border-b-2 border-[#19e63c]'
+                : 'text-gray-400 hover:text-white'
                 }`}
             >
               Economics
@@ -407,7 +407,7 @@ export default function Home() {
               stateData={stateData}
             />
           </div>
-          
+
           {/* Right: State Map */}
           <div className="h-[500px]">
             <StateSingleMap
@@ -494,6 +494,94 @@ export default function Home() {
                 </ResponsiveContainer>
               </div>
             </div>
+
+            {/* Crop Health & Progress Section */}
+            {(() => {
+              const conditionData = getCropConditionTrends(
+                filteredStateData.length ? filteredStateData : filteredNationalSummary
+              );
+              const progressData = getCropProgressSummary(
+                filteredStateData.length ? filteredStateData : filteredNationalSummary
+              );
+              const latestProgress = progressData.length > 0 ? progressData[progressData.length - 1] : null;
+
+              const CONDITION_COLORS: Record<string, string> = {
+                excellent: '#22c55e',
+                good: '#86efac',
+                fair: '#fbbf24',
+                poor: '#f97316',
+                very_poor: '#ef4444',
+              };
+
+              if (!conditionData.length && !latestProgress) return null;
+
+              return (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Crop Condition Trends */}
+                  {conditionData.length > 0 && (
+                    <div className="bg-[#1a1d24] p-6 rounded-xl border border-[#2a4030]">
+                      <div className="flex items-center gap-2 mb-4">
+                        <span className="material-symbols-outlined text-[#19e63c]">health_metrics</span>
+                        <h3 className="text-lg font-semibold text-white">Crop Condition Trends</h3>
+                      </div>
+                      <p className="text-xs text-gray-400 mb-4">Average % of crops rated in each condition category by year</p>
+                      <div className="h-[350px]">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <AreaChart data={conditionData} stackOffset="expand">
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#2a4030" />
+                            <XAxis dataKey="year" axisLine={false} tickLine={false} tick={{ fill: '#9ca3af', fontSize: 11 }} />
+                            <YAxis axisLine={false} tickLine={false} tick={{ fill: '#9ca3af', fontSize: 11 }} tickFormatter={(v) => `${Math.round(v * 100)}%`} />
+                            <Tooltip
+                              formatter={(val: any, name?: string) => [`${Math.round(Number(val))}%`, (name || '').replace('_', ' ').replace(/\b\w/g, c => c.toUpperCase())]}
+                              contentStyle={{ backgroundColor: '#1a1d24', border: '1px solid #2a4030', borderRadius: '8px', color: '#fff' }}
+                            />
+                            <Legend wrapperStyle={{ color: '#9ca3af', fontSize: '11px' }} formatter={(v: string) => v.replace('_', ' ').replace(/\b\w/g, c => c.toUpperCase())} />
+                            <Area type="monotone" dataKey="excellent" stackId="1" stroke={CONDITION_COLORS.excellent} fill={CONDITION_COLORS.excellent} fillOpacity={0.8} />
+                            <Area type="monotone" dataKey="good" stackId="1" stroke={CONDITION_COLORS.good} fill={CONDITION_COLORS.good} fillOpacity={0.8} />
+                            <Area type="monotone" dataKey="fair" stackId="1" stroke={CONDITION_COLORS.fair} fill={CONDITION_COLORS.fair} fillOpacity={0.8} />
+                            <Area type="monotone" dataKey="poor" stackId="1" stroke={CONDITION_COLORS.poor} fill={CONDITION_COLORS.poor} fillOpacity={0.8} />
+                            <Area type="monotone" dataKey="very_poor" stackId="1" stroke={CONDITION_COLORS.very_poor} fill={CONDITION_COLORS.very_poor} fillOpacity={0.8} />
+                          </AreaChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Crop Progress Snapshot */}
+                  {latestProgress && latestProgress.crops.length > 0 && (
+                    <div className="bg-[#1a1d24] p-6 rounded-xl border border-[#2a4030]">
+                      <div className="flex items-center gap-2 mb-4">
+                        <span className="material-symbols-outlined text-[#19e63c]">sprint</span>
+                        <h3 className="text-lg font-semibold text-white">Crop Progress ({latestProgress.year})</h3>
+                      </div>
+                      <p className="text-xs text-gray-400 mb-4">Peak season completion % for top crops</p>
+                      <div className="h-[350px]">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart
+                            layout="vertical"
+                            data={latestProgress.crops.slice(0, 12)}
+                            margin={{ top: 5, right: 30, left: 60, bottom: 5 }}
+                          >
+                            <CartesianGrid strokeDasharray="3 3" horizontal={false} vertical={true} stroke="#2a4030" />
+                            <XAxis type="number" domain={[0, 100]} tickFormatter={(v) => `${v}%`} axisLine={false} tickLine={false} tick={{ fill: '#9ca3af', fontSize: 11 }} />
+                            <YAxis type="category" dataKey="commodity" axisLine={false} tickLine={false} tick={{ fill: '#9ca3af', fontSize: 11, fontWeight: 500 }} width={100} />
+                            <Tooltip
+                              formatter={(val: any) => [`${Number(val).toFixed(1)}%`, 'Completion']}
+                              contentStyle={{ backgroundColor: '#1a1d24', border: '1px solid #2a4030', borderRadius: '8px', color: '#fff' }}
+                            />
+                            <Bar dataKey="progress" radius={[0, 6, 6, 0]} barSize={20}>
+                              {latestProgress.crops.slice(0, 12).map((_: any, index: number) => (
+                                <Cell key={`cell-${index}`} fill={index < 4 ? '#19e63c' : index < 8 ? '#10b981' : '#047857'} />
+                              ))}
+                            </Bar>
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
 
             {/* Fastest Growing Crops Chart */}
             <div className="bg-[#1a1d24] p-6 rounded-xl border border-[#2a4030]">
