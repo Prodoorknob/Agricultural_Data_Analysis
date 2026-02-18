@@ -3,7 +3,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
-    AreaChart, Area, Legend
+    AreaChart, Area, Legend, ScatterChart, Scatter, ZAxis, ReferenceLine, Label
 } from 'recharts';
 import { getTopCrops, getLandUseTrends } from '../utils/processData';
 import { palette, chartDefaults } from '../utils/design';
@@ -24,6 +24,14 @@ const COMP_COLORS: Record<string, string> = {
     'Special Uses': '#805ad5',
     'Urban': '#ed8936',
     'Other': '#718096',
+};
+
+// Quadrant colors for scatter chart
+const QUADRANT_COLORS = {
+    urbanSprawl: '#ef4444',    // Lost cropland, gained urban
+    growingBoth: '#22c55e',    // Gained both
+    farmlandFocus: '#3b82f6',  // Gained cropland, lost urban
+    declining: '#6b7280',      // Lost both
 };
 
 export default function LandDashboard({ data, year, stateName }: LandDashboardProps) {
@@ -48,27 +56,41 @@ export default function LandDashboard({ data, year, stateName }: LandDashboardPr
     }, [data]);
 
     const [selectedCommodity, setSelectedCommodity] = useState<string>('All Crops');
+    const [excludeMultiHarvest, setExcludeMultiHarvest] = useState<boolean>(false);
 
-    // 2. Filter Data by Commodity (if not 'All Crops')
+    // 2. Compute multi-harvest information first (needed for toggle)
+    const rawLandUseTrends = useMemo(() => {
+        return getLandUseTrends(data);
+    }, [data]);
+
+    const multiHarvestCrops: string[] = (rawLandUseTrends as any).multiHarvestCrops || [];
+
+    // 3. Filter Data by Commodity + optional multi-harvest exclusion
     const filteredData = useMemo(() => {
-        if (selectedCommodity === 'All Crops') return data;
-        return data.filter(d => d.commodity_desc === selectedCommodity);
-    }, [data, selectedCommodity]);
+        let result = data;
+        if (selectedCommodity !== 'All Crops') {
+            result = result.filter(d => d.commodity_desc === selectedCommodity);
+        }
+        if (excludeMultiHarvest && multiHarvestCrops.length > 0) {
+            result = result.filter(d => !multiHarvestCrops.includes(d.commodity_desc));
+        }
+        return result;
+    }, [data, selectedCommodity, excludeMultiHarvest, multiHarvestCrops]);
 
-    // 3. Top Crops by Area Harvested
+    // 4. Top Crops by Area Harvested
     const topLandCrops = useMemo(() => {
         return getTopCrops(data, year, HARVESTED_METRIC);
     }, [data, year]);
 
-    // 4. Land Use Trends (Planted vs Harvested) -> Uses filteredData
+    // 5. Land Use Trends (Planted vs Harvested) -> Uses filteredData
     const landUseTrends = useMemo(() => {
         return getLandUseTrends(filteredData);
     }, [filteredData]);
 
-    // 5. National Land Use Composition from JSON
+    // 6. National Land Use Composition from JSON
     const landUseComposition = landUseJson?.composition || [];
 
-    // 6. State-level Cropland vs Urban Change from JSON
+    // 7. State-level Cropland vs Urban Change from JSON
     const landUseChange = landUseJson?.stateChange || [];
 
     // Calculate current totals for cards
@@ -79,6 +101,20 @@ export default function LandDashboard({ data, year, stateName }: LandDashboardPr
 
     // Composition chart categories (for stacked area)
     const compositionCategories = ['Cropland', 'Grassland & Pasture', 'Forest', 'Special Uses', 'Urban', 'Other'];
+
+    // Scatter data with quadrant classification
+    const scatterData = useMemo(() => {
+        return landUseChange.map((d: any) => ({
+            ...d,
+            quadrant: d.urbanChange >= 0 && d.cropChange < 0
+                ? 'urbanSprawl'
+                : d.urbanChange >= 0 && d.cropChange >= 0
+                    ? 'growingBoth'
+                    : d.urbanChange < 0 && d.cropChange >= 0
+                        ? 'farmlandFocus'
+                        : 'declining',
+        }));
+    }, [landUseChange]);
 
     if (!data.length) {
         return (
@@ -91,7 +127,7 @@ export default function LandDashboard({ data, year, stateName }: LandDashboardPr
 
     return (
         <div className="space-y-8">
-            {/* Header with Filter */}
+            {/* Header with Filter + Multi-Harvest Toggle */}
             <div className="flex items-center justify-between gap-4 flex-wrap">
                 <div>
                     <h2 className="text-2xl font-bold text-white flex items-center gap-3">
@@ -100,17 +136,36 @@ export default function LandDashboard({ data, year, stateName }: LandDashboardPr
                     </h2>
                     <p className="text-gray-400 text-sm mt-1">{stateName} • {year}</p>
                 </div>
-                
-                <div className="flex items-center gap-3">
-                    <label className="text-gray-400 text-sm font-semibold">Filter by Crop:</label>
-                    <select
-                        value={selectedCommodity}
-                        onChange={(e) => setSelectedCommodity(e.target.value)}
-                        className="bg-[#0f1117] border border-[#2a4030] text-white text-sm rounded-lg px-4 py-2 focus:ring-2 focus:ring-[#19e63c] appearance-none cursor-pointer min-w-[180px]"
-                    >
-                        <option value="All Crops">All Crops</option>
-                        {commodities.map(c => <option key={c} value={c}>{c}</option>)}
-                    </select>
+
+                <div className="flex items-center gap-4">
+                    {/* Multi-harvest toggle */}
+                    {multiHarvestCrops.length > 0 && (
+                        <button
+                            onClick={() => setExcludeMultiHarvest(!excludeMultiHarvest)}
+                            className={`flex items-center gap-2 text-xs font-medium px-3 py-2 rounded-lg border transition-all ${excludeMultiHarvest
+                                    ? 'bg-amber-500/20 border-amber-500/40 text-amber-300'
+                                    : 'bg-[#0f1117] border-[#2a4030] text-gray-400 hover:text-white'
+                                }`}
+                        >
+                            <span className="material-symbols-outlined text-[16px]">
+                                {excludeMultiHarvest ? 'filter_alt' : 'filter_alt_off'}
+                            </span>
+                            {excludeMultiHarvest ? 'Multi-harvest excluded' : 'Exclude multi-harvest'}
+                        </button>
+                    )}
+
+                    {/* Commodity filter */}
+                    <div className="flex items-center gap-3">
+                        <label className="text-gray-400 text-sm font-semibold">Filter by Crop:</label>
+                        <select
+                            value={selectedCommodity}
+                            onChange={(e) => setSelectedCommodity(e.target.value)}
+                            className="bg-[#0f1117] border border-[#2a4030] text-white text-sm rounded-lg px-4 py-2 focus:ring-2 focus:ring-[#19e63c] appearance-none cursor-pointer min-w-[180px]"
+                        >
+                            <option value="All Crops">All Crops</option>
+                            {commodities.map(c => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                    </div>
                 </div>
             </div>
 
@@ -197,9 +252,9 @@ export default function LandDashboard({ data, year, stateName }: LandDashboardPr
                                 </linearGradient>
                             </defs>
                             <XAxis dataKey="year" stroke="#718096" tick={{ fill: '#9ca3af' }} />
-                            <YAxis 
+                            <YAxis
                                 tickFormatter={(val) => `${(val / 1000000).toFixed(1)}M`}
-                                stroke="#718096" 
+                                stroke="#718096"
                                 tick={{ fill: '#9ca3af' }}
                             />
                             <CartesianGrid strokeDasharray="3 3" stroke="#2a4030" vertical={false} />
@@ -237,14 +292,25 @@ export default function LandDashboard({ data, year, stateName }: LandDashboardPr
                 </div>
             </div>
 
-            {/* Row 2: Top Crops by Area */}
+            {/* Row 2: Top Crops by Area — CLICKABLE to filter trends */}
             <div className="bg-[#1a1d24] p-6 rounded-xl border border-[#2a4030]">
-                <div className="flex items-center gap-3 mb-4">
-                    <span className="material-symbols-outlined text-[#19e63c] text-[28px]">bar_chart</span>
-                    <div>
-                        <h3 className="text-xl font-semibold text-white">Top Crops by Area Harvested</h3>
-                        <p className="text-sm text-gray-400">Largest crops by acreage in {stateName}, {year}</p>
+                <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-3">
+                        <span className="material-symbols-outlined text-[#19e63c] text-[28px]">bar_chart</span>
+                        <div>
+                            <h3 className="text-xl font-semibold text-white">Top Crops by Area Harvested</h3>
+                            <p className="text-sm text-gray-400">Click a bar to filter Land Use Trends • {stateName}, {year}</p>
+                        </div>
                     </div>
+                    {selectedCommodity !== 'All Crops' && (
+                        <button
+                            onClick={() => setSelectedCommodity('All Crops')}
+                            className="flex items-center gap-1 text-xs font-medium px-3 py-1.5 rounded-lg bg-[#19e63c]/10 border border-[#19e63c]/30 text-[#19e63c] hover:bg-[#19e63c]/20 transition-all"
+                        >
+                            <span className="material-symbols-outlined text-[14px]">close</span>
+                            Clear: {selectedCommodity}
+                        </button>
+                    )}
                 </div>
                 <div className="h-[400px] w-full">
                     <ResponsiveContainer width="100%" height="100%">
@@ -254,8 +320,8 @@ export default function LandDashboard({ data, year, stateName }: LandDashboardPr
                             margin={{ top: 5, right: 30, left: 120, bottom: 5 }}
                         >
                             <CartesianGrid strokeDasharray="3 3" stroke="#2a4030" horizontal={true} vertical={true} />
-                            <XAxis 
-                                type="number" 
+                            <XAxis
+                                type="number"
                                 tickFormatter={(val: number) => `${(val / 1000).toFixed(0)}k`}
                                 stroke="#718096"
                                 tick={{ fill: '#9ca3af' }}
@@ -276,9 +342,26 @@ export default function LandDashboard({ data, year, stateName }: LandDashboardPr
                                     color: '#fff'
                                 }}
                             />
-                            <Bar dataKey="value" radius={[0, 8, 8, 0]}>
-                                {topLandCrops.map((_: any, index: number) => (
-                                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                            <Bar
+                                dataKey="value"
+                                radius={[0, 8, 8, 0]}
+                                onClick={(barData: any) => {
+                                    if (barData?.commodity) {
+                                        setSelectedCommodity(
+                                            selectedCommodity === barData.commodity ? 'All Crops' : barData.commodity
+                                        );
+                                    }
+                                }}
+                                className="cursor-pointer"
+                            >
+                                {topLandCrops.map((entry: any, index: number) => (
+                                    <Cell
+                                        key={`cell-${index}`}
+                                        fill={entry.commodity === selectedCommodity ? '#19e63c' : COLORS[index % COLORS.length]}
+                                        opacity={selectedCommodity !== 'All Crops' && entry.commodity !== selectedCommodity ? 0.4 : 1}
+                                        stroke={entry.commodity === selectedCommodity ? '#19e63c' : 'transparent'}
+                                        strokeWidth={entry.commodity === selectedCommodity ? 2 : 0}
+                                    />
                                 ))}
                             </Bar>
                         </BarChart>
@@ -302,16 +385,16 @@ export default function LandDashboard({ data, year, stateName }: LandDashboardPr
                                 data={landUseComposition}
                                 margin={{ top: 10, right: 30, left: 20, bottom: 0 }}
                             >
-                                <XAxis 
-                                    dataKey="year" 
-                                    stroke="#718096" 
+                                <XAxis
+                                    dataKey="year"
+                                    stroke="#718096"
                                     tick={{ fill: '#9ca3af' }}
                                 />
                                 <YAxis
                                     tickFormatter={(val) => `${(val / 1000000000).toFixed(1)}B`}
-                                    label={{ 
-                                        value: 'Acres', 
-                                        angle: -90, 
+                                    label={{
+                                        value: 'Acres',
+                                        angle: -90,
                                         position: 'insideLeft',
                                         style: { fill: '#9ca3af' }
                                     }}
@@ -350,50 +433,91 @@ export default function LandDashboard({ data, year, stateName }: LandDashboardPr
                 </div>
             )}
 
-            {/* Row 4: Cropland vs Urban Change by State */}
-            {landUseChange.length > 0 && (
+            {/* Row 4: Cropland vs Urban — Scatter Quadrant Chart */}
+            {scatterData.length > 0 && (
                 <div className="bg-[#1a1d24] p-6 rounded-xl border border-[#2a4030]">
                     <div className="flex items-center gap-3 mb-4">
-                        <span className="material-symbols-outlined text-[#19e63c] text-[28px]">compare_arrows</span>
+                        <span className="material-symbols-outlined text-[#19e63c] text-[28px]">scatter_plot</span>
                         <div>
-                            <h3 className="text-xl font-semibold text-white">Cropland vs. Urban Change by State</h3>
-                            <p className="text-sm text-gray-400">Percentage change 1945-2017 (Top 15 states by urban growth)</p>
+                            <h3 className="text-xl font-semibold text-white">Cropland vs. Urban Growth by State</h3>
+                            <p className="text-sm text-gray-400">Each dot is a state — % change from 1945 to 2017</p>
                         </div>
                     </div>
+
+                    {/* Quadrant legend */}
+                    <div className="flex flex-wrap gap-4 mb-4">
+                        {[
+                            { label: '🏙️ Urban Sprawl', desc: '+Urban, −Cropland', color: QUADRANT_COLORS.urbanSprawl },
+                            { label: '📈 Growing Both', desc: '+Urban, +Cropland', color: QUADRANT_COLORS.growingBoth },
+                            { label: '🌾 Farmland Focus', desc: '−Urban, +Cropland', color: QUADRANT_COLORS.farmlandFocus },
+                            { label: '📉 Declining', desc: '−Urban, −Cropland', color: QUADRANT_COLORS.declining },
+                        ].map(q => (
+                            <div key={q.label} className="flex items-center gap-2 text-xs">
+                                <div className="w-3 h-3 rounded-full" style={{ backgroundColor: q.color }}></div>
+                                <span className="text-gray-300 font-medium">{q.label}</span>
+                                <span className="text-gray-500">({q.desc})</span>
+                            </div>
+                        ))}
+                    </div>
+
                     <div className="h-[500px] w-full">
                         <ResponsiveContainer width="100%" height="100%">
-                            <BarChart
-                                layout="vertical"
-                                data={landUseChange.sort((a: any, b: any) => b.urbanChange - a.urbanChange).slice(0, 15)}
-                                margin={{ top: 5, right: 30, left: 100, bottom: 5 }}
-                            >
-                                <CartesianGrid strokeDasharray="3 3" stroke="#2a4030" horizontal={true} vertical={true} />
-                                <XAxis 
-                                    type="number" 
+                            <ScatterChart margin={{ top: 20, right: 40, bottom: 30, left: 40 }}>
+                                <CartesianGrid strokeDasharray="3 3" stroke="#2a4030" />
+                                <XAxis
+                                    type="number"
+                                    dataKey="urbanChange"
+                                    name="Urban Change"
                                     tickFormatter={(val) => `${val.toFixed(0)}%`}
                                     stroke="#718096"
-                                    tick={{ fill: '#9ca3af' }}
-                                />
+                                    tick={{ fill: '#9ca3af', fontSize: 11 }}
+                                >
+                                    <Label value="Urban Land Change (%)" position="bottom" offset={10} style={{ fill: '#9ca3af', fontSize: 12 }} />
+                                </XAxis>
                                 <YAxis
-                                    type="category"
-                                    dataKey="state"
-                                    width={120}
-                                    tick={{ fontSize: 11, fill: '#9ca3af' }}
+                                    type="number"
+                                    dataKey="cropChange"
+                                    name="Cropland Change"
+                                    tickFormatter={(val) => `${val.toFixed(0)}%`}
                                     stroke="#718096"
-                                />
+                                    tick={{ fill: '#9ca3af', fontSize: 11 }}
+                                >
+                                    <Label value="Cropland Change (%)" angle={-90} position="insideLeft" offset={10} style={{ fill: '#9ca3af', fontSize: 12 }} />
+                                </YAxis>
+                                <ZAxis range={[80, 80]} />
+                                {/* Quadrant reference lines */}
+                                <ReferenceLine x={0} stroke="#4a5568" strokeDasharray="4 4" />
+                                <ReferenceLine y={0} stroke="#4a5568" strokeDasharray="4 4" />
                                 <Tooltip
-                                    formatter={(val: number | undefined) => [val !== undefined ? `${val.toFixed(1)}%` : '0%', 'Change']}
-                                    contentStyle={{
-                                        backgroundColor: '#1a1d24',
-                                        border: '1px solid #2a4030',
-                                        borderRadius: '8px',
-                                        color: '#fff'
+                                    cursor={{ strokeDasharray: '3 3', stroke: '#4a5568' }}
+                                    content={({ active, payload }: any) => {
+                                        if (!active || !payload?.length) return null;
+                                        const d = payload[0].payload;
+                                        return (
+                                            <div className="bg-[#1a1d24] border border-[#2a4030] rounded-lg px-4 py-3 text-sm">
+                                                <p className="text-white font-bold mb-1">{d.state}</p>
+                                                <p className="text-gray-300">Urban: <span className={d.urbanChange >= 0 ? 'text-orange-400' : 'text-blue-400'}>{d.urbanChange > 0 ? '+' : ''}{d.urbanChange?.toFixed(1)}%</span></p>
+                                                <p className="text-gray-300">Cropland: <span className={d.cropChange >= 0 ? 'text-green-400' : 'text-red-400'}>{d.cropChange > 0 ? '+' : ''}{d.cropChange?.toFixed(1)}%</span></p>
+                                            </div>
+                                        );
                                     }}
                                 />
-                                <Legend wrapperStyle={{ color: '#9ca3af' }} />
-                                <Bar dataKey="urbanChange" name="Urban Land Change" fill="#ed8936" radius={[0, 4, 4, 0]} barSize={12} />
-                                <Bar dataKey="cropChange" name="Cropland Change" fill="#19e63c" radius={[0, 4, 4, 0]} barSize={12} />
-                            </BarChart>
+                                <Scatter
+                                    data={scatterData}
+                                    shape={(props: any) => {
+                                        const { cx, cy, payload } = props;
+                                        const color = QUADRANT_COLORS[payload.quadrant as keyof typeof QUADRANT_COLORS] || '#6b7280';
+                                        return (
+                                            <g>
+                                                <circle cx={cx} cy={cy} r={6} fill={color} opacity={0.8} stroke={color} strokeWidth={1} />
+                                                <text x={cx + 9} y={cy + 4} fill="#9ca3af" fontSize={9} fontWeight={500}>
+                                                    {payload.state?.slice(0, 2)}
+                                                </text>
+                                            </g>
+                                        );
+                                    }}
+                                />
+                            </ScatterChart>
                         </ResponsiveContainer>
                     </div>
                 </div>

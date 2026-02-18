@@ -6,7 +6,7 @@ import {
     LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
     BarChart, Bar
 } from 'recharts';
-import { getLaborTrends, getOperationsTrend } from '../utils/processData';
+import { getLaborTrends } from '../utils/processData';
 
 interface LaborDashboardProps {
     data: any[]; // Was laborData in props but passed as data={filteredStateData} from page.tsx
@@ -24,11 +24,7 @@ export default function LaborDashboard({ data, year, stateName }: LaborDashboard
         return getLaborTrends(data, stateName);
     }, [data, stateName]);
 
-    // 2. Operations Trends
-    const opsTrends = useMemo(() => {
-        if (!data || !data.length) return [];
-        return getOperationsTrend(data);
-    }, [data]);
+
 
 
     // Calculate stats for cards (Latest Year)
@@ -163,48 +159,7 @@ export default function LaborDashboard({ data, year, stateName }: LaborDashboard
                 );
             })()}
 
-            {/* Row 2: Operations Trends */}
-            {opsTrends.length > 0 && (
-                <div className="bg-[#1a1d24] p-6 rounded-xl border border-[#2a4030]">
-                    <div className="flex items-center gap-3 mb-4">
-                        <span className="material-symbols-outlined text-[#19e63c] text-[28px]">agriculture</span>
-                        <div>
-                            <h3 className="text-xl font-semibold text-white">Farm Operations Trend</h3>
-                            <p className="text-sm text-gray-400">Number of Operations over time in {stateName}</p>
-                        </div>
-                    </div>
-                    <div className="h-[400px] w-full">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={opsTrends} margin={{ top: 10, right: 30, left: 10, bottom: 0 }}>
-                                <CartesianGrid strokeDasharray="3 3" stroke="#2a4030" vertical={false} />
-                                <XAxis dataKey="year" stroke="#718096" tick={{ fill: '#9ca3af' }} />
-                                <YAxis
-                                    tickFormatter={(val) => new Intl.NumberFormat('en-US', { notation: "compact", compactDisplay: "short" }).format(val)}
-                                    label={{
-                                        value: 'Number of Operations',
-                                        angle: -90,
-                                        position: 'insideLeft',
-                                        style: { fill: '#9ca3af' }
-                                    }}
-                                    stroke="#718096"
-                                    tick={{ fill: '#9ca3af' }}
-                                />
-                                <Tooltip
-                                    formatter={(val: number | string | Array<number | string> | undefined) => [new Intl.NumberFormat('en-US').format(Number(val || 0)), 'Operations']}
-                                    contentStyle={{
-                                        backgroundColor: '#1a1d24',
-                                        border: '1px solid #2a4030',
-                                        borderRadius: '8px',
-                                        color: '#fff'
-                                    }}
-                                    labelStyle={{ color: '#9ca3af' }}
-                                />
-                                <Bar dataKey="operations" fill="#19e63c" name="Operations" radius={[8, 8, 0, 0]} />
-                            </BarChart>
-                        </ResponsiveContainer>
-                    </div>
-                </div>
-            )}
+
         </div>
     );
 }

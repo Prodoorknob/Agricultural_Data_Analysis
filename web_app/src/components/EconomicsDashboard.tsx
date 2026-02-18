@@ -5,7 +5,7 @@ import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
     LineChart, Line, Legend
 } from 'recharts';
-import { getTopCrops, getTrendData, getBoomCrops } from '../utils/processData';
+import { getTopCrops, getTrendData, getBoomCrops, getOperationsTrend } from '../utils/processData';
 import { palette } from '../utils/design';
 
 interface EconomicsDashboardProps {
@@ -53,6 +53,34 @@ export default function EconomicsDashboard({ data, year, stateName }: EconomicsD
         return getBoomCrops(data, METRIC, year, year - 10); // 10-year growth
     }, [data, year]);
 
+    // 4. Operations Trends (migrated from Labor)
+    const opsTrends = useMemo(() => {
+        if (!data?.length) return [];
+        return getOperationsTrend(data);
+    }, [data]);
+
+    // 5. Detect Census-gap zeros in revenue trends
+    const { cleanedRevenueTrends, hasCensusGaps } = useMemo(() => {
+        if (!revenueTrends.length) return { cleanedRevenueTrends: [], hasCensusGaps: false };
+        const top5 = trendKeys;
+        // Check if any trend has data intermittently (non-zero then 0 then non-zero)
+        let gapCount = 0;
+        let totalPoints = 0;
+        for (const pt of revenueTrends) {
+            for (const key of top5) {
+                totalPoints++;
+                if (pt[key] === 0 || pt[key] === undefined) gapCount++;
+            }
+        }
+        const gapRatio = totalPoints > 0 ? gapCount / totalPoints : 0;
+        const hasGaps = gapRatio > 0.3 && gapRatio < 1; // many gaps but not all-zero
+        // Filter out points where ALL commodity values are 0 (Census gap years)
+        const cleaned = hasGaps
+            ? revenueTrends.filter(pt => top5.some(k => pt[k] > 0))
+            : revenueTrends;
+        return { cleanedRevenueTrends: cleaned, hasCensusGaps: hasGaps };
+    }, [revenueTrends, trendKeys]);
+
     if (!data.length) {
         return (
             <div className="p-12 text-center">
@@ -62,8 +90,8 @@ export default function EconomicsDashboard({ data, year, stateName }: EconomicsD
         );
     }
 
-    return (
-        <div className="space-y-8">
+    const mainContent = (
+        <>
             {/* Header */}
             <div>
                 <h2 className="text-2xl font-bold text-white flex items-center gap-3">
@@ -90,8 +118,8 @@ export default function EconomicsDashboard({ data, year, stateName }: EconomicsD
                             margin={{ top: 5, right: 30, left: 120, bottom: 5 }}
                         >
                             <CartesianGrid strokeDasharray="3 3" stroke={palette.border} horizontal={true} vertical={true} />
-                            <XAxis 
-                                type="number" 
+                            <XAxis
+                                type="number"
                                 tickFormatter={(val) => `$${(val / 1000000).toFixed(1)}M`}
                                 stroke={palette.textMuted}
                                 tick={{ fill: palette.textSecondary }}
@@ -115,9 +143,9 @@ export default function EconomicsDashboard({ data, year, stateName }: EconomicsD
                             />
                             <Bar dataKey="value" radius={[0, 8, 8, 0]}>
                                 {topRevenueCrops.map((entry: any) => (
-                                    <Cell 
-                                        key={`cell-${entry.commodity}`} 
-                                        fill={COMMODITY_COLORS[entry.commodity] || palette.textAccent} 
+                                    <Cell
+                                        key={`cell-${entry.commodity}`}
+                                        fill={COMMODITY_COLORS[entry.commodity] || palette.textAccent}
                                     />
                                 ))}
                             </Bar>
@@ -135,20 +163,28 @@ export default function EconomicsDashboard({ data, year, stateName }: EconomicsD
                         <p className="text-sm text-gray-400">Historical revenue performance for top commodities</p>
                     </div>
                 </div>
+                {hasCensusGaps && (
+                    <div className="mb-4 p-3 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center gap-3">
+                        <span className="material-symbols-outlined text-blue-400 text-[20px]">info</span>
+                        <p className="text-blue-300 text-xs">
+                            Revenue data is intermittent (Census-only for some commodities). Years with no data are hidden. Apply sector/group filters for richer detail.
+                        </p>
+                    </div>
+                )}
                 <div className="h-[400px] w-full">
                     <ResponsiveContainer width="100%" height="100%">
                         <LineChart
-                            data={revenueTrends}
+                            data={cleanedRevenueTrends}
                             margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
                         >
                             <CartesianGrid strokeDasharray="3 3" stroke={palette.border} />
                             <XAxis dataKey="year" stroke={palette.textMuted} tick={{ fill: palette.textSecondary }} />
-                            <YAxis 
+                            <YAxis
                                 tickFormatter={(val) => `$${(val / 1000000).toFixed(0)}M`}
                                 stroke={palette.textMuted}
                                 tick={{ fill: palette.textSecondary }}
                             />
-                            <Tooltip 
+                            <Tooltip
                                 formatter={(val: number | undefined) => [val ? `$${val.toLocaleString()}` : '$0', 'Revenue']}
                                 contentStyle={{
                                     backgroundColor: palette.bgCard,
@@ -192,8 +228,8 @@ export default function EconomicsDashboard({ data, year, stateName }: EconomicsD
                             margin={{ top: 5, right: 50, left: 120, bottom: 5 }}
                         >
                             <CartesianGrid strokeDasharray="3 3" stroke={palette.border} horizontal={true} vertical={true} />
-                            <XAxis 
-                                type="number" 
+                            <XAxis
+                                type="number"
                                 tickFormatter={(val) => `${val.toFixed(0)}%`}
                                 stroke={palette.textMuted}
                                 tick={{ fill: palette.textSecondary }}
@@ -228,6 +264,57 @@ export default function EconomicsDashboard({ data, year, stateName }: EconomicsD
                     </ResponsiveContainer>
                 </div>
             </div>
+        </>
+    );
+
+    // --- Row 4: Farm Operations Trend (migrated from Labor) ---
+    const opsSection = opsTrends.length > 0 ? (
+        <div className="bg-[#1a1d24] p-6 rounded-xl border border-[#2a4030]">
+            <div className="flex items-center gap-3 mb-4">
+                <span className="material-symbols-outlined text-[#19e63c] text-[28px]">agriculture</span>
+                <div>
+                    <h3 className="text-xl font-semibold text-white">Farm Operations Trend</h3>
+                    <p className="text-sm text-gray-400">Number of operations over time in {stateName} — apply sector/group filters for breakdown</p>
+                </div>
+            </div>
+            <div className="h-[400px] w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={opsTrends} margin={{ top: 10, right: 30, left: 10, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke={palette.border} vertical={false} />
+                        <XAxis dataKey="year" stroke={palette.textMuted} tick={{ fill: palette.textSecondary }} />
+                        <YAxis
+                            tickFormatter={(val) => new Intl.NumberFormat('en-US', { notation: "compact", compactDisplay: "short" }).format(val)}
+                            label={{
+                                value: 'Number of Operations',
+                                angle: -90,
+                                position: 'insideLeft',
+                                style: { fill: palette.textSecondary }
+                            }}
+                            stroke={palette.textMuted}
+                            tick={{ fill: palette.textSecondary }}
+                        />
+                        <Tooltip
+                            formatter={(val: number | undefined) => [val ? new Intl.NumberFormat('en-US').format(val) : '0', 'Operations']}
+                            contentStyle={{
+                                backgroundColor: palette.bgCard,
+                                border: `1px solid ${palette.border}`,
+                                borderRadius: '8px',
+                                color: palette.textPrimary
+                            }}
+                            labelStyle={{ color: palette.textSecondary }}
+                        />
+                        <Bar dataKey="operations" fill="#19e63c" name="Operations" radius={[8, 8, 0, 0]} />
+                    </BarChart>
+                </ResponsiveContainer>
+            </div>
+        </div>
+    ) : null;
+
+    return (
+        <div className="space-y-8">
+            {/* All existing chart sections + Operations at the end */}
+            {mainContent}
+            {opsSection}
         </div>
     );
 }
