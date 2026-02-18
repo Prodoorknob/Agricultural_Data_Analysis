@@ -40,12 +40,22 @@ const MEASURES = [
   'Ops per 1,000 Acres'
 ];
 
+// --- View-specific filter defaults ---
+const VIEW_FILTER_DEFAULTS: Record<ViewMode, { sector?: string; group?: string }> = {
+  'OVERVIEW': {},
+  'CROPS': { sector: 'Crops' },
+  'ANIMALS': { sector: 'Animals & Products', group: 'All Animal Groups' },
+  'LAND': {},
+  'LABOR': { sector: 'All Sectors', group: 'All Groups' },
+  'ECONOMICS': { sector: 'All Sectors', group: 'All Groups' },
+};
+
 export default function Home() {
   // --- State ---
   const [selectedState, setSelectedState] = useState<string | undefined>('IN');
   const [selectedYear, setSelectedYear] = useState<number>(2022);
   const [selectedSector, setSelectedSector] = useState<string>('All Sectors');
-  const [selectedSubGroup, setSelectedSubGroup] = useState<string>('All Groups'); // Unified Group Filter
+  const [selectedSubGroup, setSelectedSubGroup] = useState<string>('All Groups');
   const [selectedMeasure, setSelectedMeasure] = useState<string>('Area Harvested (acres)');
   const [viewMode, setViewMode] = useState<ViewMode>('OVERVIEW');
 
@@ -57,9 +67,18 @@ export default function Home() {
   const [stateData, setStateData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // --- Smart View Switch: auto-reset filters for target view ---
+  const switchView = (target: ViewMode) => {
+    const defaults = VIEW_FILTER_DEFAULTS[target];
+    if (defaults.sector) {
+      setSelectedSector(defaults.sector);
+      if (defaults.group) setSelectedSubGroup(defaults.group);
+    }
+    setViewMode(target);
+  };
+
   // --- Reset SubGroup when Sector Changes ---
   useEffect(() => {
-    // Default to first option in list (usually 'All ...')
     const options = GROUP_OPTIONS[selectedSector] || ['All Groups'];
     setSelectedSubGroup(options[0]);
   }, [selectedSector]);
@@ -201,60 +220,21 @@ export default function Home() {
             </h1>
           </div>
           <nav className="hidden lg:flex items-center gap-6">
-            <button
-              onClick={() => setViewMode('OVERVIEW')}
-              className={`text-sm font-medium transition-colors pb-1 ${viewMode === 'OVERVIEW'
-                ? 'text-[#19e63c] border-b-2 border-[#19e63c]'
-                : 'text-gray-400 hover:text-white'
-                }`}
-            >
-              Dashboard
-            </button>
-            <button
-              onClick={() => setViewMode('CROPS')}
-              className={`text-sm font-medium transition-colors pb-1 ${viewMode === 'CROPS'
-                ? 'text-[#19e63c] border-b-2 border-[#19e63c]'
-                : 'text-gray-400 hover:text-white'
-                }`}
-            >
-              Crops
-            </button>
-            <button
-              onClick={() => setViewMode('ANIMALS')}
-              className={`text-sm font-medium transition-colors pb-1 ${viewMode === 'ANIMALS'
-                ? 'text-[#19e63c] border-b-2 border-[#19e63c]'
-                : 'text-gray-400 hover:text-white'
-                }`}
-            >
-              Livestock
-            </button>
-            <button
-              onClick={() => setViewMode('LAND')}
-              className={`text-sm font-medium transition-colors pb-1 ${viewMode === 'LAND'
-                ? 'text-[#19e63c] border-b-2 border-[#19e63c]'
-                : 'text-gray-400 hover:text-white'
-                }`}
-            >
-              Land & Area
-            </button>
-            <button
-              onClick={() => setViewMode('LABOR')}
-              className={`text-sm font-medium transition-colors pb-1 ${viewMode === 'LABOR'
-                ? 'text-[#19e63c] border-b-2 border-[#19e63c]'
-                : 'text-gray-400 hover:text-white'
-                }`}
-            >
-              Labor
-            </button>
-            <button
-              onClick={() => setViewMode('ECONOMICS')}
-              className={`text-sm font-medium transition-colors pb-1 ${viewMode === 'ECONOMICS'
-                ? 'text-[#19e63c] border-b-2 border-[#19e63c]'
-                : 'text-gray-400 hover:text-white'
-                }`}
-            >
-              Economics
-            </button>
+            {(['OVERVIEW', 'CROPS', 'ANIMALS', 'LAND', 'LABOR', 'ECONOMICS'] as ViewMode[]).map(v => {
+              const labels: Record<ViewMode, string> = { OVERVIEW: 'Dashboard', CROPS: 'Crops', ANIMALS: 'Livestock', LAND: 'Land & Area', LABOR: 'Labor', ECONOMICS: 'Economics' };
+              return (
+                <button
+                  key={v}
+                  onClick={() => switchView(v)}
+                  className={`text-sm font-medium transition-colors pb-1 ${viewMode === v
+                    ? 'text-[#19e63c] border-b-2 border-[#19e63c]'
+                    : 'text-gray-400 hover:text-white'
+                    }`}
+                >
+                  {labels[v]}
+                </button>
+              );
+            })}
           </nav>
         </div>
 
@@ -497,11 +477,13 @@ export default function Home() {
 
             {/* Crop Health & Progress Section */}
             {(() => {
+              // Use raw stateData (not sector-filtered) so CONDITION/PROGRESS rows aren't excluded
+              const rawClean = filterData(stateData);
               const conditionData = getCropConditionTrends(
-                filteredStateData.length ? filteredStateData : filteredNationalSummary
+                rawClean.length ? rawClean : filteredNationalSummary
               );
               const progressData = getCropProgressSummary(
-                filteredStateData.length ? filteredStateData : filteredNationalSummary
+                rawClean.length ? rawClean : filteredNationalSummary
               );
               const latestProgress = progressData.length > 0 ? progressData[progressData.length - 1] : null;
 
@@ -639,6 +621,7 @@ export default function Home() {
           <div className="bg-[#0f1117] -mx-4 lg:-mx-8 px-4 lg:px-8 py-8">
             <CropsDashboard
               data={filteredStateData}
+              allData={filterData(stateData)}
               year={selectedYear}
               stateName={selectedState || 'National'}
             />
@@ -663,7 +646,7 @@ export default function Home() {
 
         {viewMode === 'LABOR' && (
           <LaborDashboard
-            data={filteredStateData}
+            data={filterData(stateData)}
             year={selectedYear}
             stateName={selectedState || 'National'}
           />
@@ -671,7 +654,7 @@ export default function Home() {
 
         {viewMode === 'ECONOMICS' && (
           <EconomicsDashboard
-            data={filteredStateData}
+            data={filterData(stateData)}
             year={selectedYear}
             stateName={selectedState || 'National'}
           />

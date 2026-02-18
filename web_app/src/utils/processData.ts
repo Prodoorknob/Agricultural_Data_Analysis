@@ -531,9 +531,21 @@ export function getCropConditionTrends(data: any[], commodity?: string) {
         };
 
         rows.forEach(r => {
-            const level = String(r.unit_desc || '').toUpperCase().trim();
             const val = cleanValue(r.value_num || r.Value);
-            if (conditionLevels[level] !== undefined && !isNaN(val)) {
+            if (isNaN(val)) return;
+
+            // Try to extract condition level from unit_desc
+            // USDA stores as 'PCT EXCELLENT', 'PCT GOOD', etc. or bare 'EXCELLENT'
+            const unitDesc = String(r.unit_desc || '').toUpperCase().trim();
+            let level = '';
+
+            if (unitDesc.startsWith('PCT ')) {
+                level = unitDesc.replace('PCT ', '').trim();
+            } else if (conditionLevels[unitDesc] !== undefined) {
+                level = unitDesc;
+            }
+
+            if (conditionLevels[level] !== undefined) {
                 conditionLevels[level].push(val);
             }
         });
@@ -575,15 +587,26 @@ export function getCropProgressSummary(data: any[]) {
         const yearEntry: any = { year, crops: [] };
 
         commodityGroups.forEach((cRows, commodity) => {
-            // Get the latest progress value for this commodity-year
-            const latestVal = d3.max(cRows, r => cleanValue(r.value_num || r.Value));
-            if (latestVal && !isNaN(latestVal) && latestVal > 0) {
-                yearEntry.crops.push({ commodity, progress: latestVal });
-            }
+            const vals = cRows
+                .map(r => cleanValue(r.value_num || r.Value))
+                .filter(v => !isNaN(v) && v > 0);
+
+            if (vals.length === 0) return;
+
+            // Use median as a "typical progress pace" — avoids trivial 100% from year-end reports
+            const sorted = vals.sort((a, b) => a - b);
+            const median = sorted[Math.floor(sorted.length / 2)];
+            const latest = sorted[sorted.length - 1];
+
+            yearEntry.crops.push({
+                commodity,
+                progress: Math.round(median),
+                latest: Math.round(latest),
+                reportCount: vals.length,
+            });
         });
 
         if (yearEntry.crops.length > 0) {
-            // Sort crops by progress to show the top ones
             yearEntry.crops.sort((a: any, b: any) => b.progress - a.progress);
             trends.push(yearEntry);
         }

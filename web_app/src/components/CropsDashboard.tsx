@@ -12,6 +12,7 @@ import { palette, chartDefaults, formatCompact, formatCurrency, formatDelta } fr
 
 interface CropsDashboardProps {
     data: any[];
+    allData?: any[]; // All state data (unfiltered by sector) for cross-sector revenue lookups
     year: number;
     stateName: string;
 }
@@ -134,7 +135,7 @@ function AnomalyDot(props: any) {
 // ═════════════════════════════════════════════════════════════════
 // ─── MAIN COMPONENT ─────────────────────────────────────────────
 // ═════════════════════════════════════════════════════════════════
-export default function CropsDashboard({ data, year, stateName }: CropsDashboardProps) {
+export default function CropsDashboard({ data, allData, year, stateName }: CropsDashboardProps) {
 
     // ─── Filter for CROPS sector ──────────────────────────────────
     const cropsData = useMemo(() => {
@@ -159,8 +160,9 @@ export default function CropsDashboard({ data, year, stateName }: CropsDashboard
 
     // ─── Unified Story Data ───────────────────────────────────────
     const { story, anomalyYears } = useMemo(() => {
-        return getCommodityStory(data, selectedCommodity);
-    }, [data, selectedCommodity]);
+        // Pass allData (cross-sector) so revenue from ECONOMICS sector is found
+        return getCommodityStory(allData || data, selectedCommodity);
+    }, [allData, data, selectedCommodity]);
 
     // ─── Current & Previous Year Stats ────────────────────────────
     const currentStats = useMemo(() => story.find(d => d.year === year) || {} as any, [story, year]);
@@ -430,6 +432,23 @@ export default function CropsDashboard({ data, year, stateName }: CropsDashboard
                     <p style={{ color: palette.textSecondary, fontSize: '13px', marginTop: '4px' }}>
                         Area planted vs. harvested — gaps indicate crop loss or abandonment
                     </p>
+                    {story.some(d => d.areaHarvested > d.areaPlanted && d.areaPlanted > 0) && (
+                        <div style={{
+                            marginTop: '8px',
+                            padding: '8px 12px',
+                            background: 'rgba(251, 191, 36, 0.08)',
+                            borderRadius: '8px',
+                            border: '1px solid rgba(251, 191, 36, 0.2)',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                        }}>
+                            <span style={{ color: '#fbbf24', fontSize: '14px' }}>ℹ</span>
+                            <span style={{ color: '#fbbf24', fontSize: '12px', fontWeight: 500 }}>
+                                Harvested area exceeds planted for {selectedCommodity} in some years. This is common for crops reported across multiple categories (e.g., grain vs. silage) or with multi-harvest practices.
+                            </span>
+                        </div>
+                    )}
                 </div>
 
                 <div style={{ height: '320px' }}>
