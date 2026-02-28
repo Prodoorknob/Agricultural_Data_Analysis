@@ -165,3 +165,106 @@ export async function fetchLandUseData() {
 export async function fetchLaborData() {
     return fetchParquet('partitioned_states/NATIONAL.parquet');
 }
+
+// ─── Athena-Backed Fetch Functions ────────────────────────────────
+// These provide SQL-powered queries as an alternative to full parquet downloads.
+// They fall back gracefully if Athena is not configured.
+
+import type { AthenaQueryParams } from './athenaClient';
+
+/**
+ * Fetch aggregated data for a state via Athena SQL.
+ * Returns top commodities by the specified metric.
+ * Falls back to empty array if Athena is unavailable.
+ */
+export async function fetchStateAggregated(
+    stateAlpha: string,
+    year: number,
+    metric: string = 'AREA HARVESTED',
+    sector?: string,
+    limit: number = 25
+): Promise<any[]> {
+    try {
+        const params = new URLSearchParams({
+            state: stateAlpha,
+            year: year.toString(),
+            metric,
+            groupBy: 'commodity_desc',
+            limit: limit.toString(),
+        });
+        if (sector) params.set('sector', sector);
+
+        const response = await fetch(`/api/athena?${params.toString()}`);
+        if (!response.ok) return [];
+
+        const result = await response.json();
+        return result.rows || [];
+    } catch {
+        console.warn('[Athena] Not available, falling back to parquet');
+        return [];
+    }
+}
+
+/**
+ * Fetch trend data for a commodity across years via Athena.
+ */
+export async function fetchCommodityTrend(
+    stateAlpha: string,
+    commodity: string,
+    metric: string = 'AREA HARVESTED',
+    yearStart: number = 2001,
+    yearEnd: number = 2025
+): Promise<any[]> {
+    try {
+        const params = new URLSearchParams({
+            state: stateAlpha,
+            commodity,
+            metric,
+            yearStart: yearStart.toString(),
+            yearEnd: yearEnd.toString(),
+            groupBy: 'year',
+            orderBy: 'year',
+            orderDir: 'ASC',
+            limit: '50',
+        });
+
+        const response = await fetch(`/api/athena?${params.toString()}`);
+        if (!response.ok) return [];
+
+        const result = await response.json();
+        return result.rows || [];
+    } catch {
+        console.warn('[Athena] Not available for trend query');
+        return [];
+    }
+}
+
+/**
+ * Fetch state comparison data via Athena.
+ */
+export async function fetchStateComparison(
+    states: string[],
+    metric: string,
+    commodity?: string,
+    yearStart: number = 2010,
+    yearEnd: number = 2025
+): Promise<any[]> {
+    try {
+        const params = new URLSearchParams({
+            states: states.join(','),
+            metric,
+            yearStart: yearStart.toString(),
+            yearEnd: yearEnd.toString(),
+        });
+        if (commodity) params.set('commodity', commodity);
+
+        const response = await fetch(`/api/athena/compare?${params.toString()}`);
+        if (!response.ok) return [];
+
+        const result = await response.json();
+        return result.rows || [];
+    } catch {
+        console.warn('[Athena] Not available for comparison query');
+        return [];
+    }
+}
