@@ -28,14 +28,17 @@ export function cleanValue(val: any): number {
 
 /**
  * Enhanced Filter: Source + Totals + Valid Data
+ * Accepts SURVEY, CENSUS (for revenue), and DERIVED (pipeline-computed metrics).
+ * Dedup priority: SURVEY > CENSUS > DERIVED
  */
 export function filterData(data: any[]): any[] {
     if (!data || data.length === 0) return [];
 
     // Step 1: Apply non-source filters (totals, domain)
     const basicFiltered = data.filter(d =>
-        // Source: Survey or Farm Operations Exception or Revenue Data Exception
-        (!d.source_desc || d.source_desc === 'SURVEY' || d.commodity_desc === 'FARM OPERATIONS' ||
+        // Source: Survey, Derived (pipeline-computed), Farm Operations, or Census revenue
+        (!d.source_desc || d.source_desc === 'SURVEY' || d.source_desc === 'DERIVED' ||
+            d.commodity_desc === 'FARM OPERATIONS' ||
             // Allow CENSUS revenue data (SALES with $ unit) for crops where SURVEY lacks dollar revenue
             (d.statisticcat_desc === 'SALES' && d.unit_desc === '$')) &&
 
@@ -47,7 +50,8 @@ export function filterData(data: any[]): any[] {
         (d.domain_desc === 'TOTAL' || !d.domain_desc)
     );
 
-    // Step 2: Deduplicate Census/Survey overlap — prefer SURVEY when both exist
+    // Step 2: Deduplicate Census/Survey/Derived overlap
+    // Priority: SURVEY > CENSUS > DERIVED
     const keyMap = new Map<string, any[]>();
     basicFiltered.forEach(d => {
         const key = `${d.state_alpha || ''}|${d.year || ''}|${d.commodity_desc || ''}|${d.statisticcat_desc || ''}|${d.unit_desc || ''}`;
@@ -59,10 +63,14 @@ export function filterData(data: any[]): any[] {
     keyMap.forEach((rows) => {
         const hasSurvey = rows.some(r => r.source_desc === 'SURVEY');
         const hasCensus = rows.some(r => r.source_desc === 'CENSUS');
-        if (hasSurvey && hasCensus) {
-            // Overlap detected: keep only SURVEY rows
+        if (hasSurvey) {
+            // SURVEY is highest priority
             result.push(...rows.filter(r => r.source_desc === 'SURVEY'));
+        } else if (hasCensus) {
+            // CENSUS is second priority
+            result.push(...rows.filter(r => r.source_desc === 'CENSUS'));
         } else {
+            // DERIVED or other fallback
             result.push(...rows);
         }
     });
