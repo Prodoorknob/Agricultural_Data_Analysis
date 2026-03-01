@@ -23,10 +23,12 @@ Environment Variables:
     AWS_REGION               - AWS region (default: us-east-2)
 """
 
+import gc
 import os
 import sys
 import re
 import json
+import shutil
 import time
 import logging
 import argparse
@@ -584,9 +586,17 @@ def run_ingestion(
     logger.info(f"Output: {OUTPUT_DIR}")
     logger.info("")
 
-    all_dfs = []
+    # Use a temp directory for intermediate per-state chunk files.
+    # This avoids accumulating all data in memory (which causes OOM kills
+    # on small EC2 instances for full 25-year runs).
+    temp_dir = os.path.join(OUTPUT_DIR, "_chunks")
+    if os.path.exists(temp_dir):
+        shutil.rmtree(temp_dir)
+    os.makedirs(temp_dir)
+
     total_fetched = 0
 
+    # ---- Phase 1: Fetch, clean, enrich, write per-state chunk files ----
     for sector in sectors:
         logger.info(f"--- Fetching sector: {sector} ---")
         for year in range(year_start, year_end + 1):
@@ -596,53 +606,102 @@ def run_ingestion(
 
             df = clean_dataframe(df, sector)
             df = enrich_dataframe(df)
-            total_fetched += len(df)
-            all_dfs.append(df)
 
-            # Update manifest counts
-            key = f"{sector}_{year}"
-            manifest["record_counts"][key] = len(df)
+            # Apply state filter early to save disk and memory
+            if states_filter and "state_alpha" in df.columns:
+                df = df[df["state_alpha"].isin(states_filter)]
+
+            total_fetched += len(df)
+            manifest["record_counts"][f"{sector}_{year}"] = len(df)
+
+            # Write per-state chunk files so memory is freed after each (sector, year)
+            if "state_alpha" in df.columns:
+                for state_code, group in df.groupby("state_alpha"):
+                    if pd.isna(state_code) or state_code == "":
+                        continue
+                    state_chunk_dir = os.path.join(temp_dir, str(state_code))
+                    os.makedirs(state_chunk_dir, exist_ok=True)
+                    chunk_path = os.path.join(
+                        state_chunk_dir, f"{sector}_{year}.parquet"
+                    )
+                    group.to_parquet(
+                        chunk_path,
+                        engine="pyarrow",
+                        compression="snappy",
+                        index=False,
+                    )
+
+            del df
+            gc.collect()
 
         logger.info("")
 
-    if not all_dfs:
+    if total_fetched == 0:
         logger.warning("No data fetched from any sector/year combination")
+        shutil.rmtree(temp_dir)
         save_manifest(manifest)
         return False
 
-    # Combine all data
-    combined = pd.concat(all_dfs, ignore_index=True)
     logger.info(f"Total records fetched and cleaned: {total_fetched:,}")
-    logger.info(f"Combined dataframe: {len(combined):,} rows, {len(combined.columns)} columns")
 
-    # Apply state filter if specified
-    if states_filter:
-        combined = combined[combined["state_alpha"].isin(states_filter)]
-        logger.info(f"After state filter: {len(combined):,} rows")
-
-    # Partition by state and write parquet
-    logger.info("\nPartitioning by state...")
-    state_counts = partition_by_state(combined, OUTPUT_DIR)
-    logger.info(f"Wrote {len(state_counts)} state parquet files")
-
-    # Also write Athena-optimized Hive-partitioned layout
+    # ---- Phase 2: Merge per-state chunks into final parquet files ----
+    # Only one state's data is in memory at a time.
+    logger.info("\nMerging chunks and writing final parquet files...")
     athena_dir = os.path.join(OUTPUT_DIR, "athena_optimized")
     os.makedirs(athena_dir, exist_ok=True)
-    for state_code, group in combined.groupby("state_alpha"):
-        if pd.isna(state_code) or state_code == "":
+    state_total = 0
+
+    for state_code in sorted(os.listdir(temp_dir)):
+        state_chunk_dir = os.path.join(temp_dir, state_code)
+        if not os.path.isdir(state_chunk_dir):
             continue
+
+        # Read all chunks for this state
+        chunks = []
+        for chunk_file in sorted(os.listdir(state_chunk_dir)):
+            if chunk_file.endswith(".parquet"):
+                chunks.append(
+                    pd.read_parquet(os.path.join(state_chunk_dir, chunk_file))
+                )
+
+        if not chunks:
+            continue
+
+        combined = pd.concat(chunks, ignore_index=True)
+        del chunks
+        combined = combined.drop_duplicates()
+
+        if "year" in combined.columns and "commodity_desc" in combined.columns:
+            combined = combined.sort_values(["year", "commodity_desc"])
+
+        # Write browser-fetch parquet
+        filename = "NATIONAL.parquet" if state_code == "US" else f"{state_code}.parquet"
+        combined.to_parquet(
+            os.path.join(OUTPUT_DIR, filename),
+            engine="pyarrow",
+            compression="snappy",
+            index=False,
+        )
+
+        # Write Athena Hive-partitioned parquet
         partition_dir = os.path.join(athena_dir, f"state_alpha={state_code}")
         os.makedirs(partition_dir, exist_ok=True)
-        if "year" in group.columns and "commodity_desc" in group.columns:
-            group = group.sort_values(["year", "commodity_desc"])
-        group = group.drop_duplicates()
-        group.to_parquet(
+        combined.to_parquet(
             os.path.join(partition_dir, "data.parquet"),
             engine="pyarrow",
             compression="snappy",
             index=False,
         )
 
+        logger.info(f"  Wrote {filename}: {len(combined):,} rows")
+        state_total += 1
+
+        del combined
+        gc.collect()
+
+    # Cleanup temp directory
+    shutil.rmtree(temp_dir)
+    logger.info(f"Wrote {state_total} state parquet files")
     logger.info(f"Wrote Athena-optimized partitions to {athena_dir}")
 
     manifest["last_success"] = datetime.now(timezone.utc).isoformat()
