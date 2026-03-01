@@ -646,6 +646,9 @@ def run_ingestion(
 
     # ---- Phase 2: Merge per-state chunks into final parquet files ----
     # Only one state's data is in memory at a time.
+    # If a parquet file already exists for a state (from a previous run with
+    # a different year range), merge the new data into it so that multi-step
+    # runs (e.g., 2001-2010 then 2011-2020) accumulate correctly.
     logger.info("\nMerging chunks and writing final parquet files...")
     athena_dir = os.path.join(OUTPUT_DIR, "athena_optimized")
     os.makedirs(athena_dir, exist_ok=True)
@@ -656,7 +659,7 @@ def run_ingestion(
         if not os.path.isdir(state_chunk_dir):
             continue
 
-        # Read all chunks for this state
+        # Read all NEW chunks for this state
         chunks = []
         for chunk_file in sorted(os.listdir(state_chunk_dir)):
             if chunk_file.endswith(".parquet"):
@@ -667,15 +670,28 @@ def run_ingestion(
         if not chunks:
             continue
 
-        combined = pd.concat(chunks, ignore_index=True)
+        new_data = pd.concat(chunks, ignore_index=True)
         del chunks
-        combined = combined.drop_duplicates()
+
+        # Merge with existing parquet if present (incremental accumulation)
+        filename = "NATIONAL.parquet" if state_code == "US" else f"{state_code}.parquet"
+        existing_path = os.path.join(OUTPUT_DIR, filename)
+        if os.path.exists(existing_path):
+            try:
+                existing = pd.read_parquet(existing_path)
+                new_data = pd.concat([existing, new_data], ignore_index=True)
+                del existing
+                logger.info(f"  Merged with existing {filename}")
+            except Exception as e:
+                logger.warning(f"  Could not read existing {filename}, overwriting: {e}")
+
+        combined = new_data.drop_duplicates()
+        del new_data
 
         if "year" in combined.columns and "commodity_desc" in combined.columns:
             combined = combined.sort_values(["year", "commodity_desc"])
 
         # Write browser-fetch parquet
-        filename = "NATIONAL.parquet" if state_code == "US" else f"{state_code}.parquet"
         combined.to_parquet(
             os.path.join(OUTPUT_DIR, filename),
             engine="pyarrow",
