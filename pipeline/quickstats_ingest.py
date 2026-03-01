@@ -62,7 +62,7 @@ API_GET_ENDPOINT = f"{API_BASE}/api_GET"
 API_COUNT_ENDPOINT = f"{API_BASE}/get_counts"
 
 MAX_RECORDS_PER_REQUEST = 50000
-REQUEST_DELAY_SECONDS = 0.5
+REQUEST_DELAY_SECONDS = 1.0
 MAX_RETRIES = 3
 RETRY_BACKOFF_BASE = 2  # seconds
 
@@ -126,6 +126,22 @@ SECTOR_TO_DATASET_SOURCE = {
     "ECONOMICS": "nass_economics",
 }
 
+# Commodity groups for deep sub-chunking when (source, agg_level, stat_cat) still exceeds 50K
+COMMODITY_GROUPS = {
+    "CROPS": [
+        "FIELD CROPS", "VEGETABLES", "FRUIT & TREE NUTS",
+        "HORTICULTURE", "CROP TOTALS",
+    ],
+    "ANIMALS & PRODUCTS": [
+        "LIVESTOCK", "POULTRY", "AQUACULTURE",
+        "SPECIALTY", "ANIMAL TOTALS",
+    ],
+    "ECONOMICS": [
+        "FARMS & LAND & ASSETS", "OPERATORS", "INCOME",
+        "EXPENSES",
+    ],
+}
+
 
 # ---------------------------------------------------------------------------
 # API Key Management
@@ -187,6 +203,16 @@ def filter_totals(df: pd.DataFrame) -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 # API Calls
 # ---------------------------------------------------------------------------
+_active_api_key = ""  # Set during ingestion for error sanitization
+
+
+def _sanitize_error(msg: str) -> str:
+    """Replace API key in error messages with a redacted placeholder."""
+    if _active_api_key:
+        return str(msg).replace(_active_api_key, "***REDACTED***")
+    return str(msg)
+
+
 def api_get_counts(api_key: str, params: dict) -> int:
     """Call the get_counts endpoint and return expected record count."""
     params_with_key = {"key": api_key, **params}
@@ -196,10 +222,11 @@ def api_get_counts(api_key: str, params: dict) -> int:
             resp.raise_for_status()
             data = resp.json()
             count = int(data.get("count", 0))
+            time.sleep(REQUEST_DELAY_SECONDS)
             return count
         except Exception as e:
             wait = RETRY_BACKOFF_BASE ** (attempt + 1)
-            logger.warning(f"get_counts attempt {attempt + 1} failed: {e}. Retrying in {wait}s...")
+            logger.warning(f"get_counts attempt {attempt + 1} failed: {_sanitize_error(e)}. Retrying in {wait}s...")
             time.sleep(wait)
     return 0
 
@@ -216,14 +243,17 @@ def api_get_data(api_key: str, params: dict) -> list[dict]:
             return records
         except requests.exceptions.HTTPError as e:
             if resp.status_code == 413:
-                logger.error(f"Request too large (>50K records): {params}")
+                logger.error(f"Request too large (>50K records): {_sanitize_error(params)}")
+                return []
+            if resp.status_code == 400:
+                logger.warning(f"Bad request (invalid parameter combo): {_sanitize_error(params)}")
                 return []
             wait = RETRY_BACKOFF_BASE ** (attempt + 1)
-            logger.warning(f"api_GET attempt {attempt + 1} failed: {e}. Retrying in {wait}s...")
+            logger.warning(f"api_GET attempt {attempt + 1} failed: {_sanitize_error(e)}. Retrying in {wait}s...")
             time.sleep(wait)
         except Exception as e:
             wait = RETRY_BACKOFF_BASE ** (attempt + 1)
-            logger.warning(f"api_GET attempt {attempt + 1} failed: {e}. Retrying in {wait}s...")
+            logger.warning(f"api_GET attempt {attempt + 1} failed: {_sanitize_error(e)}. Retrying in {wait}s...")
             time.sleep(wait)
     return []
 
@@ -236,71 +266,91 @@ def fetch_sector_year(api_key: str, sector: str, year: int) -> pd.DataFrame:
 
     Fetches both SURVEY and CENSUS data to maximize data density.
     The frontend filterData() handles Census/Survey deduplication.
-    If the count exceeds 50K, sub-chunk by source_desc, then agg_level_desc.
+
+    Only fetches STATE and NATIONAL aggregation levels (COUNTY is
+    discarded by partition_by_state() so fetching it wastes API calls).
+
+    Sub-chunking strategy when count exceeds 50K:
+      1. Split by source_desc (SURVEY/CENSUS)
+      2. Split by statisticcat_desc (from RELEVANT_STAT_CATS)
+      3. Split by group_desc (from COMMODITY_GROUPS)
+      4. If group_desc still >50K, try with domain_desc=TOTAL (aggregate only)
     """
-    base_params = {
-        "sector_desc": sector,
-        "year": str(year),
-    }
-
-    count = api_get_counts(api_key, base_params)
-    logger.info(f"  {sector} / {year}: {count:,} records expected (SURVEY+CENSUS)")
-
-    if count == 0:
-        return pd.DataFrame()
-
-    if count <= MAX_RECORDS_PER_REQUEST:
-        time.sleep(REQUEST_DELAY_SECONDS)
-        records = api_get_data(api_key, base_params)
-        if records:
-            return pd.DataFrame(records)
-        return pd.DataFrame()
-
-    # Sub-chunk by source_desc first, then agg_level_desc
-    logger.info(f"  Count {count:,} exceeds limit, sub-chunking by source_desc + agg_level_desc")
     all_records = []
-    for source in ["SURVEY", "CENSUS"]:
-        source_params = {**base_params, "source_desc": source}
-        source_count = api_get_counts(api_key, source_params)
-        if source_count == 0:
+
+    # Only fetch STATE and NATIONAL — COUNTY is discarded by partition_by_state()
+    for agg_level in ["NATIONAL", "STATE"]:
+        base_params = {
+            "sector_desc": sector,
+            "year": str(year),
+            "agg_level_desc": agg_level,
+        }
+
+        count = api_get_counts(api_key, base_params)
+        logger.info(f"  {sector} / {year} / {agg_level}: {count:,} records")
+
+        if count == 0:
             continue
 
-        if source_count <= MAX_RECORDS_PER_REQUEST:
+        if count <= MAX_RECORDS_PER_REQUEST:
             time.sleep(REQUEST_DELAY_SECONDS)
-            records = api_get_data(api_key, source_params)
+            records = api_get_data(api_key, base_params)
             all_records.extend(records)
-            logger.info(f"    {source}: fetched {len(records):,}")
+            logger.info(f"    Fetched {len(records):,} records")
             continue
 
-        # Further sub-chunk by agg_level_desc
-        for agg_level in ["STATE", "NATIONAL", "COUNTY"]:
-            sub_params = {**source_params, "agg_level_desc": agg_level}
-            sub_count = api_get_counts(api_key, sub_params)
-            if sub_count == 0:
+        # Sub-chunk by source_desc
+        logger.info(f"    Count {count:,} exceeds limit, sub-chunking by source_desc")
+        for source in ["SURVEY", "CENSUS"]:
+            source_params = {**base_params, "source_desc": source}
+            source_count = api_get_counts(api_key, source_params)
+            if source_count == 0:
                 continue
 
-            if sub_count > MAX_RECORDS_PER_REQUEST:
-                # Further sub-chunk by statisticcat_desc
-                logger.info(f"    {source}/{agg_level} has {sub_count:,} records, sub-chunking by statisticcat_desc")
-                for stat_cat in RELEVANT_STAT_CATS:
-                    cat_params = {**sub_params, "statisticcat_desc": stat_cat}
-                    cat_count = api_get_counts(api_key, cat_params)
-                    if cat_count == 0:
-                        continue
-                    if cat_count > MAX_RECORDS_PER_REQUEST:
-                        logger.warning(
-                            f"    {source}/{agg_level}/{stat_cat} has {cat_count:,} records (still >50K). Skipping."
-                        )
-                        continue
+            if source_count <= MAX_RECORDS_PER_REQUEST:
+                time.sleep(REQUEST_DELAY_SECONDS)
+                records = api_get_data(api_key, source_params)
+                all_records.extend(records)
+                logger.info(f"    {source}: fetched {len(records):,}")
+                continue
+
+            # Sub-chunk by statisticcat_desc
+            logger.info(f"    {source}/{agg_level}: {source_count:,} records, sub-chunking by statisticcat_desc")
+            for stat_cat in RELEVANT_STAT_CATS:
+                cat_params = {**source_params, "statisticcat_desc": stat_cat}
+                cat_count = api_get_counts(api_key, cat_params)
+                if cat_count == 0:
+                    continue
+
+                if cat_count <= MAX_RECORDS_PER_REQUEST:
                     time.sleep(REQUEST_DELAY_SECONDS)
                     records = api_get_data(api_key, cat_params)
                     all_records.extend(records)
                     logger.info(f"      {stat_cat}: fetched {len(records):,}")
-            else:
-                time.sleep(REQUEST_DELAY_SECONDS)
-                records = api_get_data(api_key, sub_params)
-                all_records.extend(records)
-                logger.info(f"    {source}/{agg_level}: fetched {len(records):,}")
+                    continue
+
+                # Sub-chunk by group_desc when stat_cat still exceeds 50K
+                logger.info(
+                    f"      {source}/{agg_level}/{stat_cat}: {cat_count:,} still >50K, "
+                    "sub-chunking by group_desc"
+                )
+                groups = COMMODITY_GROUPS.get(sector, [])
+                for group in groups:
+                    group_params = {**cat_params, "group_desc": group}
+                    time.sleep(REQUEST_DELAY_SECONDS)
+                    records = api_get_data(api_key, group_params)
+                    if records:
+                        all_records.extend(records)
+                        logger.info(f"        {group}: fetched {len(records):,}")
+                    else:
+                        # Fallback: try with domain_desc=TOTAL to get aggregate data
+                        # when group_desc is still >50K (due to domain breakdowns)
+                        total_params = {**group_params, "domain_desc": "TOTAL"}
+                        time.sleep(REQUEST_DELAY_SECONDS)
+                        records = api_get_data(api_key, total_params)
+                        if records:
+                            all_records.extend(records)
+                            logger.info(f"        {group} (TOTAL only): fetched {len(records):,}")
 
     if all_records:
         return pd.DataFrame(all_records)
@@ -519,6 +569,8 @@ def run_ingestion(
     Returns:
         True if successful, False otherwise
     """
+    global _active_api_key
+    _active_api_key = api_key
     manifest = load_manifest()
     manifest["last_run"] = datetime.now(timezone.utc).isoformat()
 
