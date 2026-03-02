@@ -135,6 +135,10 @@ export function getTrendData(data: any[], metric: string, topCommodities: string
                 }
             }
             yearObj[commodity] = d3.sum(relevantRows, r => cleanValue(r.value_num || r.Value));
+            // For SALES metric, convert 0 to undefined to avoid plotting Census gap years as $0
+            if (metric === 'SALES' && (yearObj[commodity] === 0 || yearObj[commodity] === undefined)) {
+                yearObj[commodity] = undefined;
+            }
         });
         trendData.push(yearObj);
     });
@@ -458,7 +462,7 @@ export function getCommodityStory(data: any[], commodity: string) {
             r.statisticcat_desc === 'SALES' &&
             r.unit_desc === '$'
         );
-        const revenue = d3.max(salesRows, r => cleanValue(r.value_num || r.Value)) || 0;
+        const revenue = d3.max(salesRows, r => cleanValue(r.value_num || r.Value)) || undefined;
 
         const prodUnit = rows.find(r => r.statisticcat_desc === 'PRODUCTION')?.unit_desc || '';
         const yieldUnit = rows.find(r => r.statisticcat_desc === 'YIELD')?.unit_desc || '';
@@ -480,7 +484,7 @@ export function getCommodityStory(data: any[], commodity: string) {
     revData.forEach(r => {
         const existing = mergedMap.get(r.year);
         if (existing) {
-            if (existing.revenue === 0) existing.revenue = r.revenue;
+            if (!existing.revenue) existing.revenue = r.revenue;
         } else {
             mergedMap.set(r.year, {
                 year: r.year, production: 0, yield: 0,

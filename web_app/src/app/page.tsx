@@ -8,7 +8,7 @@ import CropsDashboard from '@/components/CropsDashboard';
 import AnimalsDashboard from '@/components/AnimalsDashboard';
 import StateInfoPanel from '@/components/StateInfoPanel';
 import StateSingleMap from '@/components/StateSingleMap';
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { US_STATES } from '../utils/serviceData';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -32,14 +32,6 @@ const GROUP_OPTIONS: Record<string, string[]> = {
   'Economics': ['All Economics', 'Expenses', 'Income']
 };
 
-const MEASURES = [
-  'Area Harvested (acres)',
-  'Area Planted (acres)',
-  'Revenue (USD)',
-  'Operations',
-  'Ops per 1,000 Acres'
-];
-
 // --- View-specific filter defaults ---
 const VIEW_FILTER_DEFAULTS: Record<ViewMode, { sector?: string; group?: string }> = {
   'OVERVIEW': {},
@@ -56,7 +48,6 @@ export default function Home() {
   const [selectedYear, setSelectedYear] = useState<number>(2022);
   const [selectedSector, setSelectedSector] = useState<string>('All Sectors');
   const [selectedSubGroup, setSelectedSubGroup] = useState<string>('All Groups');
-  const [selectedMeasure, setSelectedMeasure] = useState<string>('Area Harvested (acres)');
   const [viewMode, setViewMode] = useState<ViewMode>('OVERVIEW');
 
   // Overview Interaction State
@@ -66,6 +57,9 @@ export default function Home() {
   const [nationalData, setNationalData] = useState<any[]>([]);
   const [stateData, setStateData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Ref for map section auto-scroll
+  const mapSectionRef = useRef<HTMLDivElement>(null);
 
   // --- Smart View Switch: auto-reset filters for target view ---
   const switchView = (target: ViewMode) => {
@@ -121,6 +115,12 @@ export default function Home() {
     loadData();
     // Reset overview interaction on state change
     setOverviewCommodity(null);
+    // Auto-scroll to map section when a state is selected
+    if (selectedState) {
+      setTimeout(() => {
+        mapSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }, 100);
+    }
   }, [selectedState]);
 
   // --- Global Filtering Logic ---
@@ -168,14 +168,7 @@ export default function Home() {
 
 
   // --- Derived Data for Map ---
-  const mapMetric = useMemo(() => {
-    if (selectedMeasure.includes('Revenue')) return 'SALES';
-    if (selectedMeasure.includes('Harvested')) return 'AREA HARVESTED';
-    if (selectedMeasure.includes('Planted')) return 'AREA PLANTED';
-    if (selectedMeasure.includes('Operations')) return 'OPERATIONS';
-    if (selectedMeasure.includes('Inventory')) return 'INVENTORY';
-    return 'AREA HARVESTED';
-  }, [selectedMeasure]);
+  const mapMetric = 'AREA HARVESTED';
 
   const mapData = useMemo(() => {
     const relevant = filterByGroup(filteredMapSource);
@@ -345,20 +338,6 @@ export default function Home() {
               </select>
             </div>
 
-            {/* Map Metric Filter */}
-            <div className="relative">
-              <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-gray-500 pointer-events-none">
-                <span className="material-symbols-outlined text-[18px]">straighten</span>
-              </span>
-              <select
-                value={selectedMeasure}
-                onChange={(e) => setSelectedMeasure(e.target.value)}
-                className="bg-[#0f1117] border border-[#2a4030] text-white text-sm rounded-lg pl-10 pr-8 py-2 focus:ring-2 focus:ring-[#19e63c] appearance-none cursor-pointer"
-              >
-                {MEASURES.map(m => <option key={m} value={m}>{m}</option>)}
-              </select>
-            </div>
-
             {/* Live Status Indicator */}
             <div className="ml-auto flex items-center gap-2 text-xs font-medium text-gray-400 bg-[#0f1117] px-3 py-2 rounded-lg border border-[#2a4030]">
               <span className="w-2 h-2 rounded-full bg-[#19e63c] animate-pulse"></span>
@@ -376,7 +355,7 @@ export default function Home() {
 
       <div className="px-4 lg:px-8 py-8 max-w-[1800px] mx-auto">
         {/* State Selector Section */}
-        <div className="mb-8 grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div ref={mapSectionRef} className="mb-8 grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Left: State Info Panel */}
           <div className="h-[500px]">
             <StateInfoPanel
@@ -646,7 +625,7 @@ export default function Home() {
 
         {viewMode === 'LABOR' && (
           <LaborDashboard
-            data={filterData(stateData)}
+            data={filteredStateData}
             year={selectedYear}
             stateName={selectedState || 'National'}
           />
@@ -654,7 +633,7 @@ export default function Home() {
 
         {viewMode === 'ECONOMICS' && (
           <EconomicsDashboard
-            data={filterData(stateData)}
+            data={filteredStateData}
             year={selectedYear}
             stateName={selectedState || 'National'}
           />

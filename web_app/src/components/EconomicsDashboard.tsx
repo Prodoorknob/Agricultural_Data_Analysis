@@ -204,6 +204,7 @@ export default function EconomicsDashboard({ data, year, stateName }: EconomicsD
                                     strokeWidth={3}
                                     dot={{ r: 3, fill: COMMODITY_COLORS[key] || palette.textAccent, strokeWidth: 0 }}
                                     activeDot={{ r: 6, stroke: palette.bgCard, strokeWidth: 2 }}
+                                    connectNulls={true}
                                 />
                             ))}
                         </LineChart>

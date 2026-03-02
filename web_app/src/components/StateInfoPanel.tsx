@@ -16,6 +16,14 @@ export default function StateInfoPanel({ selectedState, selectedYear, selectedSe
   const filteredData = stateData.filter(d => {
     if (selectedYear > 0 && d.year !== selectedYear) return false;
     if (selectedCommodity && d.commodity_desc !== selectedCommodity) return false;
+    // Sector filter
+    if (selectedSector !== 'All Sectors' && selectedSector !== 'Economics') {
+      const sectorMap: Record<string, string> = {
+        'Crops': 'CROPS',
+        'Animals & Products': 'ANIMALS & PRODUCTS',
+      };
+      if (sectorMap[selectedSector] && d.sector_desc?.toUpperCase() !== sectorMap[selectedSector]) return false;
+    }
     return true;
   });
 
@@ -24,14 +32,20 @@ export default function StateInfoPanel({ selectedState, selectedYear, selectedSe
   const totalOperations = filteredData
     .filter(d => d.statisticcat_desc === 'OPERATIONS')
     .reduce((sum, d) => sum + (d.value_num || 0), 0);
-  
+
   const totalAreaHarvested = filteredData
     .filter(d => d.statisticcat_desc === 'AREA HARVESTED')
     .reduce((sum, d) => sum + (d.value_num || 0), 0);
-  
-  const totalRevenue = filteredData
-    .filter(d => d.statisticcat_desc === 'SALES' && d.unit_desc === '$')
-    .reduce((max, d) => Math.max(max, d.value_num || 0), 0);
+
+  // Revenue: group by (commodity, year), take max per group (avoids sub-domain duplicates), then sum
+  const revenueRows = filteredData.filter(d => d.statisticcat_desc === 'SALES' && d.unit_desc === '$');
+  const revenueByGroup = new Map<string, number>();
+  revenueRows.forEach(d => {
+    const key = `${d.commodity_desc}|${d.year}`;
+    const val = d.value_num || 0;
+    revenueByGroup.set(key, Math.max(revenueByGroup.get(key) || 0, val));
+  });
+  const totalRevenue = Array.from(revenueByGroup.values()).reduce((sum, v) => sum + v, 0);
 
   const formatNumber = (num: number) => {
     if (num >= 1000000000) return `$${(num / 1000000000).toFixed(2)}B`;
