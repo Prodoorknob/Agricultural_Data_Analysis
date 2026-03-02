@@ -130,3 +130,30 @@ body {
 .crops-story .recharts-cartesian-axis-tick-value {
   fill: #6b7280 !important;
 }
+
+/* ─── Recharts ResponsiveContainer guard ─────────────────────── */
+/* Prevents crash from negative dimensions on resize/hide */
+.recharts-wrapper {
+  min-height: 50px;
+  min-width: 50px;
+}
+
+/* ─── Focus indicators for keyboard navigation ──────────────── */
+button:focus-visible,
+select:focus-visible,
+input:focus-visible,
+a:focus-visible {
+  outline: 2px solid #60a5fa;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* ─── Touch target minimum sizing ────────────────────────────── */
+@media (pointer: coarse) {
+  button,
+  select,
+  .cursor-pointer {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}

@@ -4,10 +4,11 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import {
     LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
-    BarChart, Bar, Cell, AreaChart, Area, ReferenceLine
+    BarChart, Bar, Cell, AreaChart, Area, ReferenceLine,
+    ScatterChart, Scatter, ZAxis
 } from 'recharts';
 import * as d3 from 'd3-array';
-import { cleanValue, getCommodityStory, getTopCrops } from '../utils/processData';
+import { cleanValue, getCommodityStory, getTopCrops, getTrendData } from '../utils/processData';
 import { palette, chartDefaults, formatCompact, formatCurrency, formatDelta } from '../utils/design';
 
 interface CropsDashboardProps {
@@ -177,6 +178,31 @@ export default function CropsDashboard({ data, allData, year, stateName }: Crops
     const topCropsRanking = useMemo(() => {
         return getTopCrops(data, year, 'AREA HARVESTED').slice(0, 10);
     }, [data, year]);
+
+    // ─── Commodity Comparison (top 5 crops trend) ────────────────
+    const comparisonCommodities = useMemo(() => {
+        return topCropsRanking.slice(0, 5).map(c => c.commodity);
+    }, [topCropsRanking]);
+
+    const comparisonTrends = useMemo(() => {
+        if (!comparisonCommodities.length) return [];
+        return getTrendData(data, 'AREA HARVESTED', comparisonCommodities);
+    }, [data, comparisonCommodities]);
+
+    // ─── Yield vs Revenue Scatter ────────────────────────────────
+    const yieldRevenueScatter = useMemo(() => {
+        return story
+            .filter(d => d.yield > 0 && d.revenue && d.revenue > 0)
+            .map(d => ({
+                year: d.year,
+                yield: d.yield,
+                revenue: d.revenue,
+                isAnomaly: d.isAnomaly,
+            }));
+    }, [story]);
+
+    // Colors for commodity comparison lines
+    const COMPARISON_COLORS = ['#34d399', '#60a5fa', '#fbbf24', '#a78bfa', '#f87171'];
 
     // ─── Chart click handler ──────────────────────────────────────
     const handleChartClick = useCallback((data: any) => {
@@ -509,7 +535,7 @@ export default function CropsDashboard({ data, allData, year, stateName }: Crops
             {/* ════════════════════════════════════════════════════ */}
             {/* SECTION 3: Economic Impact                          */}
             {/* ════════════════════════════════════════════════════ */}
-            {story.some(d => d.revenue > 0) && (
+            {story.some(d => d.revenue && d.revenue > 0) && (
                 <div className="story-section card-animate" style={{
                     background: palette.bgCard,
                     border: `1px solid ${palette.border}`,
@@ -560,6 +586,7 @@ export default function CropsDashboard({ data, allData, year, stateName }: Crops
                                     animationDuration={chartDefaults.animationDuration}
                                     onClick={handleChartClick}
                                     style={{ cursor: 'pointer' }}
+                                    connectNulls={true}
                                 />
                             </AreaChart>
                         </ResponsiveContainer>
@@ -620,6 +647,168 @@ export default function CropsDashboard({ data, allData, year, stateName }: Crops
                     </ResponsiveContainer>
                 </div>
             </div>
+
+            {/* ════════════════════════════════════════════════════ */}
+            {/* SECTION 5: Commodity Comparison Trends               */}
+            {/* ════════════════════════════════════════════════════ */}
+            {comparisonTrends.length > 0 && (
+                <div className="story-section card-animate" style={{
+                    background: palette.bgCard,
+                    border: `1px solid ${palette.border}`,
+                    borderRadius: '14px',
+                    padding: '24px',
+                    marginBottom: '20px',
+                    animationDelay: '800ms',
+                }}>
+                    <div style={{ marginBottom: '16px' }}>
+                        <h3 style={{ color: palette.textPrimary, fontSize: '18px', fontWeight: 700, margin: 0 }}>
+                            How do top crops trend over time?
+                        </h3>
+                        <p style={{ color: palette.textSecondary, fontSize: '13px', marginTop: '4px' }}>
+                            Area harvested trends for the top 5 crops in {stateName}
+                        </p>
+                    </div>
+
+                    <div style={{ height: '380px' }}>
+                        <ResponsiveContainer width="100%" height="100%">
+                            <LineChart data={comparisonTrends} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+                                <CartesianGrid {...chartDefaults.grid} />
+                                <XAxis dataKey="year" {...chartDefaults.axisStyle} />
+                                <YAxis {...chartDefaults.axisStyle} tickFormatter={formatCompact} />
+                                <Tooltip
+                                    {...chartDefaults.tooltipStyle}
+                                    formatter={(val: any) => [val ? val.toLocaleString() + ' acres' : '0', '']}
+                                />
+                                <Legend
+                                    verticalAlign="top" align="right" height={36}
+                                    wrapperStyle={{ color: palette.textSecondary, fontSize: '12px' }}
+                                />
+                                {comparisonCommodities.map((commodity, i) => (
+                                    <Line
+                                        key={commodity}
+                                        type="monotone"
+                                        dataKey={commodity}
+                                        name={commodity}
+                                        stroke={COMPARISON_COLORS[i % COMPARISON_COLORS.length]}
+                                        strokeWidth={commodity === selectedCommodity ? 3 : 2}
+                                        dot={{ r: commodity === selectedCommodity ? 3 : 2, fill: COMPARISON_COLORS[i % COMPARISON_COLORS.length], strokeWidth: 0 }}
+                                        activeDot={{ r: 5, stroke: palette.bgCard, strokeWidth: 2 }}
+                                        opacity={commodity === selectedCommodity ? 1 : 0.7}
+                                        connectNulls={true}
+                                    />
+                                ))}
+                            </LineChart>
+                        </ResponsiveContainer>
+                    </div>
+                </div>
+            )}
+
+            {/* ════════════════════════════════════════════════════ */}
+            {/* SECTION 6: Yield vs Revenue Scatter                  */}
+            {/* ════════════════════════════════════════════════════ */}
+            {yieldRevenueScatter.length >= 3 && (
+                <div className="story-section card-animate" style={{
+                    background: palette.bgCard,
+                    border: `1px solid ${palette.border}`,
+                    borderRadius: '14px',
+                    padding: '24px',
+                    marginBottom: '20px',
+                    animationDelay: '950ms',
+                }}>
+                    <div style={{ marginBottom: '16px' }}>
+                        <h3 style={{ color: palette.textPrimary, fontSize: '18px', fontWeight: 700, margin: 0 }}>
+                            Does higher yield mean higher revenue?
+                        </h3>
+                        <p style={{ color: palette.textSecondary, fontSize: '13px', marginTop: '4px' }}>
+                            {selectedCommodity} yield vs. revenue by year — each dot is a year
+                        </p>
+                    </div>
+
+                    <div style={{ height: '380px' }}>
+                        <ResponsiveContainer width="100%" height="100%">
+                            <ScatterChart margin={{ top: 10, right: 30, left: 20, bottom: 10 }}>
+                                <CartesianGrid {...chartDefaults.grid} />
+                                <XAxis
+                                    dataKey="yield"
+                                    type="number"
+                                    name="Yield"
+                                    {...chartDefaults.axisStyle}
+                                    label={{ value: 'Yield', position: 'insideBottom', offset: -5, style: { fill: palette.textSecondary, fontSize: 11 } }}
+                                />
+                                <YAxis
+                                    dataKey="revenue"
+                                    type="number"
+                                    name="Revenue"
+                                    {...chartDefaults.axisStyle}
+                                    tickFormatter={formatCurrency}
+                                    label={{ value: 'Revenue', angle: -90, position: 'insideLeft', style: { fill: palette.textSecondary, fontSize: 11 } }}
+                                />
+                                <ZAxis range={[60, 60]} />
+                                <Tooltip
+                                    content={({ active, payload }: any) => {
+                                        if (!active || !payload?.length) return null;
+                                        const d = payload[0]?.payload;
+                                        return (
+                                            <div style={{ ...chartDefaults.tooltipStyle.contentStyle, padding: '10px 14px' }}>
+                                                <p style={{ color: d?.isAnomaly ? palette.anomaly : palette.textPrimary, fontWeight: 700, marginBottom: '4px' }}>
+                                                    {d?.year} {d?.isAnomaly ? '(Anomaly)' : ''}
+                                                </p>
+                                                <p style={{ color: palette.yield, fontSize: '12px' }}>Yield: {d?.yield?.toFixed(1)}</p>
+                                                <p style={{ color: palette.revenue, fontSize: '12px' }}>Revenue: {formatCurrency(d?.revenue || 0)}</p>
+                                            </div>
+                                        );
+                                    }}
+                                />
+                                <Scatter
+                                    data={yieldRevenueScatter}
+                                    fill={palette.yield}
+                                    animationDuration={chartDefaults.animationDuration}
+                                >
+                                    {yieldRevenueScatter.map((entry, index) => (
+                                        <Cell
+                                            key={`scatter-${index}`}
+                                            fill={entry.isAnomaly ? palette.anomaly : palette.yield}
+                                            opacity={0.8}
+                                        />
+                                    ))}
+                                </Scatter>
+                            </ScatterChart>
+                        </ResponsiveContainer>
+                    </div>
+
+                    {/* Correlation hint */}
+                    {(() => {
+                        const n = yieldRevenueScatter.length;
+                        if (n < 5) return null;
+                        const yields = yieldRevenueScatter.map(d => d.yield);
+                        const revenues = yieldRevenueScatter.map(d => d.revenue);
+                        const meanY = (d3.mean(yields) || 0);
+                        const meanR = (d3.mean(revenues) || 0);
+                        const num = d3.sum(yieldRevenueScatter.map(d => (d.yield - meanY) * (d.revenue - meanR)));
+                        const denY = Math.sqrt(d3.sum(yields.map(y => (y - meanY) ** 2)));
+                        const denR = Math.sqrt(d3.sum(revenues.map(r => (r - meanR) ** 2)));
+                        const r = denY > 0 && denR > 0 ? num / (denY * denR) : 0;
+                        const strength = Math.abs(r) > 0.7 ? 'strong' : Math.abs(r) > 0.4 ? 'moderate' : 'weak';
+                        const direction = r > 0 ? 'positive' : 'negative';
+                        return (
+                            <div style={{
+                                marginTop: '12px',
+                                padding: '10px 14px',
+                                background: palette.highlight,
+                                borderRadius: '8px',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '8px',
+                            }}>
+                                <span style={{ color: palette.textAccent, fontSize: '14px' }}>R = {r.toFixed(2)}</span>
+                                <span style={{ color: palette.textSecondary, fontSize: '12px' }}>
+                                    {strength} {direction} correlation between yield and revenue
+                                </span>
+                            </div>
+                        );
+                    })()}
+                </div>
+            )}
         </div>
     );
 }
