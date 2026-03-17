@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Report 02 — Commodity Price Forecasting Pipeline</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --navy:    #1a3a5c;
+    --navy-lt: #2a5080;
+    --ink:     #0f1923;
+    --mid:     #4a5568;
+    --muted:   #718096;
+    --rule:    #dde3ea;
+    --bg:      #ffffff;
+    --bg-soft: #f7f9fb;
+    --bg-alt:  #eef2f7;
+    --accent:  #c8a84b;
+    --green:   #2a7a4b;
+    --red:     #b03030;
+    --serif:   'Libre Baskerville', Georgia, serif;
+    --sans:    'Geist', system-ui, sans-serif;
+    --mono:    'Geist Mono', monospace;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: var(--sans); font-size: 15px; line-height: 1.7; color: var(--ink); background: var(--bg); }
+
+  .cover {
+    background: #0f2740;
+    color: #fff;
+    padding: 72px 80px 60px;
+  }
+  .cover-meta {
+    font-size: 11px; font-weight: 600; letter-spacing: 0.18em;
+    text-transform: uppercase; color: var(--accent); margin-bottom: 20px;
+  }
+  .cover h1 {
+    font-family: var(--serif); font-size: clamp(28px, 4vw, 42px);
+    line-height: 1.2; font-weight: 700; margin-bottom: 16px;
+  }
+  .cover-sub {
+    font-size: 16px; color: rgba(255,255,255,0.65); max-width: 580px; line-height: 1.6;
+    margin-bottom: 36px;
+  }
+  .cover-pills { display: flex; flex-wrap: wrap; gap: 10px; }
+  .pill {
+    font-size: 11px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase;
+    padding: 5px 14px; border-radius: 20px; border: 1px solid rgba(255,255,255,0.2);
+    color: rgba(255,255,255,0.8);
+  }
+  .pill-red { background: rgba(176,48,48,0.3); border-color: rgba(176,48,48,0.6); color: #f4a7a7; }
+
+  .kpi-row {
+    display: grid; grid-template-columns: repeat(4, 1fr);
+    background: var(--bg-soft); border-bottom: 1px solid var(--rule);
+  }
+  .kpi-cell {
+    padding: 24px 28px; border-right: 1px solid var(--rule);
+  }
+  .kpi-cell:last-child { border-right: none; }
+  .kpi-label { font-size: 10px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
+  .kpi-val { font-family: var(--serif); font-size: 26px; font-weight: 700; color: var(--navy); line-height: 1; margin-bottom: 4px; }
+  .kpi-desc { font-size: 11.5px; color: var(--muted); }
+  .kpi-badge { display: inline-block; font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 12px; }
+  .badge-red   { background: #fdeaea; color: #8b1a1a; }
+  .badge-amber { background: #fdf4e7; color: #8a5d0e; }
+  .badge-blue  { background: #eef4fb; color: #1f548a; }
+
+  .body { max-width: 860px; margin: 0 auto; padding: 52px 40px 80px; }
+
+  h2 {
+    font-family: var(--serif); font-size: 20px; font-weight: 700;
+    color: var(--navy); margin-bottom: 14px; padding-bottom: 10px;
+    border-bottom: 1.5px solid var(--rule);
+  }
+  h3 { font-family: var(--serif); font-size: 16px; color: var(--ink); margin-bottom: 10px; margin-top: 24px; }
+  p { font-size: 14.5px; color: var(--mid); margin-bottom: 16px; line-height: 1.75; }
+  p strong { color: var(--ink); font-weight: 600; }
+  .section { margin-bottom: 48px; }
+
+  .pipeline { display: flex; flex-direction: column; gap: 0; margin-bottom: 8px; }
+  .step {
+    display: flex; gap: 20px; align-items: flex-start;
+    padding: 20px 24px; background: var(--bg-soft);
+    border: 1px solid var(--rule); border-bottom: none;
+  }
+  .step:first-child { border-radius: 10px 10px 0 0; }
+  .step:last-child { border-bottom: 1px solid var(--rule); border-radius: 0 0 10px 10px; }
+  .step-num {
+    width: 32px; height: 32px; border-radius: 50%; background: var(--navy);
+    color: #fff; font-size: 13px; font-weight: 700; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center; margin-top: 1px;
+  }
+  .step-body { flex: 1; }
+  .step-title { font-size: 14px; font-weight: 600; color: var(--ink); margin-bottom: 5px; }
+  .step-desc { font-size: 13.5px; color: var(--mid); line-height: 1.65; }
+  .step-code { font-family: var(--mono); font-size: 12px; color: var(--navy-lt); margin-top: 6px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; margin-bottom: 8px; }
+  thead th {
+    background: var(--navy); color: #fff; font-size: 11px; font-weight: 600;
+    letter-spacing: 0.1em; text-transform: uppercase; padding: 10px 14px; text-align: left;
+  }
+  tbody tr { border-bottom: 1px solid var(--rule); }
+  tbody tr:last-child { border-bottom: none; }
+  tbody td { padding: 11px 14px; color: var(--mid); vertical-align: top; }
+  tbody tr:nth-child(even) td { background: var(--bg-soft); }
+  td strong { color: var(--ink); }
+  td code { font-family: var(--mono); font-size: 11.5px; background: var(--bg-alt); padding: 2px 6px; border-radius: 4px; color: var(--navy-lt); }
+
+  .callout {
+    background: var(--bg-alt); border-left: 3px solid var(--navy);
+    padding: 16px 20px; border-radius: 0 8px 8px 0; margin: 20px 0;
+    font-size: 14px; color: var(--mid); line-height: 1.65;
+  }
+  .callout strong { color: var(--navy); }
+  .callout-warn { border-left-color: #c8a84b; background: #fdf9ee; }
+  .callout-warn strong { color: #7a5c10; }
+  .callout-danger { border-left-color: #b03030; background: #fef5f5; }
+  .callout-danger strong { color: #8b1a1a; }
+
+  .int-grid {
+    display: grid; grid-template-columns: 1fr 40px 1fr 40px 1fr;
+    align-items: center; gap: 0; margin: 24px 0;
+  }
+  .int-box {
+    background: var(--bg-soft); border: 1.5px solid var(--rule); border-radius: 8px;
+    padding: 16px 18px; text-align: center;
+  }
+  .int-box .int-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted); margin-bottom: 5px; }
+  .int-box .int-name { font-size: 13.5px; font-weight: 600; color: var(--navy); }
+  .int-box .int-tech { font-family: var(--mono); font-size: 11px; color: var(--muted); margin-top: 4px; }
+  .int-arrow { text-align: center; font-size: 18px; color: var(--rule); }
+
+  .framing-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 20px 0;
+  }
+  .framing-box {
+    padding: 18px 20px; border-radius: 8px; border: 1.5px solid var(--rule);
+  }
+  .framing-box.bad { border-color: #f4c4c4; background: #fef8f8; }
+  .framing-box.good { border-color: #b5d9b5; background: #f0f9f0; }
+  .framing-box .framing-label { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; margin-bottom: 10px; }
+  .bad .framing-label { color: #8b1a1a; }
+  .good .framing-label { color: #2d6a2d; }
+  .framing-box p { font-size: 13.5px; margin-bottom: 0; }
+
+  .risk-row { display: flex; align-items: flex-start; gap: 14px; padding: 14px 0; border-bottom: 1px solid var(--rule); }
+  .risk-row:last-child { border-bottom: none; }
+  .risk-pill { font-size: 10px; font-weight: 700; padding: 3px 10px; border-radius: 12px; white-space: nowrap; margin-top: 2px; flex-shrink: 0; }
+  .risk-high { background: #fdeaea; color: #8b1a1a; }
+  .risk-med  { background: #fdf4e7; color: #8a5d0e; }
+  .risk-low  { background: #eaf4ea; color: #2d6a2d; }
+  .risk-text { font-size: 13.5px; color: var(--mid); line-height: 1.6; }
+  .risk-text strong { color: var(--ink); }
+
+  footer {
+    background: #0f2740; color: rgba(255,255,255,0.5);
+    font-size: 11.5px; padding: 20px 40px;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  footer strong { color: rgba(255,255,255,0.8); }
+
+  @media (max-width: 680px) {
+    .cover { padding: 40px 24px 36px; }
+    .kpi-row { grid-template-columns: repeat(2, 1fr); }
+    .body { padding: 32px 20px 60px; }
+    .int-grid { grid-template-columns: 1fr; }
+    .framing-grid { grid-template-columns: 1fr; }
+    footer { flex-direction: column; gap: 6px; text-align: center; }
+  }
+</style>
+</head>
+<body>
+
+<!-- COVER -->
+<div class="cover">
+  <div class="cover-meta">Agricultural Dashboard · Prediction Module 02 · March 2026</div>
+  <h1>Commodity Price<br>Forecasting Pipeline</h1>
+  <p class="cover-sub">Analysis architecture, probabilistic framing, signal integration, and webapp design for 1–6 month corn, soybean, and wheat price forecasting as decision support for farmers, lenders, and grain merchants.</p>
+  <div class="cover-pills">
+    <span class="pill">Option 2 — Hardest to Beat</span>
+    <span class="pill pill-red">Difficulty: Hard</span>
+    <span class="pill">Timeline: 4–6 weeks</span>
+    <span class="pill">Output: Monthly</span>
+  </div>
+</div>
+
+<!-- KPI ROW -->
+<div class="kpi-row">
+  <div class="kpi-cell">
+    <div class="kpi-label">Accuracy Target</div>
+    <div class="kpi-val">5–15%</div>
+    <div class="kpi-desc">MAPE; degrades at 6+ month horizon</div>
+  </div>
+  <div class="kpi-cell">
+    <div class="kpi-label">Forecast Horizon</div>
+    <div class="kpi-val">1–6 mo</div>
+    <div class="kpi-desc">Reliable at 1–3 months; probabilistic at 4–6</div>
+  </div>
+  <div class="kpi-cell">
+    <div class="kpi-label">Market Efficiency</div>
+    <div class="kpi-val"><span class="kpi-badge badge-red">High</span></div>
+    <div class="kpi-desc">Futures already price in most signals</div>
+  </div>
+  <div class="kpi-cell">
+    <div class="kpi-label">Build Difficulty</div>
+    <div class="kpi-val"><span class="kpi-badge badge-amber">Hard</span></div>
+    <div class="kpi-desc">4 of 5 · Hardest module to show ML edge</div>
+  </div>
+</div>
+
+<!-- BODY -->
+<div class="body">
+
+  <!-- SECTION 1: STRATEGIC FRAMING -->
+  <div class="section">
+    <h2>1. Strategic Framing: Decision Support, Not a Crystal Ball</h2>
+    <p>Grain futures markets are among the most efficient in commodity finance — prices integrate weather forecasts, WASDE supply/demand reports, dollar movements, and global trade flows almost immediately. A model that claims to reliably beat the futures curve is making an extraordinary claim and should be treated with skepticism.</p>
+
+    <div class="callout callout-danger">
+      <strong>Fundamental constraint:</strong> The futures price <em>is</em> the market's best prediction. Any ML model attempting to beat it must either incorporate a signal the market hasn't priced yet, or exploit a systematic behavioral bias in how participants react to public information. Both are difficult to sustain at scale.
+    </div>
+
+    <p>The right framing reorients the module's value proposition entirely. The genuine utility is in <strong>surfacing when fundamental signals look unusual relative to the current futures curve</strong> and presenting that in a probability format farmers can act on — not in predicting the exact price.</p>
+
+    <div class="framing-grid">
+      <div class="framing-box bad">
+        <div class="framing-label">❌ Wrong Framing</div>
+        <p style="color:#6b2a2a;">"Our model predicts corn at $4.37 in October" — presents a single number that implies precision the model doesn't have and that the futures market likely already reflects.</p>
+      </div>
+      <div class="framing-box good">
+        <div class="framing-label">✓ Correct Framing</div>
+        <p style="color:#1d5a1d;">"Based on current fundamentals, there is a 64% probability corn stays above $4.20 through October — WASDE stocks-to-use is historically tight at this level."</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- SECTION 2: DATA SOURCES -->
+  <div class="section">
+    <h2>2. Tech Sources &amp; Data Inputs</h2>
+    <p>Commodity price modeling draws from the broadest signal set of all three modules — market microstructure, fundamental supply/demand, weather, and macroeconomic drivers all carry predictive content at different time horizons.</p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Source</th>
+          <th>Data Pulled</th>
+          <th>Access</th>
+          <th>Horizon Relevance</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>CME Futures (Nasdaq Data Link)</strong></td>
+          <td>Corn, soybean, wheat daily settlement prices; open interest; volume; term structure (near/deferred)</td>
+          <td><code>data.nasdaq.com/api/v3</code> — Free tier 50 calls/day</td>
+          <td>1–6 months</td>
+        </tr>
+        <tr>
+          <td><strong>USDA WASDE</strong></td>
+          <td>Monthly world supply/demand report — ending stocks, production estimates, export projections; stocks-to-use ratio</td>
+          <td>Free CSV/PDF release; parse monthly</td>
+          <td>1–6 months</td>
+        </tr>
+        <tr>
+          <td><strong>USDA NASS QuickStats</strong></td>
+          <td>Crop condition ratings, planting progress, harvest progress — leading indicators for supply side</td>
+          <td>Already in pipeline</td>
+          <td>1–3 months</td>
+        </tr>
+        <tr>
+          <td><strong>NOAA Seasonal Outlooks</strong></td>
+          <td>3-month temperature and precipitation probability outlooks for major production regions — translates to yield risk</td>
+          <td><code>api.weather.gov</code> — Free, no auth</td>
+          <td>3–6 months</td>
+        </tr>
+        <tr>
+          <td><strong>US Dollar Index (DXY)</strong></td>
+          <td>Daily DXY value — strong dollar suppresses US grain export demand; strong negative correlation with corn/soy prices</td>
+          <td>FRED API (<code>api.stlouisfed.org</code>) — Free API key</td>
+          <td>1–6 months</td>
+        </tr>
+        <tr>
+          <td><strong>USDA ERS Production Costs</strong></td>
+          <td>Annual cost of production per commodity — defines price floor; farmers resist selling below breakeven</td>
+          <td>Free annual download</td>
+          <td>Annual structural</td>
+        </tr>
+        <tr>
+          <td><strong>US Drought Monitor</strong></td>
+          <td>Weekly drought extent in major production states — drought shock is the single fastest-moving supply signal</td>
+          <td>REST API, no auth</td>
+          <td>1–2 months</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>Signal Priority by Horizon</h3>
+    <p>Different signals dominate at different forecast horizons. At <strong>1–2 months</strong>, market microstructure (open interest, basis, term structure spread) and current drought conditions are highest-weight inputs. At <strong>3–4 months</strong>, WASDE stocks-to-use and seasonal outlook dominate. At <strong>5–6 months</strong>, macroeconomic signals (DXY, export pace) and production cost floors become the relevant anchors, and uncertainty is high enough that probabilistic output is the only honest representation.</p>
+  </div>
+
+  <!-- SECTION 3: MODEL IMPLEMENTATION -->
+  <div class="section">
+    <h2>3. Model Implementation</h2>
+
+    <h3>Architecture: Ensemble + Probabilistic Calibration</h3>
+    <p>Given the efficient market challenge, the optimal strategy is an ensemble of diverse model types — each capturing different market regimes — combined with isotonic regression calibration on the probability outputs so that "60% probability above $4.20" is actually correct 60% of the time historically.</p>
+
+    <div class="pipeline">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-body">
+          <div class="step-title">Feature Assembly: Multi-Horizon Feature Matrix</div>
+          <div class="step-desc">Build separate feature sets for 1-month, 3-month, and 6-month horizons. The 1-month matrix is rich with market signals; the 6-month matrix relies more on structural fundamentals. Avoid using features that won't be available at inference time (e.g., don't use "month T+1 WASDE" as a training feature if you're forecasting month T+1).</div>
+          <div class="step-code">features_1m: [futures_basis, open_interest_change, drought_extent, wasde_stocks_use, dxy]
+features_6m: [wasde_stocks_use, noaa_seasonal_precip, production_cost, prior_year_price_regime]</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-body">
+          <div class="step-title">Baseline: Futures Curve + Seasonal Adjustment</div>
+          <div class="step-desc">The primary benchmark is the CME futures curve itself — this is what any ML model must beat to add value. Compute a seasonally adjusted futures-implied forward price. If the ML model's MAPE is not statistically better than this baseline in walk-forward testing, the UI should default to displaying the futures curve as the forecast, augmented with fundamental commentary only.</div>
+          <div class="step-code">baseline_forecast = futures_settlement[horizon_month] * seasonal_factor(month, crop)</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-body">
+          <div class="step-title">Ensemble: ARIMAX + Gradient Boosting + Quantile Regression</div>
+          <div class="step-desc">Three model types cover different regimes. ARIMAX captures autocorrelation and WASDE surprise effects. XGBoost captures nonlinear interactions between drought, dollar, and market positioning. Quantile regression (LightGBM) provides the probability bands. Ensemble weights are learned via a simple linear meta-learner trained on walk-forward OOF predictions.</div>
+          <div class="step-code">ensemble_pred = w1*arimax + w2*xgb + w3*quantile_median  (weights learned from OOF)</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">4</div>
+        <div class="step-body">
+          <div class="step-title">Probability Calibration</div>
+          <div class="step-desc">Convert model output to calibrated probabilities using isotonic regression. Train calibration on 2018–2022 hold-out period. Calibrated probabilities are more useful to farmers than raw predictions — "64% chance above $4.20" is actionable; "predicted price: $4.31" creates false precision.</div>
+          <div class="step-code">from sklearn.calibration import CalibratedClassifierCV
+calibrated = CalibratedClassifierCV(base_model, method='isotonic', cv='prefit')</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">5</div>
+        <div class="step-body">
+          <div class="step-title">WASDE Surprise Signal</div>
+          <div class="step-desc">Build a dedicated WASDE surprise detector — compute the difference between WASDE monthly release and consensus analyst estimates (scraped from Bloomberg/Reuters summaries or estimated from prior-month WASDE). Large positive/negative surprises generate short-term price impulses that the model can anticipate directionally. This is one of the few genuine edges available.</div>
+          <div class="step-code">wasde_surprise = wasde_release_stocks_use - prior_month_stocks_use_estimate</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">6</div>
+        <div class="step-body">
+          <div class="step-title">Output Storage</div>
+          <div class="step-desc">Monthly forecasts written to PostgreSQL. Table stores point forecast, probability bands, model confidence tier, and a human-readable "key driver" label identifying the top SHAP-important feature for that month's forecast — surfaced in the UI as a plain-language explanation.</div>
+          <div class="step-code">price_forecasts(crop, horizon_month, p10, p50, p90, prob_above_threshold, key_driver, model_ver)</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="callout">
+      <strong>When the model should defer to the futures curve:</strong> If walk-forward MAPE on the 6-month horizon is within 1.5 percentage points of the futures-implied baseline, the module should display the futures curve as the primary forecast and present the ML ensemble as a "fundamental divergence signal" only — flagging when supply/demand fundamentals are historically inconsistent with the current futures level.
+    </div>
+  </div>
+
+  <!-- SECTION 4: INTEGRATION -->
+  <div class="section">
+    <h2>4. Integration with the Agricultural Webapp</h2>
+
+    <div class="int-grid">
+      <div class="int-box">
+        <div class="int-label">Data Layer</div>
+        <div class="int-name">PostgreSQL</div>
+        <div class="int-tech">price_forecasts<br>wasde_releases<br>futures_daily</div>
+      </div>
+      <div class="int-arrow">→</div>
+      <div class="int-box">
+        <div class="int-label">API Layer</div>
+        <div class="int-name">FastAPI</div>
+        <div class="int-tech">GET /predict/price<br>GET /predict/price/probability</div>
+      </div>
+      <div class="int-arrow">→</div>
+      <div class="int-box">
+        <div class="int-label">UI Layer</div>
+        <div class="int-name">Next.js</div>
+        <div class="int-tech">Fan chart (p10–p90)<br>Probability gauge<br>Key driver callout</div>
+      </div>
+    </div>
+
+    <h3>API Endpoints</h3>
+    <table>
+      <thead>
+        <tr><th>Endpoint</th><th>Parameters</th><th>Returns</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>GET /predict/price</code></td>
+          <td><code>crop</code>, <code>horizon_months</code></td>
+          <td>p10/p50/p90 price forecast, key driver label, model vs. futures divergence flag</td>
+        </tr>
+        <tr>
+          <td><code>GET /predict/price/probability</code></td>
+          <td><code>crop</code>, <code>threshold_price</code>, <code>horizon_months</code></td>
+          <td>Calibrated probability of price exceeding threshold — powers "sell decision" gauge</td>
+        </tr>
+        <tr>
+          <td><code>GET /predict/price/wasde-signal</code></td>
+          <td><code>crop</code>, <code>release_date</code></td>
+          <td>Most recent WASDE surprise score and historical price reaction context</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>Key UI Components</h3>
+    <p><strong>Fan chart (price trajectory):</strong> 6-month forward view showing p10–p90 bands widening with horizon. The CME futures curve overlays as a reference line — visual divergence between model and futures is immediately apparent. <strong>Probability gauge:</strong> A single prominent number — "67% chance corn stays above $4.20 through October" — with a slider allowing the farmer to input their own breakeven price and get a personalized probability. <strong>Key driver callout:</strong> Plain-language card explaining what is driving the current forecast — "Current forecast driven primarily by tight WASDE stocks-to-use (1.8 billion bushels — 5th lowest in 20 years)." <strong>Regime alert:</strong> Highlights when current fundamentals are historically unusual relative to the current futures level — the genuine ML edge surfaced as a signal, not a price prediction.</p>
+
+    <h3>Update Cadence</h3>
+    <p>Model reruns monthly, triggered the day after each WASDE release (typically the 11th of each month). The WASDE surprise signal updates immediately on release day. Daily futures prices update via the Nasdaq Data Link API pull running as part of the existing morning ETL job.</p>
+  </div>
+
+  <!-- SECTION 5: RISKS -->
+  <div class="section">
+    <h2>5. Risks &amp; Mitigations</h2>
+    <div class="risk-row">
+      <div class="risk-pill risk-high">High</div>
+      <div class="risk-text"><strong>Model alpha erosion over time.</strong> Any predictive edge in efficient markets tends to decay as more participants use similar signals. Mitigation: Annual model re-evaluation against the futures baseline; maintain strict walk-forward testing and retire signals that no longer add value over the benchmark.</div>
+    </div>
+    <div class="risk-row">
+      <div class="risk-pill risk-high">High</div>
+      <div class="risk-text"><strong>False confidence in probability output.</strong> Farmers may treat calibrated probabilities as certainties. Mitigation: Always display the uncertainty band prominently; include plain-language disclaimer — "This is a probability estimate, not a guarantee. Use alongside your agronomist and grain merchandiser."</div>
+    </div>
+    <div class="risk-row">
+      <div class="risk-pill risk-high">High</div>
+      <div class="risk-text"><strong>Black swan events render model useless.</strong> Export bans, geopolitical shocks (Russia/Ukraine 2022), and pandemic disruptions are not captured in historical patterns. Mitigation: Add a "regime anomaly" flag that triggers when current market conditions are statistically outside the training distribution; suppress model output and display raw futures curve in those periods.</div>
+    </div>
+    <div class="risk-row">
+      <div class="risk-pill risk-med">Medium</div>
+      <div class="risk-text"><strong>Nasdaq Data Link free tier limitations.</strong> 50 API calls/day may constrain daily futures data for multiple commodities. Mitigation: Cache daily settlements in PostgreSQL; single pull per day per commodity is sufficient at this update frequency.</div>
+    </div>
+    <div class="risk-row">
+      <div class="risk-pill risk-low">Low</div>
+      <div class="risk-text"><strong>WASDE PDF parsing brittleness.</strong> USDA occasionally reformats WASDE PDF layouts, breaking automated parsers. Mitigation: Fall back to the machine-readable CSV release format (available since 2020) rather than PDF parsing.</div>
+    </div>
+  </div>
+
+  <!-- SECTION 6: MILESTONES -->
+  <div class="section">
+    <h2>6. Delivery Milestones</h2>
+    <table>
+      <thead>
+        <tr><th>Week</th><th>Deliverable</th><th>Owner</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><strong>1</strong></td><td>CME futures + WASDE + FRED DXY ingestion pipeline; historical data backfill to 2010</td><td>Backend</td></tr>
+        <tr><td><strong>2</strong></td><td>Feature engineering: basis, term structure spread, WASDE stocks-to-use, seasonal adjustment</td><td>Data Science</td></tr>
+        <tr><td><strong>3</strong></td><td>Baseline model (futures curve + seasonal) + ARIMAX + XGBoost training; walk-forward validation</td><td>Data Science</td></tr>
+        <tr><td><strong>4</strong></td><td>Ensemble meta-learner + probability calibration; regime anomaly detector</td><td>Data Science</td></tr>
+        <tr><td><strong>5</strong></td><td>FastAPI endpoints + PostgreSQL schema; WASDE surprise signal integration</td><td>Backend</td></tr>
+        <tr><td><strong>6</strong></td><td>Frontend fan chart, probability gauge, key driver callout; monthly cron job live</td><td>Frontend</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+</div>
+
+<footer>
+  <span><strong>Agricultural Dashboard</strong> · Prediction Module 02 — Commodity Price Forecasting</span>
+  <span>Internal Pipeline Report · March 2026 · QuickStats SII Project</span>
+</footer>
+
+</body>
+</html>

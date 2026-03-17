@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Report 03 — Planted Acreage Prediction Pipeline</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --navy:    #1a3a5c;
+    --navy-lt: #2a5080;
+    --ink:     #0f1923;
+    --mid:     #4a5568;
+    --muted:   #718096;
+    --rule:    #dde3ea;
+    --bg:      #ffffff;
+    --bg-soft: #f7f9fb;
+    --bg-alt:  #eef2f7;
+    --accent:  #c8a84b;
+    --green:   #2a7a4b;
+    --serif:   'Libre Baskerville', Georgia, serif;
+    --sans:    'Geist', system-ui, sans-serif;
+    --mono:    'Geist Mono', monospace;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: var(--sans); font-size: 15px; line-height: 1.7; color: var(--ink); background: var(--bg); }
+
+  .cover {
+    background: #1a4030;
+    color: #fff;
+    padding: 72px 80px 60px;
+  }
+  .cover-meta {
+    font-size: 11px; font-weight: 600; letter-spacing: 0.18em;
+    text-transform: uppercase; color: var(--accent); margin-bottom: 20px;
+  }
+  .cover h1 {
+    font-family: var(--serif); font-size: clamp(28px, 4vw, 42px);
+    line-height: 1.2; font-weight: 700; margin-bottom: 16px;
+  }
+  .cover-sub {
+    font-size: 16px; color: rgba(255,255,255,0.65); max-width: 580px; line-height: 1.6;
+    margin-bottom: 36px;
+  }
+  .cover-pills { display: flex; flex-wrap: wrap; gap: 10px; }
+  .pill {
+    font-size: 11px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase;
+    padding: 5px 14px; border-radius: 20px; border: 1px solid rgba(255,255,255,0.2);
+    color: rgba(255,255,255,0.8);
+  }
+  .pill-blue { background: rgba(42,80,128,0.4); border-color: rgba(100,160,220,0.6); color: #a8d0f0; }
+
+  .kpi-row {
+    display: grid; grid-template-columns: repeat(4, 1fr);
+    background: var(--bg-soft); border-bottom: 1px solid var(--rule);
+  }
+  .kpi-cell {
+    padding: 24px 28px; border-right: 1px solid var(--rule);
+  }
+  .kpi-cell:last-child { border-right: none; }
+  .kpi-label { font-size: 10px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
+  .kpi-val { font-family: var(--serif); font-size: 26px; font-weight: 700; color: var(--navy); line-height: 1; margin-bottom: 4px; }
+  .kpi-desc { font-size: 11.5px; color: var(--muted); }
+  .kpi-badge { display: inline-block; font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 12px; }
+  .badge-green { background: #eaf4ea; color: #2d6a2d; }
+  .badge-blue  { background: #eef4fb; color: #1f548a; }
+
+  .body { max-width: 860px; margin: 0 auto; padding: 52px 40px 80px; }
+
+  h2 {
+    font-family: var(--serif); font-size: 20px; font-weight: 700;
+    color: var(--navy); margin-bottom: 14px; padding-bottom: 10px;
+    border-bottom: 1.5px solid var(--rule);
+  }
+  h3 { font-family: var(--serif); font-size: 16px; color: var(--ink); margin-bottom: 10px; margin-top: 24px; }
+  p { font-size: 14.5px; color: var(--mid); margin-bottom: 16px; line-height: 1.75; }
+  p strong { color: var(--ink); font-weight: 600; }
+  .section { margin-bottom: 48px; }
+
+  .pipeline { display: flex; flex-direction: column; gap: 0; margin-bottom: 8px; }
+  .step {
+    display: flex; gap: 20px; align-items: flex-start;
+    padding: 20px 24px; background: var(--bg-soft);
+    border: 1px solid var(--rule); border-bottom: none;
+  }
+  .step:first-child { border-radius: 10px 10px 0 0; }
+  .step:last-child { border-bottom: 1px solid var(--rule); border-radius: 0 0 10px 10px; }
+  .step-num {
+    width: 32px; height: 32px; border-radius: 50%; background: var(--navy);
+    color: #fff; font-size: 13px; font-weight: 700; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center; margin-top: 1px;
+  }
+  .step-body { flex: 1; }
+  .step-title { font-size: 14px; font-weight: 600; color: var(--ink); margin-bottom: 5px; }
+  .step-desc { font-size: 13.5px; color: var(--mid); line-height: 1.65; }
+  .step-code { font-family: var(--mono); font-size: 12px; color: var(--navy-lt); margin-top: 6px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; margin-bottom: 8px; }
+  thead th {
+    background: var(--navy); color: #fff; font-size: 11px; font-weight: 600;
+    letter-spacing: 0.1em; text-transform: uppercase; padding: 10px 14px; text-align: left;
+  }
+  tbody tr { border-bottom: 1px solid var(--rule); }
+  tbody tr:last-child { border-bottom: none; }
+  tbody td { padding: 11px 14px; color: var(--mid); vertical-align: top; }
+  tbody tr:nth-child(even) td { background: var(--bg-soft); }
+  td strong { color: var(--ink); }
+  td code { font-family: var(--mono); font-size: 11.5px; background: var(--bg-alt); padding: 2px 6px; border-radius: 4px; color: var(--navy-lt); }
+
+  .callout {
+    background: var(--bg-alt); border-left: 3px solid var(--navy);
+    padding: 16px 20px; border-radius: 0 8px 8px 0; margin: 20px 0;
+    font-size: 14px; color: var(--mid); line-height: 1.65;
+  }
+  .callout strong { color: var(--navy); }
+  .callout-green { border-left-color: #2a7a4b; background: #f0f9f4; }
+  .callout-green strong { color: #1d5a35; }
+  .callout-warn { border-left-color: #c8a84b; background: #fdf9ee; }
+  .callout-warn strong { color: #7a5c10; }
+
+  .int-grid {
+    display: grid; grid-template-columns: 1fr 40px 1fr 40px 1fr;
+    align-items: center; gap: 0; margin: 24px 0;
+  }
+  .int-box {
+    background: var(--bg-soft); border: 1.5px solid var(--rule); border-radius: 8px;
+    padding: 16px 18px; text-align: center;
+  }
+  .int-box .int-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted); margin-bottom: 5px; }
+  .int-box .int-name { font-size: 13.5px; font-weight: 600; color: var(--navy); }
+  .int-box .int-tech { font-family: var(--mono); font-size: 11px; color: var(--muted); margin-top: 4px; }
+  .int-arrow { text-align: center; font-size: 18px; color: var(--rule); }
+
+  /* Calendar timeline */
+  .timeline { display: flex; gap: 0; margin: 24px 0; }
+  .tl-item { flex: 1; text-align: center; position: relative; }
+  .tl-item::before {
+    content: ''; position: absolute; top: 14px; left: 50%; right: -50%;
+    height: 2px; background: var(--rule); z-index: 0;
+  }
+  .tl-item:last-child::before { display: none; }
+  .tl-dot {
+    width: 28px; height: 28px; border-radius: 50%; background: var(--bg);
+    border: 2px solid var(--rule); margin: 0 auto 8px; position: relative; z-index: 1;
+    display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: var(--muted);
+  }
+  .tl-dot.active { background: var(--navy); border-color: var(--navy); color: #fff; }
+  .tl-dot.accent { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .tl-month { font-size: 11px; font-weight: 600; color: var(--muted); margin-bottom: 4px; }
+  .tl-label { font-size: 11.5px; color: var(--mid); line-height: 1.4; }
+
+  .risk-row { display: flex; align-items: flex-start; gap: 14px; padding: 14px 0; border-bottom: 1px solid var(--rule); }
+  .risk-row:last-child { border-bottom: none; }
+  .risk-pill { font-size: 10px; font-weight: 700; padding: 3px 10px; border-radius: 12px; white-space: nowrap; margin-top: 2px; flex-shrink: 0; }
+  .risk-high { background: #fdeaea; color: #8b1a1a; }
+  .risk-med  { background: #fdf4e7; color: #8a5d0e; }
+  .risk-low  { background: #eaf4ea; color: #2d6a2d; }
+  .risk-text { font-size: 13.5px; color: var(--mid); line-height: 1.6; }
+  .risk-text strong { color: var(--ink); }
+
+  /* Infra reuse box */
+  .reuse-box {
+    background: #f0f9f4; border: 1.5px solid #b5d9b5; border-radius: 8px;
+    padding: 20px 24px; margin: 20px 0;
+  }
+  .reuse-box h4 { font-size: 13px; font-weight: 700; color: #1d5a35; margin-bottom: 12px; letter-spacing: 0.05em; text-transform: uppercase; }
+  .reuse-row { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 8px; }
+  .reuse-row:last-child { margin-bottom: 0; }
+  .check { color: #2a7a4b; font-size: 14px; flex-shrink: 0; margin-top: 1px; }
+  .reuse-text { font-size: 13.5px; color: #2a4a38; }
+
+  footer {
+    background: #1a4030; color: rgba(255,255,255,0.5);
+    font-size: 11.5px; padding: 20px 40px;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  footer strong { color: rgba(255,255,255,0.8); }
+
+  @media (max-width: 680px) {
+    .cover { padding: 40px 24px 36px; }
+    .kpi-row { grid-template-columns: repeat(2, 1fr); }
+    .body { padding: 32px 20px 60px; }
+    .int-grid { grid-template-columns: 1fr; }
+    .timeline { flex-direction: column; gap: 8px; }
+    .tl-item::before { display: none; }
+    footer { flex-direction: column; gap: 6px; text-align: center; }
+  }
+</style>
+</head>
+<body>
+
+<!-- COVER -->
+<div class="cover">
+  <div class="cover-meta">Agricultural Dashboard · Prediction Module 03 · March 2026</div>
+  <h1>Planted Acreage<br>Prediction Pipeline</h1>
+  <p class="cover-sub">Analysis architecture, data sources, model implementation, and webapp integration for pre-season state-level planted acreage forecasting for corn, soybeans, and wheat — beating the USDA Prospective Plantings release window.</p>
+  <div class="cover-pills">
+    <span class="pill">Option 3 — Build Second</span>
+    <span class="pill pill-blue">Difficulty: Easier</span>
+    <span class="pill">Timeline: 2–3 weeks</span>
+    <span class="pill">Output: Annual / Pre-season</span>
+  </div>
+</div>
+
+<!-- KPI ROW -->
+<div class="kpi-row">
+  <div class="kpi-cell">
+    <div class="kpi-label">Accuracy Target</div>
+    <div class="kpi-val">5–10%</div>
+    <div class="kpi-desc">MAPE at state level; county harder</div>
+  </div>
+  <div class="kpi-cell">
+    <div class="kpi-label">Key Window</div>
+    <div class="kpi-val">Feb–Mar</div>
+    <div class="kpi-desc">Forecast issued before USDA March 31 release</div>
+  </div>
+  <div class="kpi-cell">
+    <div class="kpi-label">Infra Reuse</div>
+    <div class="kpi-val"><span class="kpi-badge badge-green">High</span></div>
+    <div class="kpi-desc">Most data already in existing pipeline</div>
+  </div>
+  <div class="kpi-cell">
+    <div class="kpi-label">Build Difficulty</div>
+    <div class="kpi-val"><span class="kpi-badge badge-blue">Easier</span></div>
+    <div class="kpi-desc">2 of 5 · High infra leverage from Module 01</div>
+  </div>
+</div>
+
+<!-- BODY -->
+<div class="body">
+
+  <!-- SECTION 1: OVERVIEW -->
+  <div class="section">
+    <h2>1. What This Module Does</h2>
+    <p>The Planted Acreage Prediction module forecasts how many acres of corn, soybeans, and wheat farmers will plant in the upcoming growing season — <strong>issued in February, six or more weeks before USDA's official Prospective Plantings report</strong> (released annually on March 31). The model uses pre-season economic signals: futures price ratios, input costs, prior-year yields, and crop rotation patterns.</p>
+
+    <p>Sample output: <em>"2026 U.S. corn planted acreage forecast: 91.2 million acres (±4.1M) — soybean competition elevated due to current corn/soy price ratio of 2.31, slightly below the historical threshold favoring corn."</em></p>
+
+    <div class="callout callout-green">
+      <strong>Why this module is a strong second build:</strong> It shares infrastructure almost entirely with Module 01 — USDA NASS QuickStats is already in the pipeline, CME futures data added for Module 02 is reused here, and the PostgreSQL schema extends cleanly. The model itself is simpler than yield prediction. Estimated build time after Phase 1 infra: 2–3 weeks.
+    </div>
+
+    <h3>The Market Timing Opportunity</h3>
+    <p>USDA's Prospective Plantings report (March 31) and its predecessor Grain Stocks report move grain markets substantially when they surprise analysts. The value of this module is publishing a well-reasoned forecast in <strong>February</strong> — giving traders, cooperatives, and input suppliers 6+ weeks of advance visibility. Even an imperfect forecast published early is commercially valuable to users who need to make operational commitments before the USDA print.</p>
+  </div>
+
+  <!-- SECTION 2: SEASONAL CALENDAR -->
+  <div class="section">
+    <h2>2. The Planting Decision Calendar</h2>
+    <p>Farmers finalize planting decisions based on a sequence of economic signals that crystallize from fall through early spring. Understanding this decision timeline informs exactly which features the model should use and when they become available.</p>
+
+    <div class="timeline">
+      <div class="tl-item">
+        <div class="tl-dot active">O</div>
+        <div class="tl-month">Oct–Nov</div>
+        <div class="tl-label">Futures price ratios (corn/soy) settle; crop rotation intentions form</div>
+      </div>
+      <div class="tl-item">
+        <div class="tl-dot active">D</div>
+        <div class="tl-month">Dec–Jan</div>
+        <div class="tl-label">Input cost signals: fertilizer prices, seed contracts finalized</div>
+      </div>
+      <div class="tl-item">
+        <div class="tl-dot accent">F</div>
+        <div class="tl-month">Feb</div>
+        <div class="tl-label"><strong>Model forecast published</strong> — all signals available, pre-USDA window</div>
+      </div>
+      <div class="tl-item">
+        <div class="tl-dot">M</div>
+        <div class="tl-month">Mar 31</div>
+        <div class="tl-label">USDA Prospective Plantings report — market baseline</div>
+      </div>
+      <div class="tl-item">
+        <div class="tl-dot">A–M</div>
+        <div class="tl-month">Apr–May</div>
+        <div class="tl-label">Actual planting; weather may force last-minute switches</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SECTION 3: DATA SOURCES -->
+  <div class="section">
+    <h2>3. Tech Sources &amp; Data Inputs</h2>
+    <p>Acreage prediction is driven by economic incentives — what crop pays best given current prices and costs — combined with agronomic constraints around rotation and soil fit. The data landscape is deliberately narrow compared to yield prediction.</p>
+
+    <div class="reuse-box">
+      <h4>✦ Infrastructure already available (no new setup)</h4>
+      <div class="reuse-row"><span class="check">✓</span><span class="reuse-text"><strong>USDA NASS QuickStats:</strong> Historical planted acreage by state/crop going back to 1980. Already in PostgreSQL pipeline. Pull <code>statisticcat_desc=AREA PLANTED</code>.</span></div>
+      <div class="reuse-row"><span class="check">✓</span><span class="reuse-text"><strong>CME Futures (Nasdaq Data Link):</strong> Corn/soybean/wheat December futures prices (harvest-period contracts) — the core economic signal. Added for Module 02, reused here.</span></div>
+      <div class="reuse-row"><span class="check">✓</span><span class="reuse-text"><strong>USDA NASS prior-year yields:</strong> Prior-season county/state yields already in pipeline — one of the strongest predictors of next-year rotation patterns.</span></div>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Source</th>
+          <th>Data Pulled</th>
+          <th>Access</th>
+          <th>Pipeline Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>USDA NASS QuickStats</strong></td>
+          <td>Historical planted acreage by state × crop × year; prior-year yields</td>
+          <td>Already in pipeline</td>
+          <td><span class="kpi-badge badge-green">Available</span></td>
+        </tr>
+        <tr>
+          <td><strong>CME Futures (Nasdaq Data Link)</strong></td>
+          <td>Dec corn / Nov soybean / Jul wheat futures prices as of Nov 1 each year — proxy for expected farm-gate price</td>
+          <td>Added for Module 02</td>
+          <td><span class="kpi-badge badge-green">Available</span></td>
+        </tr>
+        <tr>
+          <td><strong>USDA ERS Production Costs</strong></td>
+          <td>Annual variable cost of production per bushel per crop — defines the profit margin signal driving acreage switches</td>
+          <td>Free annual download</td>
+          <td><span class="kpi-badge badge-blue">New — annual pull</span></td>
+        </tr>
+        <tr>
+          <td><strong>USDA ERS Fertilizer Prices</strong></td>
+          <td>Anhydrous ammonia, DAP, potash quarterly prices — corn-heavy nitrogen inputs create cost asymmetry vs. soybeans</td>
+          <td>Free quarterly download</td>
+          <td><span class="kpi-badge badge-blue">New — add</span></td>
+        </tr>
+        <tr>
+          <td><strong>USDA NASS June Area Survey</strong></td>
+          <td>June actual planted acreage (used as ground truth target for training; also cross-validates Prospective Plantings)</td>
+          <td>Already in pipeline</td>
+          <td><span class="kpi-badge badge-green">Available</span></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>The Core Signal: Corn-Soy Price Ratio</h3>
+    <p>The single most predictive feature for corn vs. soybean acreage allocation is the <strong>corn-to-soybean price ratio</strong> computed from November harvest futures. When the ratio falls below approximately 2.2–2.3 (soybeans pay relatively more per acre), acreage shifts to soybeans. When above 2.5, corn wins. This ratio explains the majority of year-over-year acreage swings between the two crops. Fertilizer cost — particularly anhydrous ammonia prices — amplifies this effect: expensive nitrogen makes corn even less attractive when the price ratio is marginal.</p>
+  </div>
+
+  <!-- SECTION 4: MODEL IMPLEMENTATION -->
+  <div class="section">
+    <h2>4. Model Implementation</h2>
+
+    <h3>Recommended Architecture: Ridge Regression + XGBoost Ensemble</h3>
+    <p>Planted acreage models operate on annual, state-level panels — a modest dataset by ML standards (50 states × ~3 crops × ~45 years = ~6,750 observations). A regularized linear model (Ridge) performs well and is highly interpretable; XGBoost adds value for capturing nonlinear interactions between price ratio and fertilizer cost regimes. Ensemble improves out-of-sample stability.</p>
+
+    <div class="pipeline">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-body">
+          <div class="step-title">Annual Feature Construction (as of November 1 each year)</div>
+          <div class="step-desc">All features are computed from data available by November 1 — the natural model freeze date for a February forecast. Key features: Dec corn futures price, Nov soybean futures price, corn/soy price ratio, fertilizer cost index, prior-year yield (state × crop), prior-year planted acres (state × crop), 5-year yield trend (captures improving genetics), crop rotation index (fraction of corn-on-corn vs. corn-after-soy in state).</div>
+          <div class="step-code">features: [corn_dec_futures, soy_nov_futures, corn_soy_ratio, anhydrous_price,
+           prior_yield, prior_acres, yield_trend_5yr, rotation_index]</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-body">
+          <div class="step-title">Training: State-Stratified Cross-Validation</div>
+          <div class="step-desc">Use leave-one-year-out cross-validation to simulate the forecasting scenario — train on all years except the target year, predict that year's acreage. This honestly reflects what the model would have known at each point in time. Train on 1980–2019, validate 2020–2022, test 2023–2024.</div>
+          <div class="step-code">LeaveOneGroupOut(groups=year_index)  # strict temporal hold-out</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-body">
+          <div class="step-title">Crop Competition Constraint</div>
+          <div class="step-desc">Total cropland is approximately fixed at the state level in the short run — acres that switch to soybeans come from somewhere (primarily corn). Implement a soft constraint: the sum of corn + soybean + wheat acreage changes must roughly equal zero across the major field crop portfolio. This prevents physically implausible forecasts where all crops expand simultaneously.</div>
+          <div class="step-code">constraint: Σ(predicted_Δacres_corn + predicted_Δacres_soy + predicted_Δacres_wheat) ≈ 0</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">4</div>
+        <div class="step-body">
+          <div class="step-title">National Rollup &amp; Uncertainty Bands</div>
+          <div class="step-desc">Sum state-level forecasts to national totals. Uncertainty at the national level is narrower than state-level because state-level errors are partially offsetting. Report 80% prediction intervals. The UI should always display both state-level and national totals — the national total is the number markets watch; state breakdown is what supply chain planners need.</div>
+          <div class="step-code">national_forecast = Σ state_forecasts; national_PI = propagate_uncertainty(state_CIs, correlation_matrix)</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">5</div>
+        <div class="step-body">
+          <div class="step-title">USDA Benchmark Comparison — Post-March 31</div>
+          <div class="step-desc">After the USDA Prospective Plantings report releases, automatically compute the forecast vs. actuals delta and store in an accuracy table. Surface this retrospective prominently in the UI — it builds credibility with users over successive seasons and provides honest accountability for model performance.</div>
+          <div class="step-code">INSERT INTO acreage_accuracy(year, crop, model_forecast, usda_report, delta_pct)</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="callout callout-warn">
+      <strong>Late-spring caveat:</strong> Wet spring conditions can force last-minute acreage switches after planting windows close — shifting corn acres to soybeans (soybeans have a later planting window). The model cannot anticipate spring weather at forecast time. Mitigate by flagging the NOAA spring precipitation outlook as a secondary advisory beside the February forecast.
+    </div>
+  </div>
+
+  <!-- SECTION 5: INTEGRATION -->
+  <div class="section">
+    <h2>5. Integration with the Agricultural Webapp</h2>
+
+    <div class="int-grid">
+      <div class="int-box">
+        <div class="int-label">Data Layer</div>
+        <div class="int-name">PostgreSQL</div>
+        <div class="int-tech">acreage_forecasts<br>acreage_accuracy<br>price_ratio_history</div>
+      </div>
+      <div class="int-arrow">→</div>
+      <div class="int-box">
+        <div class="int-label">API Layer</div>
+        <div class="int-name">FastAPI</div>
+        <div class="int-tech">GET /predict/acreage<br>GET /predict/acreage/accuracy</div>
+      </div>
+      <div class="int-arrow">→</div>
+      <div class="int-box">
+        <div class="int-label">UI Layer</div>
+        <div class="int-name">Next.js</div>
+        <div class="int-tech">State bar chart<br>National summary card<br>USDA vs. model delta</div>
+      </div>
+    </div>
+
+    <h3>API Endpoints</h3>
+    <table>
+      <thead>
+        <tr><th>Endpoint</th><th>Parameters</th><th>Returns</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>GET /predict/acreage</code></td>
+          <td><code>crop</code>, <code>year</code>, <code>level</code> (state|national)</td>
+          <td>Forecast acres, p10/p90 bands, corn-soy ratio signal, key driver label</td>
+        </tr>
+        <tr>
+          <td><code>GET /predict/acreage/accuracy</code></td>
+          <td><code>crop</code>, <code>start_year</code></td>
+          <td>Historical model forecast vs. USDA actuals — retrospective accuracy table</td>
+        </tr>
+        <tr>
+          <td><code>GET /predict/acreage/ratio-signal</code></td>
+          <td><code>as_of_date</code></td>
+          <td>Current corn/soy price ratio with historical percentile — powers "what's driving the forecast" panel</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>Key UI Components</h3>
+    <p><strong>National summary card:</strong> Single prominent number for each crop — "Corn: 91.2M acres forecast (±4.1M) · down 1.8M from last year." Positioned as a pre-season briefing card refreshed in February. <strong>State bar chart:</strong> Horizontal bar chart showing state-level forecast vs. prior year for the top 12 producing states — instant visual of where shifts are expected. <strong>Price ratio dial:</strong> A gauge showing the current corn/soy price ratio relative to historical distribution — the most intuitive way to communicate the primary forecast driver. <strong>USDA comparison panel:</strong> Post-March 31, automatically switches to display model vs. USDA Prospective Plantings side-by-side with the delta. Over time, this becomes a credibility-building retrospective.</p>
+
+    <h3>Annual Automation Schedule</h3>
+    <table>
+      <thead>
+        <tr><th>Date</th><th>Automated Action</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><strong>November 15</strong></td><td>Ingest November 1 futures prices from Nasdaq Data Link; update fertilizer and cost data</td></tr>
+        <tr><td><strong>January 15</strong></td><td>ERS production cost annual update ingested; model retrain triggered</td></tr>
+        <tr><td><strong>February 1</strong></td><td>Forecast published — written to <code>acreage_forecasts</code>; UI surfaces forecast banner</td></tr>
+        <tr><td><strong>April 1</strong></td><td>USDA Prospective Plantings parsed and stored; accuracy comparison auto-computed</td></tr>
+        <tr><td><strong>July 1</strong></td><td>June Area Survey actuals stored as final ground truth for prior-season accuracy record</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- SECTION 6: RISKS -->
+  <div class="section">
+    <h2>6. Risks &amp; Mitigations</h2>
+    <div class="risk-row">
+      <div class="risk-pill risk-high">High</div>
+      <div class="risk-text"><strong>Spring weather disruptions not captured.</strong> Excessively wet springs (2019 was the most notable example — 19.6M prevented planting acres) dramatically reduce corn acreage post-forecast. The model cannot predict spring weather in February. Mitigation: Add a Spring Disruption Risk advisory to the UI — pulling NOAA 90-day outlook for major corn belt states — flagged visually alongside the February forecast.</div>
+    </div>
+    <div class="risk-row">
+      <div class="risk-pill risk-med">Medium</div>
+      <div class="risk-text"><strong>Policy shocks — crop insurance subsidies, ARC/PLC elections.</strong> Federal farm support programs shift planting incentives in ways not captured by price ratios alone. Mitigation: Add a binary feature for dominant crop in ARC-CO vs. PLC elections at the state level — this data is available from FSA annually.</div>
+    </div>
+    <div class="risk-row">
+      <div class="risk-pill risk-med">Medium</div>
+      <div class="risk-text"><strong>Fertilizer price data latency.</strong> ERS publishes quarterly data with a 2–3 month lag. For the February forecast, the most recent available data is Q3 of the prior year. Mitigation: Use CME urea/anhydrous futures as a more current proxy for fertilizer cost; validate against lagged ERS actuals during training.</div>
+    </div>
+    <div class="risk-row">
+      <div class="risk-pill risk-low">Low</div>
+      <div class="risk-text"><strong>State-level model for sparse wheat states.</strong> Wheat acreage in some plains states is highly variable with thin history. Mitigation: Cluster states by production profile (Corn Belt vs. Plains vs. South) and apply separate model weights per cluster rather than a single national model.</div>
+    </div>
+  </div>
+
+  <!-- SECTION 7: MILESTONES -->
+  <div class="section">
+    <h2>7. Delivery Milestones</h2>
+    <div class="callout">
+      <strong>Note:</strong> This module is designated "Build Second" because it reuses the majority of infrastructure from Module 01 (Crop Yield). The 2–3 week timeline assumes Module 01 infrastructure — NASS pipeline, PostgreSQL schema, FastAPI base, EC2 cron — is already operational.
+    </div>
+    <table>
+      <thead>
+        <tr><th>Week</th><th>Deliverable</th><th>Owner</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><strong>1</strong></td><td>ERS production costs + fertilizer price ingestion; price ratio feature construction from existing CME data</td><td>Backend + DS</td></tr>
+        <tr><td><strong>2</strong></td><td>Model training (Ridge + XGBoost ensemble); walk-forward validation; crop competition constraint implementation; national rollup logic</td><td>Data Science</td></tr>
+        <tr><td><strong>3</strong></td><td>FastAPI endpoints + PostgreSQL acreage tables; frontend state bar chart, national card, price ratio dial; annual cron schedule live; USDA comparison logic</td><td>Full stack</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+</div>
+
+<footer>
+  <span><strong>Agricultural Dashboard</strong> · Prediction Module 03 — Planted Acreage</span>
+  <span>Internal Pipeline Report · March 2026 · QuickStats SII Project</span>
+</footer>
+
+</body>
+</html>

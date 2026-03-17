@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Crop Yield Prediction — Team Labor Division</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,600;1,400&family=Source+Sans+3:wght@300;400;500;600&family=Source+Code+Pro:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper:   #fdf9f4;
+    --ink:     #1c1a17;
+    --mid:     #4a4640;
+    --muted:   #8a8278;
+    --rule:    #ddd5c8;
+    --bg-alt:  #f5f0e8;
+    --crimson: #7a2020;
+    --gold:    #a07828;
+    --blue:    #1a3a5c;
+    --green:   #2a5a38;
+    --serif:   'EB Garamond', Georgia, serif;
+    --sans:    'Source Sans 3', system-ui, sans-serif;
+    --mono:    'Source Code Pro', monospace;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: var(--sans); background: var(--paper); color: var(--ink); font-size: 15px; line-height: 1.7; }
+
+  /* ── HEADER ── */
+  .header {
+    max-width: 860px; margin: 0 auto;
+    padding: 60px 40px 36px;
+    border-bottom: 2px solid var(--ink);
+  }
+  .header-eyebrow {
+    font-family: var(--sans); font-size: 11px; font-weight: 600;
+    letter-spacing: 0.2em; text-transform: uppercase; color: var(--crimson);
+    margin-bottom: 16px;
+  }
+  .header h1 {
+    font-family: var(--serif); font-size: clamp(26px, 4vw, 40px);
+    font-weight: 600; line-height: 1.2; color: var(--ink); margin-bottom: 10px;
+  }
+  .header-sub {
+    font-family: var(--serif); font-size: 18px; font-style: italic;
+    color: var(--muted); margin-bottom: 28px;
+  }
+  .header-meta {
+    display: flex; flex-wrap: wrap; gap: 24px; font-size: 13px; color: var(--muted);
+  }
+  .header-meta span strong { color: var(--ink); font-weight: 600; }
+
+  /* ── BODY ── */
+  .body { max-width: 860px; margin: 0 auto; padding: 44px 40px 80px; }
+
+  h2 {
+    font-family: var(--serif); font-size: 22px; font-weight: 600;
+    color: var(--ink); margin-bottom: 16px; margin-top: 48px;
+    padding-bottom: 8px; border-bottom: 1px solid var(--rule);
+  }
+  h2:first-child { margin-top: 0; }
+  h3 { font-family: var(--serif); font-size: 17px; color: var(--ink); margin-top: 28px; margin-bottom: 10px; }
+  p { font-size: 14.5px; color: var(--mid); margin-bottom: 14px; line-height: 1.75; }
+  p strong { color: var(--ink); }
+
+  /* ── ROLE CARDS ── */
+  .roles-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin: 24px 0; }
+  .role-card {
+    border: 1.5px solid var(--rule); border-radius: 6px;
+    overflow: hidden;
+  }
+  .role-header {
+    padding: 14px 18px; color: #fff;
+  }
+  .role-header.lead     { background: var(--blue); }
+  .role-header.ml       { background: var(--crimson); }
+  .role-header.beginner { background: #4a5a38; }
+  .role-tag {
+    font-size: 9.5px; font-weight: 700; letter-spacing: 0.18em;
+    text-transform: uppercase; margin-bottom: 5px; opacity: 0.75;
+  }
+  .role-name { font-family: var(--serif); font-size: 16px; font-weight: 600; }
+  .role-person { font-size: 12px; opacity: 0.75; margin-top: 4px; }
+  .role-body { padding: 16px 18px; background: var(--paper); }
+  .role-body ul { list-style: none; }
+  .role-body ul li {
+    font-size: 13px; color: var(--mid); padding: 5px 0;
+    border-bottom: 1px solid var(--rule); line-height: 1.5;
+    display: flex; gap: 8px;
+  }
+  .role-body ul li:last-child { border-bottom: none; }
+  .role-body ul li::before { content: '→'; color: var(--muted); flex-shrink: 0; }
+
+  /* ── PHASE TABLE ── */
+  .phase-block { margin: 28px 0; }
+  .phase-label {
+    font-size: 11px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--gold); margin-bottom: 10px;
+  }
+  .phase-title {
+    font-family: var(--serif); font-size: 18px; margin-bottom: 4px;
+  }
+  .phase-meta { font-size: 12.5px; color: var(--muted); margin-bottom: 14px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; margin-bottom: 6px; }
+  thead th {
+    background: var(--ink); color: var(--paper); font-size: 10.5px; font-weight: 600;
+    letter-spacing: 0.1em; text-transform: uppercase; padding: 9px 14px; text-align: left;
+  }
+  tbody td { padding: 10px 14px; color: var(--mid); border-bottom: 1px solid var(--rule); vertical-align: top; }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:nth-child(even) td { background: var(--bg-alt); }
+  td strong { color: var(--ink); font-weight: 600; }
+  td code { font-family: var(--mono); font-size: 11.5px; background: var(--bg-alt); padding: 1px 5px; border-radius: 3px; }
+
+  /* Owner pills */
+  .owner { display: inline-block; font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 12px; white-space: nowrap; }
+  .owner-lead { background: #dde8f5; color: #1a3a5c; }
+  .owner-ml   { background: #f5dede; color: #7a2020; }
+  .owner-beg  { background: #e6eddf; color: #2a4a20; }
+  .owner-all  { background: #ede8df; color: #5a4a28; }
+
+  /* ── DELIVERABLES ── */
+  .deliverable-row {
+    display: flex; gap: 16px; padding: 14px 0; border-bottom: 1px solid var(--rule);
+    align-items: flex-start;
+  }
+  .deliverable-row:last-child { border-bottom: none; }
+  .del-week {
+    font-family: var(--mono); font-size: 11.5px; font-weight: 500;
+    color: var(--gold); white-space: nowrap; padding-top: 2px; min-width: 54px;
+  }
+  .del-body { flex: 1; }
+  .del-title { font-size: 14px; font-weight: 600; color: var(--ink); margin-bottom: 4px; }
+  .del-desc { font-size: 13px; color: var(--mid); line-height: 1.6; }
+  .del-owners { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+
+  /* ── COORDINATION ── */
+  .coord-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 20px 0; }
+  .coord-box {
+    background: var(--bg-alt); border: 1px solid var(--rule); border-radius: 6px;
+    padding: 18px 20px;
+  }
+  .coord-box h4 { font-family: var(--serif); font-size: 15px; margin-bottom: 10px; }
+  .coord-box ul { list-style: none; }
+  .coord-box ul li { font-size: 13px; color: var(--mid); padding: 4px 0; display: flex; gap: 8px; }
+  .coord-box ul li::before { content: '·'; color: var(--gold); }
+
+  /* ── RISK ── */
+  .risk-row { display: flex; gap: 12px; padding: 13px 0; border-bottom: 1px solid var(--rule); }
+  .risk-row:last-child { border-bottom: none; }
+  .risk-tag {
+    font-size: 9.5px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
+    padding: 3px 8px; border-radius: 10px; white-space: nowrap; margin-top: 2px; flex-shrink: 0;
+  }
+  .r-high { background: #f5dede; color: #7a2020; }
+  .r-med  { background: #f5edda; color: #7a5820; }
+  .r-low  { background: #e6eddf; color: #2a4a20; }
+  .risk-text { font-size: 13.5px; color: var(--mid); line-height: 1.6; }
+  .risk-text strong { color: var(--ink); }
+
+  /* ── CALLOUT ── */
+  .callout {
+    border-left: 3px solid var(--gold); background: #fdf5e4;
+    padding: 14px 18px; border-radius: 0 6px 6px 0; margin: 20px 0;
+    font-size: 14px; color: var(--mid); line-height: 1.65;
+  }
+  .callout strong { color: #7a5820; }
+
+  /* ── WORKLOAD BAR ── */
+  .workload-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; margin: 20px 0; }
+  .wl-card {
+    border: 1.5px solid var(--rule); border-radius: 6px; padding: 16px 18px;
+    background: var(--paper);
+  }
+  .wl-name { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 10px; }
+  .wl-name.lead-c { color: var(--blue); }
+  .wl-name.ml-c   { color: var(--crimson); }
+  .wl-name.beg-c  { color: #4a5a38; }
+  .wl-bar-bg { background: var(--rule); border-radius: 4px; height: 8px; margin-bottom: 6px; }
+  .wl-bar { height: 8px; border-radius: 4px; }
+  .wl-bar.lead-b { background: var(--blue); width: 45%; }
+  .wl-bar.ml-b   { background: var(--crimson); width: 35%; }
+  .wl-bar.beg-b  { background: #4a5a38; width: 20%; }
+  .wl-pct { font-family: var(--serif); font-size: 22px; font-weight: 600; color: var(--ink); margin-bottom: 2px; }
+  .wl-desc { font-size: 12px; color: var(--muted); }
+
+  /* ── FOOTER ── */
+  footer {
+    border-top: 2px solid var(--ink); max-width: 860px; margin: 0 auto;
+    padding: 20px 40px 40px;
+    display: flex; justify-content: space-between; font-size: 12px; color: var(--muted);
+  }
+  footer strong { color: var(--ink); }
+
+  @media (max-width: 680px) {
+    .header, .body { padding-left: 20px; padding-right: 20px; }
+    .roles-grid { grid-template-columns: 1fr; }
+    .coord-grid { grid-template-columns: 1fr; }
+    .workload-grid { grid-template-columns: 1fr; }
+    footer { flex-direction: column; gap: 6px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="header">
+  <div class="header-eyebrow">Cloud Computing · Class Project · Indiana University Indianapolis</div>
+  <h1>Crop Yield Prediction Pipeline</h1>
+  <p class="header-sub">Team Labor Division &amp; Project Coordination Plan</p>
+  <div class="header-meta">
+    <span><strong>Team size:</strong> 3 members</span>
+    <span><strong>Platform:</strong> AWS (EC2, S3, RDS, EventBridge)</span>
+    <span><strong>Timeline:</strong> 6 weeks</span>
+    <span><strong>Date:</strong> March 2026</span>
+  </div>
+</div>
+
+<div class="body">
+
+  <!-- SECTION 1: ROLES -->
+  <h2>1. Team Roles &amp; Responsibility Domains</h2>
+  <p>The team of three maps cleanly onto the system's three functional layers. Each member owns a domain end-to-end — accountable for its correctness, documentation, and integration handoffs. Cross-domain work happens at integration points (API contract, DB schema), which are jointly agreed before work begins.</p>
+
+  <div class="roles-grid">
+    <div class="role-card">
+      <div class="role-header lead">
+        <div class="role-tag">Role A · Lead</div>
+        <div class="role-name">Cloud Infrastructure &amp; Integration</div>
+        <div class="role-person">Raj (Rajashekar Reddy Vedire)</div>
+      </div>
+      <div class="role-body">
+        <ul>
+          <li>AWS architecture, IAM, S3 bucket layout</li>
+          <li>EC2 setup, Python environment, cron via EventBridge</li>
+          <li>FastAPI application — all endpoints</li>
+          <li>RDS schema design &amp; Alembic migrations</li>
+          <li>GitHub repo, branch strategy, CI actions</li>
+          <li>Frontend integration (Next.js components)</li>
+          <li>Final integration testing end-to-end</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="role-card">
+      <div class="role-header ml">
+        <div class="role-tag">Role B · ML Lead</div>
+        <div class="role-name">Data Pipeline &amp; Model Engineering</div>
+        <div class="role-person">Teammate 2 (Strong ML/DS)</div>
+      </div>
+      <div class="role-body">
+        <ul>
+          <li>ETL scripts: NOAA, NASA POWER, Drought Monitor</li>
+          <li>Feature engineering module (GDD, CCI, VPD)</li>
+          <li>LightGBM model training + walk-forward CV</li>
+          <li>Quantile model ensemble (p10/p50/p90)</li>
+          <li>Model artifact storage + metadata JSON</li>
+          <li>Baseline comparison vs. county mean</li>
+          <li>Model unit tests &amp; accuracy benchmarks</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="role-card">
+      <div class="role-header beginner">
+        <div class="role-tag">Role C · Contributor</div>
+        <div class="role-name">Data Ingestion &amp; Documentation</div>
+        <div class="role-person">Teammate 3 (Beginner / General CS)</div>
+      </div>
+      <div class="role-body">
+        <ul>
+          <li>USDA NASS QuickStats ingestion script</li>
+          <li>SSURGO one-time static data load</li>
+          <li>API key registration &amp; .env file setup</li>
+          <li>README &amp; setup documentation</li>
+          <li>Manual QA: verify data rows in RDS</li>
+          <li>CloudWatch log monitoring &amp; alerts</li>
+          <li>Presentation slides &amp; demo prep</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- WORKLOAD -->
+  <h3>Workload Distribution</h3>
+  <div class="workload-grid">
+    <div class="wl-card">
+      <div class="wl-name lead-c">Role A — Lead</div>
+      <div class="wl-pct">~45%</div>
+      <div class="wl-bar-bg"><div class="wl-bar lead-b"></div></div>
+      <div class="wl-desc">Cloud infra, FastAPI, frontend, CI, final integration — highest complexity tasks</div>
+    </div>
+    <div class="wl-card">
+      <div class="wl-name ml-c">Role B — ML Lead</div>
+      <div class="wl-pct">~35%</div>
+      <div class="wl-bar-bg"><div class="wl-bar ml-b"></div></div>
+      <div class="wl-desc">Full ETL-to-model pipeline — technically deep, well-scoped for an ML expert</div>
+    </div>
+    <div class="wl-card">
+      <div class="wl-name beg-c">Role C — Contributor</div>
+      <div class="wl-pct">~20%</div>
+      <div class="wl-bar-bg"><div class="wl-bar beg-b"></div></div>
+      <div class="wl-desc">NASS ingestion, static loads, docs, QA — accessible tasks with real impact</div>
+    </div>
+  </div>
+
+  <div class="callout">
+    <strong>Note on Role C scoping:</strong> The beginner contributor's tasks are intentionally bounded to one well-documented API (NASS QuickStats, already partially in the pipeline), one static file load (SSURGO), and non-code deliverables. This is not a token assignment — NASS ingestion is a real dependency that blocks model training, and documentation is a graded deliverable for most class projects. If Teammate 3 gains confidence, the NOAA station-to-county mapping script (Section 3.2 of the tech spec) is a well-scoped stretch task.
+  </div>
+
+  <!-- SECTION 2: PHASE PLAN -->
+  <h2>2. Six-Week Phased Plan</h2>
+
+  <!-- PHASE 1 -->
+  <div class="phase-block">
+    <div class="phase-label">Phase 1 · Weeks 1–2</div>
+    <div class="phase-title">Infrastructure Setup &amp; Data Ingestion</div>
+    <div class="phase-meta">All three members active. Goal: data flowing into RDS from all five sources before Week 2 ends.</div>
+    <table>
+      <thead>
+        <tr><th>Task</th><th>Owner</th><th>Output / Definition of Done</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>AWS environment setup</strong> — EC2, S3 bucket, RDS instance, IAM role</td>
+          <td><span class="owner owner-lead">Lead (A)</span></td>
+          <td>Team can SSH to EC2; S3 bucket accessible; RDS reachable from EC2</td>
+        </tr>
+        <tr>
+          <td><strong>GitHub repo + CI skeleton</strong> — branch strategy, .env.example, GitHub Actions lint</td>
+          <td><span class="owner owner-lead">Lead (A)</span></td>
+          <td>PR-to-main triggers test run; README has setup instructions</td>
+        </tr>
+        <tr>
+          <td><strong>RDS schema creation</strong> — <code>feature_weekly</code>, <code>yield_forecasts</code>, <code>soil_features</code> tables</td>
+          <td><span class="owner owner-lead">Lead (A)</span></td>
+          <td>Alembic migration runs clean; schema matches tech spec Section 2.3</td>
+        </tr>
+        <tr>
+          <td><strong>NASS QuickStats ingestion script</strong> — crop conditions + historical yields backfill to 2000</td>
+          <td><span class="owner owner-beg">Contrib (C)</span></td>
+          <td>Script runs; <code>feature_weekly</code> populated with NASS rows for 2000–2024</td>
+        </tr>
+        <tr>
+          <td><strong>SSURGO static load</strong> — download bulk file, parse AWC + drainage, insert to <code>soil_features</code></td>
+          <td><span class="owner owner-beg">Contrib (C)</span></td>
+          <td><code>soil_features</code> has a row for all 3,100+ county FIPS codes</td>
+        </tr>
+        <tr>
+          <td><strong>NOAA + NASA POWER + Drought Monitor ingestion</strong> — weekly pull scripts</td>
+          <td><span class="owner owner-ml">ML (B)</span></td>
+          <td>Three ingest scripts; data lands in S3 raw/ for current + 4 prior weeks</td>
+        </tr>
+        <tr>
+          <td><strong>NOAA station-to-county mapping</strong> — Haversine join, fallback to NASA POWER</td>
+          <td><span class="owner owner-ml">ML (B)</span></td>
+          <td>Mapping table in RDS; completeness check passes for all Corn Belt counties</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- PHASE 2 -->
+  <div class="phase-block">
+    <div class="phase-label">Phase 2 · Week 3</div>
+    <div class="phase-title">Feature Engineering</div>
+    <div class="phase-meta">ML lead drives. Lead reviews. Beginner runs QA queries on feature outputs.</div>
+    <table>
+      <thead>
+        <tr><th>Task</th><th>Owner</th><th>Output / Definition of Done</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Feature engineering module</strong> — GDD, CCI, precip deficit, VPD stress days, drought pct</td>
+          <td><span class="owner owner-ml">ML (B)</span></td>
+          <td><code>build_features.py</code> produces feature matrix; unit tests pass (GDD + CCI)</td>
+        </tr>
+        <tr>
+          <td><strong>Week-of-season indexing</strong> — planting date sourced from NASS planting progress</td>
+          <td><span class="owner owner-ml">ML (B)</span></td>
+          <td>All features indexed as week-of-season, not calendar week; lookahead guard asserts clean</td>
+        </tr>
+        <tr>
+          <td><strong>Historical feature matrix build</strong> — 2000–2024 all crops × counties × weeks</td>
+          <td><span class="owner owner-ml">ML (B)</span></td>
+          <td>Parquet file in S3 <code>processed/</code>; row count matches expected season × county × crop cells</td>
+        </tr>
+        <tr>
+          <td><strong>Feature QA</strong> — query <code>feature_weekly</code>, spot-check GDD values against USDA published examples</td>
+          <td><span class="owner owner-beg">Contrib (C)</span></td>
+          <td>QA log document with 5+ county spot-checks; anomalies reported to ML lead</td>
+        </tr>
+        <tr>
+          <td><strong>API contract definition</strong> — agree on request/response schemas for all 3 endpoints</td>
+          <td><span class="owner owner-all">A + B</span></td>
+          <td>Pydantic schema file committed; both A and B sign off before model or API work begins</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- PHASE 3 -->
+  <div class="phase-block">
+    <div class="phase-label">Phase 3 · Week 4</div>
+    <div class="phase-title">Model Training &amp; Validation</div>
+    <div class="phase-meta">ML lead owns entirely. Lead sets up S3 artifact storage path. Beginner documents model results.</div>
+    <table>
+      <thead>
+        <tr><th>Task</th><th>Owner</th><th>Output / Definition of Done</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>LightGBM quantile training</strong> — 60 models (3 crops × 20 weeks × 3 quantiles)</td>
+          <td><span class="owner owner-ml">ML (B)</span></td>
+          <td>60 model files in S3 <code>models/</code>; training completes in &lt; 30 min on EC2 t3.medium</td>
+        </tr>
+        <tr>
+          <td><strong>Walk-forward validation</strong> — 2020–2024 test set; RRMSE by crop × week</td>
+          <td><span class="owner owner-ml">ML (B)</span></td>
+          <td>Validation notebook with RRMSE table; confirms model meets thresholds in tech spec §9.3</td>
+        </tr>
+        <tr>
+          <td><strong>Baseline comparison</strong> — county 5yr mean vs. model p50 RRMSE</td>
+          <td><span class="owner owner-ml">ML (B)</span></td>
+          <td>Table showing % improvement over baseline for each crop; honest reporting if below threshold</td>
+        </tr>
+        <tr>
+          <td><strong>Model metadata JSON</strong> — training date, RRMSE by week, top 3 features per model</td>
+          <td><span class="owner owner-ml">ML (B)</span></td>
+          <td><code>metadata.json</code> in S3 <code>models/</code>; parseable by FastAPI version endpoint</td>
+        </tr>
+        <tr>
+          <td><strong>S3 artifact path setup</strong> — bucket prefix structure, versioning tag</td>
+          <td><span class="owner owner-lead">Lead (A)</span></td>
+          <td>S3 prefix <code>models/{crop}/week_{N}_{quantile}.pkl</code> matches inference loader path</td>
+        </tr>
+        <tr>
+          <td><strong>Model results documentation</strong> — accuracy table, feature importance chart for presentation</td>
+          <td><span class="owner owner-beg">Contrib (C)</span></td>
+          <td>One-page results summary document; accuracy charts for final presentation</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- PHASE 4 -->
+  <div class="phase-block">
+    <div class="phase-label">Phase 4 · Week 5</div>
+    <div class="phase-title">API, Automation &amp; Frontend</div>
+    <div class="phase-meta">Lead drives API and frontend. ML lead supports inference integration. Beginner handles CloudWatch setup and monitoring.</div>
+    <table>
+      <thead>
+        <tr><th>Task</th><th>Owner</th><th>Output / Definition of Done</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>FastAPI endpoints</strong> — <code>/predict/yield</code>, <code>/predict/yield/map</code>, <code>/predict/yield/history</code></td>
+          <td><span class="owner owner-lead">Lead (A)</span></td>
+          <td>All 3 endpoints return correct schema; Pydantic validation rejects bad inputs</td>
+        </tr>
+        <tr>
+          <td><strong>Inference pipeline integration</strong> — load model from S3, run per current week, write to RDS</td>
+          <td><span class="owner owner-lead">Lead (A)</span> + <span class="owner owner-ml">ML (B)</span></td>
+          <td><code>inference.py</code> runs clean; <code>yield_forecasts</code> populates with correct p10/p50/p90</td>
+        </tr>
+        <tr>
+          <td><strong>EventBridge weekly trigger</strong> — cron every Thursday 10:00 UTC → SSM → EC2 run_pipeline.sh</td>
+          <td><span class="owner owner-lead">Lead (A)</span></td>
+          <td>Trigger fires in test mode; CloudWatch log shows successful run</td>
+        </tr>
+        <tr>
+          <td><strong>Next.js frontend components</strong> — choropleth layer toggle, YieldForecastCard, ConfidenceStrip</td>
+          <td><span class="owner owner-lead">Lead (A)</span></td>
+          <td>Map layer renders with correct color scale; card shows p10/p50/p90 + confidence tier label</td>
+        </tr>
+        <tr>
+          <td><strong>CloudWatch log groups + SNS alert</strong> — failure alert to team email</td>
+          <td><span class="owner owner-beg">Contrib (C)</span></td>
+          <td>Alert triggers when pipeline exits non-zero; team receives email within 5 min</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- PHASE 5 -->
+  <div class="phase-block">
+    <div class="phase-label">Phase 5 · Week 6</div>
+    <div class="phase-title">Testing, Hardening &amp; Presentation</div>
+    <div class="phase-meta">Full team. Shared responsibility for a clean final demo.</div>
+    <table>
+      <thead>
+        <tr><th>Task</th><th>Owner</th><th>Output / Definition of Done</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Integration test</strong> — run pipeline end-to-end on 2024 season; assert RRMSE, row counts, API responses</td>
+          <td><span class="owner owner-all">A + B</span></td>
+          <td>All tests in §9.2 of tech spec pass; test report in GitHub Actions log</td>
+        </tr>
+        <tr>
+          <td><strong>Unit test suite</strong> — GDD, CCI, no-lookahead guard, monotonicity (p10 &lt; p50 &lt; p90)</td>
+          <td><span class="owner owner-ml">ML (B)</span></td>
+          <td>pytest runs clean on CI; coverage ≥ 70% on feature + model modules</td>
+        </tr>
+        <tr>
+          <td><strong>README finalization</strong> — architecture diagram, setup steps, .env.example, team credits</td>
+          <td><span class="owner owner-beg">Contrib (C)</span></td>
+          <td>A new team member can set up the project from README alone in &lt; 45 min</td>
+        </tr>
+        <tr>
+          <td><strong>Demo preparation</strong> — live pipeline run walkthrough; UI demo with 2024 season data</td>
+          <td><span class="owner owner-all">All</span></td>
+          <td>15-min demo script rehearsed; each member presents their own section</td>
+        </tr>
+        <tr>
+          <td><strong>Cost audit</strong> — review AWS billing dashboard; document monthly cost estimate for class report</td>
+          <td><span class="owner owner-lead">Lead (A)</span></td>
+          <td>Cost breakdown (EC2 / RDS / S3) documented; confirm total &lt; $50/month</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- SECTION 3: DELIVERABLES TIMELINE -->
+  <h2>3. Deliverable Checkpoints</h2>
+  <p>The following are the formal check-in milestones — items that should be demonstrated or committed to GitHub by end of each week. These are for the team's internal accountability, independent of any class submission schedule.</p>
+
+  <div class="deliverable-row">
+    <div class="del-week">Week 2</div>
+    <div class="del-body">
+      <div class="del-title">Infrastructure &amp; Raw Data Gate</div>
+      <div class="del-desc">All five data sources pulling successfully. Data visible in S3 raw/ and RDS. GitHub repo with CI passing. EC2 SSH accessible to all team members.</div>
+      <div class="del-owners">
+        <span class="owner owner-lead">Lead: AWS + GitHub</span>
+        <span class="owner owner-ml">ML: 3 ingest scripts</span>
+        <span class="owner owner-beg">Contrib: NASS + SSURGO</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="deliverable-row">
+    <div class="del-week">Week 3</div>
+    <div class="del-body">
+      <div class="del-title">Feature Matrix Gate</div>
+      <div class="del-desc">Historical feature matrix (2000–2024) built and written to S3 Parquet. Unit tests for GDD and CCI calculations passing. API contract schema file committed.</div>
+      <div class="del-owners">
+        <span class="owner owner-ml">ML: feature module</span>
+        <span class="owner owner-all">A+B: schema sign-off</span>
+        <span class="owner owner-beg">Contrib: QA log</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="deliverable-row">
+    <div class="del-week">Week 4</div>
+    <div class="del-body">
+      <div class="del-title">Model Accuracy Gate</div>
+      <div class="del-desc">60 trained model artifacts in S3. Walk-forward RRMSE meets or approaches thresholds (§9.3). Baseline comparison table showing ML vs. county mean. Team decision on whether to ship ML or fall back to county mean for any crop.</div>
+      <div class="del-owners">
+        <span class="owner owner-ml">ML: training + validation</span>
+        <span class="owner owner-beg">Contrib: results doc</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="deliverable-row">
+    <div class="del-week">Week 5</div>
+    <div class="del-body">
+      <div class="del-title">Live Pipeline Gate</div>
+      <div class="del-desc">Full pipeline runs end-to-end on EC2 triggered by EventBridge. FastAPI returns correct forecast for a test county. Next.js choropleth layer renders. CloudWatch alert fires on simulated failure.</div>
+      <div class="del-owners">
+        <span class="owner owner-lead">Lead: API + frontend</span>
+        <span class="owner owner-all">A+B: inference pipe</span>
+        <span class="owner owner-beg">Contrib: CloudWatch</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="deliverable-row">
+    <div class="del-week">Week 6</div>
+    <div class="del-body">
+      <div class="del-title">Demo-Ready Gate</div>
+      <div class="del-desc">All unit + integration tests passing in CI. README complete. 15-minute demo rehearsed with each member presenting their domain. AWS cost documented.</div>
+      <div class="del-owners">
+        <span class="owner owner-all">All members</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- SECTION 4: COORDINATION -->
+  <h2>4. Team Coordination Protocol</h2>
+
+  <div class="coord-grid">
+    <div class="coord-box">
+      <h4>Weekly Sync (30 min)</h4>
+      <ul>
+        <li>Each member demos what they completed vs. last week's gate</li>
+        <li>Blockers raised — Lead resolves infra blockers same-day</li>
+        <li>Next week's tasks assigned and confirmed</li>
+        <li>No async updates substitute for this meeting during crunch weeks</li>
+      </ul>
+    </div>
+    <div class="coord-box">
+      <h4>GitHub Workflow</h4>
+      <ul>
+        <li>Branch per task: <code>feature/nass-ingest</code>, <code>feature/gdd-engine</code></li>
+        <li>PRs require at least one review before merge to <code>main</code></li>
+        <li>CI must pass (lint + unit tests) before merge</li>
+        <li>Lead reviews all PRs touching the DB schema or API layer</li>
+      </ul>
+    </div>
+    <div class="coord-box">
+      <h4>Shared Resources</h4>
+      <ul>
+        <li>AWS credentials: Lead manages IAM; teammates use named IAM users</li>
+        <li>Secrets: <code>.env</code> shared via encrypted channel; never committed to git</li>
+        <li>S3 bucket: all members have read access; write access scoped per role</li>
+        <li>RDS: separate app user (<code>ag_app</code>) with minimal privileges</li>
+      </ul>
+    </div>
+    <div class="coord-box">
+      <h4>Escalation &amp; Blockers</h4>
+      <ul>
+        <li>If a task is blocked &gt; 24 hours, post in team channel immediately</li>
+        <li>Lead is the single point of escalation for AWS/infra issues</li>
+        <li>ML lead is the single point of escalation for data quality issues</li>
+        <li>Schedule scope: if a feature risks the timeline, cut it — don't delay the demo</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- SECTION 5: RISKS TO TEAM COORDINATION -->
+  <h2>5. Team-Level Risks</h2>
+
+  <div class="risk-row">
+    <div class="risk-tag r-high">High</div>
+    <div class="risk-text"><strong>Beginner contributor blocked on SSURGO parsing.</strong> SSURGO bulk download format is a non-obvious GIS-adjacent format (shapefile + tabular). Mitigation: Lead pre-downloads and unzips the SSURGO file in Week 1; provides Contributor with a starter script that reads the right table (<code>muaggatt</code>) and just needs the FIPS join logic added.</div>
+  </div>
+  <div class="risk-row">
+    <div class="risk-tag r-high">High</div>
+    <div class="risk-text"><strong>API contract disagreement between Lead and ML Lead mid-project.</strong> If the feature matrix schema changes after the API contract is signed off, both modules need updates. Mitigation: Week 3 API contract review is a hard gate — both leads must sign off. Any schema change after that requires a joint decision, not unilateral commits.</div>
+  </div>
+  <div class="risk-row">
+    <div class="risk-tag r-med">Medium</div>
+    <div class="risk-text"><strong>ML Lead underestimates walk-forward validation time.</strong> Training 60 models plus proper hold-out CV on a t3.medium can take longer than expected if the historical dataset is large. Mitigation: Start training in Week 4 not Week 5; spot-check on a 5-state subset first to validate training pipeline before full run.</div>
+  </div>
+  <div class="risk-row">
+    <div class="risk-tag r-low">Low</div>
+    <div class="risk-text"><strong>AWS cost overrun.</strong> If EC2 is left running continuously, cost exceeds budget. Mitigation: Lead sets a CloudWatch billing alarm at $40/month; EC2 is stopped manually after each work session until the EventBridge cron is live.</div>
+  </div>
+
+</div>
+
+<footer>
+  <strong>Agricultural Dashboard · Cloud Computing Class · IU Indianapolis</strong>
+  <span>Crop Yield Team Labor Division · March 2026</span>
+</footer>
+
+</body>
+</html>

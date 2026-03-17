@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Report 01 — Crop Yield Prediction Pipeline</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --navy:    #1a3a5c;
+    --navy-lt: #2a5080;
+    --ink:     #0f1923;
+    --mid:     #4a5568;
+    --muted:   #718096;
+    --rule:    #dde3ea;
+    --bg:      #ffffff;
+    --bg-soft: #f7f9fb;
+    --bg-alt:  #eef2f7;
+    --accent:  #c8a84b;
+    --green:   #2a7a4b;
+    --red:     #b03030;
+    --serif:   'Libre Baskerville', Georgia, serif;
+    --sans:    'Geist', system-ui, sans-serif;
+    --mono:    'Geist Mono', monospace;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: var(--sans); font-size: 15px; line-height: 1.7; color: var(--ink); background: var(--bg); }
+
+  /* COVER */
+  .cover {
+    background: var(--navy);
+    color: #fff;
+    padding: 72px 80px 60px;
+  }
+  .cover-meta {
+    font-size: 11px; font-weight: 600; letter-spacing: 0.18em;
+    text-transform: uppercase; color: var(--accent); margin-bottom: 20px;
+  }
+  .cover h1 {
+    font-family: var(--serif); font-size: clamp(28px, 4vw, 42px);
+    line-height: 1.2; font-weight: 700; margin-bottom: 16px;
+  }
+  .cover-sub {
+    font-size: 16px; color: rgba(255,255,255,0.65); max-width: 580px; line-height: 1.6;
+    margin-bottom: 36px;
+  }
+  .cover-pills { display: flex; flex-wrap: wrap; gap: 10px; }
+  .pill {
+    font-size: 11px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase;
+    padding: 5px 14px; border-radius: 20px; border: 1px solid rgba(255,255,255,0.2);
+    color: rgba(255,255,255,0.8);
+  }
+  .pill-green { background: rgba(42,122,75,0.3); border-color: rgba(42,122,75,0.6); color: #7dcea0; }
+
+  /* KPI ROW */
+  .kpi-row {
+    display: grid; grid-template-columns: repeat(4, 1fr);
+    background: var(--bg-soft); border-bottom: 1px solid var(--rule);
+  }
+  .kpi-cell {
+    padding: 24px 28px; border-right: 1px solid var(--rule);
+  }
+  .kpi-cell:last-child { border-right: none; }
+  .kpi-label { font-size: 10px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
+  .kpi-val { font-family: var(--serif); font-size: 26px; font-weight: 700; color: var(--navy); line-height: 1; margin-bottom: 4px; }
+  .kpi-desc { font-size: 11.5px; color: var(--muted); }
+  .kpi-badge { display: inline-block; font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 12px; }
+  .badge-green { background: #eaf4ea; color: #2d6a2d; }
+  .badge-amber { background: #fdf4e7; color: #8a5d0e; }
+
+  /* BODY */
+  .body { max-width: 860px; margin: 0 auto; padding: 52px 40px 80px; }
+
+  h2 {
+    font-family: var(--serif); font-size: 20px; font-weight: 700;
+    color: var(--navy); margin-bottom: 14px; padding-bottom: 10px;
+    border-bottom: 1.5px solid var(--rule);
+  }
+  h3 { font-family: var(--serif); font-size: 16px; color: var(--ink); margin-bottom: 10px; margin-top: 24px; }
+  p { font-size: 14.5px; color: var(--mid); margin-bottom: 16px; line-height: 1.75; }
+  p strong { color: var(--ink); font-weight: 600; }
+
+  /* SECTION WRAPPER */
+  .section { margin-bottom: 48px; }
+
+  /* PIPELINE STEPS */
+  .pipeline { display: flex; flex-direction: column; gap: 0; margin-bottom: 8px; }
+  .step {
+    display: flex; gap: 20px; align-items: flex-start;
+    padding: 20px 24px; background: var(--bg-soft);
+    border: 1px solid var(--rule); border-bottom: none;
+  }
+  .step:first-child { border-radius: 10px 10px 0 0; }
+  .step:last-child { border-bottom: 1px solid var(--rule); border-radius: 0 0 10px 10px; }
+  .step-num {
+    width: 32px; height: 32px; border-radius: 50%; background: var(--navy);
+    color: #fff; font-size: 13px; font-weight: 700; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center; margin-top: 1px;
+  }
+  .step-body { flex: 1; }
+  .step-title { font-size: 14px; font-weight: 600; color: var(--ink); margin-bottom: 5px; }
+  .step-desc { font-size: 13.5px; color: var(--mid); line-height: 1.65; }
+  .step-code { font-family: var(--mono); font-size: 12px; color: var(--navy-lt); margin-top: 6px; }
+
+  /* DATA SOURCE TABLE */
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; margin-bottom: 8px; }
+  thead th {
+    background: var(--navy); color: #fff; font-size: 11px; font-weight: 600;
+    letter-spacing: 0.1em; text-transform: uppercase; padding: 10px 14px; text-align: left;
+  }
+  tbody tr { border-bottom: 1px solid var(--rule); }
+  tbody tr:last-child { border-bottom: none; }
+  tbody td { padding: 11px 14px; color: var(--mid); vertical-align: top; }
+  tbody tr:nth-child(even) td { background: var(--bg-soft); }
+  td strong { color: var(--ink); }
+  td code { font-family: var(--mono); font-size: 11.5px; background: var(--bg-alt); padding: 2px 6px; border-radius: 4px; color: var(--navy-lt); }
+
+  /* CALLOUT */
+  .callout {
+    background: var(--bg-alt); border-left: 3px solid var(--navy);
+    padding: 16px 20px; border-radius: 0 8px 8px 0; margin: 20px 0;
+    font-size: 14px; color: var(--mid); line-height: 1.65;
+  }
+  .callout strong { color: var(--navy); }
+  .callout-warn { border-left-color: #c8a84b; background: #fdf9ee; }
+  .callout-warn strong { color: #7a5c10; }
+
+  /* INTEGRATION DIAGRAM */
+  .int-grid {
+    display: grid; grid-template-columns: 1fr 40px 1fr 40px 1fr;
+    align-items: center; gap: 0; margin: 24px 0;
+  }
+  .int-box {
+    background: var(--bg-soft); border: 1.5px solid var(--rule); border-radius: 8px;
+    padding: 16px 18px; text-align: center;
+  }
+  .int-box .int-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted); margin-bottom: 5px; }
+  .int-box .int-name { font-size: 13.5px; font-weight: 600; color: var(--navy); }
+  .int-box .int-tech { font-family: var(--mono); font-size: 11px; color: var(--muted); margin-top: 4px; }
+  .int-arrow { text-align: center; font-size: 18px; color: var(--rule); }
+
+  /* RISK TABLE */
+  .risk-row { display: flex; align-items: flex-start; gap: 14px; padding: 14px 0; border-bottom: 1px solid var(--rule); }
+  .risk-row:last-child { border-bottom: none; }
+  .risk-pill { font-size: 10px; font-weight: 700; padding: 3px 10px; border-radius: 12px; white-space: nowrap; margin-top: 2px; flex-shrink: 0; }
+  .risk-high { background: #fdeaea; color: #8b1a1a; }
+  .risk-med  { background: #fdf4e7; color: #8a5d0e; }
+  .risk-low  { background: #eaf4ea; color: #2d6a2d; }
+  .risk-text { font-size: 13.5px; color: var(--mid); line-height: 1.6; }
+  .risk-text strong { color: var(--ink); }
+
+  /* FOOTER */
+  footer {
+    background: var(--navy); color: rgba(255,255,255,0.5);
+    font-size: 11.5px; padding: 20px 40px;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  footer strong { color: rgba(255,255,255,0.8); }
+
+  @media (max-width: 680px) {
+    .cover { padding: 40px 24px 36px; }
+    .kpi-row { grid-template-columns: repeat(2, 1fr); }
+    .body { padding: 32px 20px 60px; }
+    .int-grid { grid-template-columns: 1fr; }
+    .int-arrow { transform: rotate(90deg); }
+    footer { flex-direction: column; gap: 6px; text-align: center; }
+  }
+</style>
+</head>
+<body>
+
+<!-- COVER -->
+<div class="cover">
+  <div class="cover-meta">Agricultural Dashboard · Prediction Module 01 · March 2026</div>
+  <h1>Crop Yield<br>Prediction Pipeline</h1>
+  <p class="cover-sub">Analysis architecture, data sources, model implementation, and webapp integration for in-season county-level yield forecasting across corn, soybeans, and wheat.</p>
+  <div class="cover-pills">
+    <span class="pill">Option 1 — Build First</span>
+    <span class="pill pill-green">Priority: Start Here</span>
+    <span class="pill">Difficulty: Moderate</span>
+    <span class="pill">Timeline: 4–6 weeks</span>
+  </div>
+</div>
+
+<!-- KPI ROW -->
+<div class="kpi-row">
+  <div class="kpi-cell">
+    <div class="kpi-label">Accuracy Target</div>
+    <div class="kpi-val">9–12%</div>
+    <div class="kpi-desc">RRMSE, corn Corn Belt counties</div>
+  </div>
+  <div class="kpi-cell">
+    <div class="kpi-label">Output Cadence</div>
+    <div class="kpi-val">Weekly</div>
+    <div class="kpi-desc">Updated each Thursday post-NASS</div>
+  </div>
+  <div class="kpi-cell">
+    <div class="kpi-label">Spatial Granularity</div>
+    <div class="kpi-val">County</div>
+    <div class="kpi-desc">FIPS-level forecasts, 3,100+ counties</div>
+  </div>
+  <div class="kpi-cell">
+    <div class="kpi-label">Build Difficulty</div>
+    <div class="kpi-val"><span class="kpi-badge badge-green">Moderate</span></div>
+    <div class="kpi-desc">3 of 5 · Most tractable first module</div>
+  </div>
+</div>
+
+<!-- BODY -->
+<div class="body">
+
+  <!-- SECTION 1: OVERVIEW -->
+  <div class="section">
+    <h2>1. What This Module Does</h2>
+    <p>The Crop Yield Prediction module estimates bushels-per-acre output for a given county <strong>before harvest occurs</strong> — issuing county-level forecasts for corn, soybeans, and wheat as the growing season progresses. A forecast generated in July reads: <em>"Iowa, Story County — corn projected at 192 bu/acre (±11%), down from last year's 198."</em></p>
+    <p>The model integrates three signal families: <strong>weather stress</strong> (temperature anomalies, cumulative precipitation deficit, drought severity), <strong>soil suitability</strong> (drainage class, plant-available water capacity from SSURGO), and <strong>crop condition ratings</strong> (weekly USDA NASS 5-tier condition scores as a leading indicator). Forecast confidence widens early in the season and tightens materially by late July.</p>
+    <div class="callout callout-warn">
+      <strong>Honest caveat:</strong> A naive county yield average frequently outperforms ML models when historical data is sparse. Early-season forecasts (April–May) should be presented with wide confidence intervals. The model's true value emerges July–August when in-season signals are rich and the baseline has little additional signal left to give.
+    </div>
+  </div>
+
+  <!-- SECTION 2: DATA SOURCES -->
+  <div class="section">
+    <h2>2. Tech Sources &amp; Data Inputs</h2>
+    <p>All data sources are free government APIs — no licensing fees. Several are already present in the existing USDA NASS pipeline; the remainder require lightweight one-time setup.</p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Source</th>
+          <th>Data Pulled</th>
+          <th>Access</th>
+          <th>Pipeline Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>USDA NASS QuickStats</strong></td>
+          <td>Historical yields, weekly crop condition ratings (G/E/F/P/VP), acreage planted</td>
+          <td><code>quickstats.nass.usda.gov/api</code> — Free API key</td>
+          <td><span class="kpi-badge badge-green">Already in pipeline</span></td>
+        </tr>
+        <tr>
+          <td><strong>NOAA Climate Data Online</strong></td>
+          <td>Daily max/min temp, precipitation by station; mapped to county via nearest-station join</td>
+          <td><code>api.ncdc.noaa.gov/v2</code> — Free API token</td>
+          <td><span class="kpi-badge badge-amber">New — add</span></td>
+        </tr>
+        <tr>
+          <td><strong>NASA POWER</strong></td>
+          <td>Solar radiation, vapor pressure deficit (VPD), relative humidity — critical for yield stress modeling</td>
+          <td><code>power.larc.nasa.gov/api</code> — No auth required</td>
+          <td><span class="kpi-badge badge-amber">New — add</span></td>
+        </tr>
+        <tr>
+          <td><strong>US Drought Monitor</strong></td>
+          <td>Weekly drought severity classification (D0–D4) at county level — used as a stress covariate</td>
+          <td>REST API, no authentication</td>
+          <td><span class="kpi-badge badge-amber">New — add</span></td>
+        </tr>
+        <tr>
+          <td><strong>SSURGO (NRCS)</strong></td>
+          <td>Soil drainage class, plant-available water capacity, organic matter by county — static feature set</td>
+          <td>Web Soil Survey bulk download — one-time pull, no API key</td>
+          <td><span class="kpi-badge badge-amber">New — static join</span></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>Key Feature Engineering Decisions</h3>
+    <p><strong>Growing Degree Days (GDD):</strong> Accumulated heat units from planting to current week; computed from NOAA daily temps using base temperature of 50°F for corn. GDD-to-date is the single strongest in-season predictor. <strong>Crop Condition Index (CCI):</strong> NASS weekly ratings collapsed to a numeric score (Good/Excellent = +2, Fair = 0, Poor/Very Poor = −2), cumulated over the season. <strong>Soil Adjusted Precipitation:</strong> Cumulative rainfall weighted by SSURGO available water capacity — high-capacity soils buffer drought stress, low-capacity soils amplify it.</p>
+  </div>
+
+  <!-- SECTION 3: MODEL IMPLEMENTATION -->
+  <div class="section">
+    <h2>3. Model Implementation</h2>
+
+    <h3>Recommended Architecture: Gradient Boosting with Temporal Cross-Validation</h3>
+    <p>XGBoost or LightGBM is the right primary choice for this task — not deep learning. The dataset is tabular, features are well-defined, and the signal-to-noise ratio demands interpretability. Crop yield ML literature consistently shows gradient boosting matching or exceeding LSTM on structured feature sets at county granularity.</p>
+
+    <div class="pipeline">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-body">
+          <div class="step-title">Data Ingestion &amp; Temporal Join</div>
+          <div class="step-desc">Pull weekly snapshots from NASS + NOAA + Drought Monitor. Join on FIPS county code + crop year + week-of-season. SSURGO soil features are a static left join — pulled once, merged by FIPS.</div>
+          <div class="step-code">pandas merge on [fips, year, week] → feature matrix</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-body">
+          <div class="step-title">Feature Construction</div>
+          <div class="step-desc">Compute GDD accumulated to current week, CCI rolling sum, cumulative precip deficit vs. 30-year normal, VPD stress days (days exceeding 2.0 kPa). All features indexed as "week W of season" to make them comparable across calendar years.</div>
+          <div class="step-code">features: [gdd_ytd, cci_cumul, precip_deficit, vpd_stress_days, drought_d3d4_pct, soil_awc, soil_drain_class]</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-body">
+          <div class="step-title">Training Strategy: Walk-Forward Validation</div>
+          <div class="step-desc">Never train on future years. Use leave-future-out cross-validation — train on years 2000–2018, validate on 2019–2021, test on 2022–2024. Prevents data leakage that inflates accuracy metrics. Retrain annually as new season closes.</div>
+          <div class="step-code">TimeSeriesSplit(n_splits=5, gap=1_year)</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">4</div>
+        <div class="step-body">
+          <div class="step-title">Model Fitting: Per-Crop, Per-Week</div>
+          <div class="step-desc">Train a separate model per crop × week-of-season combination. A week 20 corn model uses only signals available through week 20; a week 30 model gets the fuller picture. This means ~3 crops × 20 weekly snapshots = 60 models, but each is lightweight and interpretable.</div>
+          <div class="step-code">XGBRegressor(n_estimators=400, max_depth=5, learning_rate=0.05)</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">5</div>
+        <div class="step-body">
+          <div class="step-title">Uncertainty Quantification</div>
+          <div class="step-desc">Use quantile regression (LightGBM native support) to produce 10th–90th percentile forecast bands, not just point estimates. The UI should always display the confidence interval — particularly critical for early-season forecasts where uncertainty is high.</div>
+          <div class="step-code">LGBMRegressor(objective='quantile', alpha=0.1 / 0.5 / 0.9)</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">6</div>
+        <div class="step-body">
+          <div class="step-title">Forecast Storage</div>
+          <div class="step-desc">Write predictions to PostgreSQL (existing pipeline DB). Table: <code>yield_forecasts(fips, crop, week, year, p10, p50, p90, model_version)</code>. Immutable — never overwrite historical forecasts so post-season accuracy auditing is preserved.</div>
+          <div class="step-code">INSERT INTO yield_forecasts ... ON CONFLICT DO NOTHING</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SECTION 4: INTEGRATION -->
+  <div class="section">
+    <h2>4. Integration with the Agricultural Webapp</h2>
+
+    <p>The prediction module plugs into the existing Next.js + FastAPI + PostgreSQL stack without requiring infrastructure changes. The new surface area is: a Python prediction job (runs weekly), two new PostgreSQL tables, and two new API endpoints surfaced to the frontend.</p>
+
+    <div class="int-grid">
+      <div class="int-box">
+        <div class="int-label">Data Layer</div>
+        <div class="int-name">PostgreSQL</div>
+        <div class="int-tech">yield_forecasts<br>yield_model_runs</div>
+      </div>
+      <div class="int-arrow">→</div>
+      <div class="int-box">
+        <div class="int-label">API Layer</div>
+        <div class="int-name">FastAPI</div>
+        <div class="int-tech">GET /predict/yield<br>GET /predict/yield/history</div>
+      </div>
+      <div class="int-arrow">→</div>
+      <div class="int-box">
+        <div class="int-label">UI Layer</div>
+        <div class="int-name">Next.js</div>
+        <div class="int-tech">County map overlay<br>Forecast confidence chart</div>
+      </div>
+    </div>
+
+    <h3>API Endpoints</h3>
+    <table>
+      <thead>
+        <tr><th>Endpoint</th><th>Parameters</th><th>Returns</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>GET /predict/yield</code></td>
+          <td><code>fips</code>, <code>crop</code>, <code>week</code>, <code>year</code></td>
+          <td>JSON: p10, p50, p90 bu/acre, model confidence tier, last updated timestamp</td>
+        </tr>
+        <tr>
+          <td><code>GET /predict/yield/history</code></td>
+          <td><code>fips</code>, <code>crop</code>, <code>start_year</code></td>
+          <td>Array of seasonal forecasts vs. actuals — feeds accuracy retrospective chart</td>
+        </tr>
+        <tr>
+          <td><code>GET /predict/yield/map</code></td>
+          <td><code>crop</code>, <code>week</code>, <code>year</code></td>
+          <td>GeoJSON-compatible county forecast array for choropleth layer</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>Frontend Components</h3>
+    <p><strong>County choropleth overlay:</strong> Color-coded by forecast deviation from county historical average (z-score). Green = above average, red = below average. Existing map component extended with a "Yield Forecast" layer toggle. <strong>Forecast confidence strip chart:</strong> A simple visualization showing how forecast p10–p90 bands narrow as the season progresses — communicates model maturity without technical jargon. <strong>USDA Benchmark callout:</strong> Each county forecast card displays the most recent NASS published actual alongside the current model forecast for easy comparison.</p>
+
+    <h3>Weekly Automation</h3>
+    <p>A Python script runs every Thursday (triggered via cron on existing AWS EC2 instance) after NASS publishes new crop condition data. Runtime is approximately 8–12 minutes for all county × crop combinations. Failures alert via existing monitoring stack; the previous week's forecast remains live until a new run succeeds.</p>
+  </div>
+
+  <!-- SECTION 5: RISKS -->
+  <div class="section">
+    <h2>5. Risks &amp; Mitigations</h2>
+    <div class="risk-row">
+      <div class="risk-pill risk-high">High</div>
+      <div class="risk-text"><strong>Early-season overconfidence in UI.</strong> Users may treat April forecasts as reliable. Mitigation: Force-display confidence interval bands in UI; dynamically label forecast confidence tier ("Low — early season", "High — post-pollination") based on week of season.</div>
+    </div>
+    <div class="risk-row">
+      <div class="risk-pill risk-high">High</div>
+      <div class="risk-text"><strong>NOAA station data gaps for sparse counties.</strong> Rural counties may have no nearby weather station with complete records. Mitigation: Fall back to gridded reanalysis data (PRISM or NOAA GRIDMET) for counties where nearest station has &gt;10% missing values.</div>
+    </div>
+    <div class="risk-row">
+      <div class="risk-pill risk-med">Medium</div>
+      <div class="risk-text"><strong>Walk-forward validation understates generalization error.</strong> Training on 2000–2018 may miss structural shifts (climate change, new hybrids). Mitigation: Recalibrate annually; include a year-trend feature to capture systemic yield improvement over time.</div>
+    </div>
+    <div class="risk-row">
+      <div class="risk-pill risk-low">Low</div>
+      <div class="risk-text"><strong>SSURGO data staleness.</strong> Soil data was compiled over multiple decades; recent drainage improvements may not be reflected. Mitigation: Document vintage in data dictionary; flag for periodic manual review.</div>
+    </div>
+  </div>
+
+  <!-- SECTION 6: DELIVERY MILESTONES -->
+  <div class="section">
+    <h2>6. Delivery Milestones</h2>
+    <table>
+      <thead>
+        <tr><th>Week</th><th>Deliverable</th><th>Owner</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><strong>1–2</strong></td><td>Data pipeline setup — NOAA + NASA POWER + Drought Monitor ingestion; SSURGO static join</td><td>Backend</td></tr>
+        <tr><td><strong>3</strong></td><td>Feature engineering module + historical feature matrix built (2000–2024)</td><td>Data Science</td></tr>
+        <tr><td><strong>4</strong></td><td>Model training + walk-forward validation complete; accuracy benchmarked vs. county mean baseline</td><td>Data Science</td></tr>
+        <tr><td><strong>5</strong></td><td>FastAPI endpoints + PostgreSQL tables; integration tests pass</td><td>Backend</td></tr>
+        <tr><td><strong>6</strong></td><td>Frontend map overlay + confidence strip chart; cron job live on EC2</td><td>Frontend + DevOps</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+</div>
+
+<footer>
+  <span><strong>Agricultural Dashboard</strong> · Prediction Module 01 — Crop Yield</span>
+  <span>Internal Pipeline Report · March 2026 · QuickStats SII Project</span>
+</footer>
+
+</body>
+</html>
