@@ -1,32 +1,27 @@
-"""ETL: Ingest CME futures daily settlement prices from Nasdaq Data Link.
+"""ETL: Ingest CME futures daily settlement prices via Yahoo Finance.
 
 Schedule: Daily, 7:00 AM ET (after CME close).
-API: https://data.nasdaq.com/api/v3/datasets/CHRIS/CME_{code}.json
-Rate limit: 50 calls/day (free tier) — we use 3 calls/day.
+Source: Yahoo Finance (free, no API key required).
 Target table: futures_daily
 """
 
 import sys
-from datetime import date, timedelta, datetime
+from datetime import date, timedelta, datetime, timezone
 
 import pandas as pd
-import requests
+import yfinance as yf
 from sqlalchemy.dialects.postgresql import insert
 
-from backend.etl.common import get_env, get_sync_session, setup_logging, log_ingest_summary
+from backend.etl.common import get_sync_session, setup_logging, log_ingest_summary
 
 logger = setup_logging("ingest_futures")
 
-NASDAQ_DL_API_KEY = get_env("NASDAQ_DL_API_KEY")
-
-# Nearest continuous contract tickers
+# Yahoo Finance continuous front-month futures tickers
 TICKER_MAP = {
-    "corn": "CHRIS/CME_C1",
-    "soybean": "CHRIS/CME_S1",
-    "wheat": "CHRIS/CME_W1",
+    "corn": "ZC=F",
+    "soybean": "ZS=F",
+    "wheat": "ZW=F",
 }
-
-API_BASE = "https://data.nasdaq.com/api/v3/datasets"
 
 
 def infer_contract_month(commodity: str, trade_date: date) -> str:
@@ -54,42 +49,31 @@ def infer_contract_month(commodity: str, trade_date: date) -> str:
 
 
 def fetch_futures(commodity: str, start_date: str) -> pd.DataFrame:
-    """Fetch daily settlement prices for a commodity from Nasdaq Data Link."""
+    """Fetch daily futures prices for a commodity from Yahoo Finance."""
     ticker = TICKER_MAP[commodity]
-    url = f"{API_BASE}/{ticker}.json"
-    params = {
-        "api_key": NASDAQ_DL_API_KEY,
-        "start_date": start_date,
-    }
-    logger.info(f"Fetching {commodity} futures from {ticker} since {start_date}")
-    resp = requests.get(url, params=params, timeout=30)
-    resp.raise_for_status()
+    logger.info("Fetching %s futures from %s since %s", commodity, ticker, start_date)
 
-    dataset = resp.json()["dataset"]
-    columns = [c.lower().replace(" ", "_") for c in dataset["column_names"]]
-    df = pd.DataFrame(dataset["data"], columns=columns)
+    df = yf.download(ticker, start=start_date, auto_adjust=True, progress=False)
 
     if df.empty:
-        logger.warning(f"No data returned for {commodity} since {start_date}")
+        logger.warning("No data returned for %s since %s", commodity, start_date)
         return pd.DataFrame()
 
-    # Standardize column names — Nasdaq Data Link CHRIS datasets use:
-    # Date, Open, High, Low, Last, Change, Settle, Volume, Previous Day Open Interest
-    col_map = {}
-    for c in columns:
-        if c == "date":
-            col_map[c] = "trade_date"
-        elif "settle" in c:
-            col_map[c] = "settlement"
-        elif "volume" in c:
-            col_map[c] = "volume"
-        elif "open_interest" in c or "previous_day_open_interest" in c:
-            col_map[c] = "open_interest"
+    # yfinance returns: Open, High, Low, Close, Volume
+    # Close is the settlement price for continuous contracts
+    df = df.reset_index()
 
-    df = df.rename(columns=col_map)
+    # Handle multi-level columns from yfinance
+    if isinstance(df.columns, pd.MultiIndex):
+        df.columns = [col[0] if col[1] == "" or col[1] == ticker else col[0] for col in df.columns]
 
-    # Keep only the columns we need
-    keep = ["trade_date", "settlement", "volume", "open_interest"]
+    df = df.rename(columns={
+        "Date": "trade_date",
+        "Close": "settlement",
+        "Volume": "volume",
+    })
+
+    keep = ["trade_date", "settlement", "volume"]
     available = [c for c in keep if c in df.columns]
     df = df[available].copy()
 
@@ -99,12 +83,13 @@ def fetch_futures(commodity: str, start_date: str) -> pd.DataFrame:
 
     if "volume" in df.columns:
         df["volume"] = pd.to_numeric(df["volume"], errors="coerce").astype("Int64")
-    if "open_interest" in df.columns:
-        df["open_interest"] = pd.to_numeric(df["open_interest"], errors="coerce").astype("Int64")
+
+    # Yahoo Finance doesn't provide open interest in daily bars
+    df["open_interest"] = pd.NA
 
     df["commodity"] = commodity
     df["contract_month"] = df["trade_date"].apply(lambda d: infer_contract_month(commodity, d))
-    df["source"] = "nasdaq_dl"
+    df["source"] = "yahoo_finance"
 
     return df
 
@@ -126,7 +111,7 @@ def upsert_futures(df: pd.DataFrame) -> int:
                 "settlement": stmt.excluded.settlement,
                 "volume": stmt.excluded.volume,
                 "open_interest": stmt.excluded.open_interest,
-                "ingest_ts": datetime.utcnow(),
+                "ingest_ts": datetime.now(timezone.utc),
             },
         )
         result = session.execute(stmt)
@@ -141,7 +126,7 @@ def upsert_futures(df: pd.DataFrame) -> int:
 
 def run(lookback_days: int = 7):
     """Main entry point — fetch last N days of futures for all commodities."""
-    start = datetime.utcnow()
+    start = datetime.now(timezone.utc)
     start_date = (date.today() - timedelta(days=lookback_days)).isoformat()
     total_rows = 0
 
@@ -151,11 +136,8 @@ def run(lookback_days: int = 7):
             n = upsert_futures(df)
             total_rows += n
             logger.info(f"  {commodity}: {n} rows upserted ({len(df)} fetched)")
-        except requests.HTTPError as e:
-            logger.error(f"  {commodity}: HTTP error — {e}")
-            raise
         except Exception as e:
-            logger.error(f"  {commodity}: unexpected error — {e}")
+            logger.error("  %s: error — %s", commodity, e)
             raise
 
     log_ingest_summary(logger, "futures_daily", total_rows, start)

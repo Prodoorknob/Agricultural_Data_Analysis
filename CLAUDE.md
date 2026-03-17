@@ -92,7 +92,7 @@ Agricultural_Data_Analysis/
 | S3 | `usda-analysis-datasets` (us-east-2) — parquet files, model artifacts |
 | EC2 | Pipeline cron + FastAPI backend (same instance) |
 | Athena | Database `usda_agricultural`, table `quickstats_data`, workgroup `usda-dashboard` |
-| RDS | PostgreSQL (db.t4g.micro, us-east-2) — `ag-dashboard` instance, database `ag_dashboard`, user `ag_app` |
+| RDS | PostgreSQL (db.t4g.micro, us-east-2) — `ag-dashboard` instance, database `ag_dashboard`, user `ag_app`, **Publicly Accessible = Yes** (local dev access via security group IP whitelist) |
 | SNS | `arn:aws:sns:us-east-2:294733692749:usda-pipeline-alerts` |
 
 ## Environment Variables
@@ -104,7 +104,7 @@ NOAA_API_KEY=...           # NOAA weather data
 
 # Prediction modules (added to .env)
 DATABASE_URL=postgresql+asyncpg://ag_app:PASSWORD@ag-dashboard.cvuu6ce8odqc.us-east-2.rds.amazonaws.com:5432/ag_dashboard
-NASDAQ_DL_API_KEY=...      # Nasdaq Data Link (CME futures)
+# NASDAQ_DL_API_KEY — no longer needed (CHRIS/CME retired, switched to Yahoo Finance)
 FRED_API_KEY=...           # FRED API (DXY index)
 ```
 
@@ -151,7 +151,7 @@ cd backend && pip install -r requirements.txt && uvicorn main:app --reload --por
 - Step 1: CLAUDE.md created
 - Step 2: FastAPI backend skeleton (`backend/`) — main.py, config.py, database.py, routers/price.py (stub endpoints), models/schemas.py, models/db_tables.py (ORM), alembic migration 001
 - Step 3: DB Migration — 5 tables created on RDS (futures_daily, wasde_releases, price_forecasts, ers_production_costs, dxy_daily). Fixed: `config.py` extra="ignore", `database.py` lazy engine init for Alembic compatibility.
-- Step 4: ETL Scripts — `backend/etl/common.py` (sync DB engine, logging), `ingest_futures.py` (daily CME via Nasdaq DL, upsert to futures_daily), `ingest_fred.py` (daily FRED DXY, upsert to dxy_daily), `ingest_wasde.py` (monthly PSD CSV download, filter/pivot/compute stocks-to-use, upsert to wasde_releases), `load_ers_costs.py` (annual ERS Excel parse, upsert to ers_production_costs). Updated `pipeline/cron_runner.sh` with `--daily`, `--monthly-wasde`, `--annual-ers` modes.
+- Step 4: ETL Scripts — `backend/etl/common.py` (sync DB engine, logging), `ingest_futures.py` (daily CME via Yahoo Finance `yfinance`, upsert to futures_daily — switched from Nasdaq DL CHRIS/CME which was retired/403), `ingest_fred.py` (daily FRED DXY, upsert to dxy_daily), `ingest_wasde.py` (monthly PSD CSV download, filter/pivot/compute stocks-to-use, upsert to wasde_releases), `load_ers_costs.py` (annual ERS Excel parse, upsert to ers_production_costs). Updated `pipeline/cron_runner.sh` with `--daily`, `--monthly-wasde`, `--annual-ers` modes.
 - Step 5: Feature Engineering — `backend/features/price_features.py`: `build_price_features(commodity, as_of_date, horizon_months)` returns single-row DataFrame with 18 features (market: futures_spot/deferred, basis, term_spread, OI change; fundamental: stocks_to_use, percentile, WASDE surprise, world STU; macro: DXY, DXY 30d change; cost: production_cost_bu, price_cost_ratio; interaction: corn_soy_ratio; seasonal: prior_year_price, seasonal_factor). Pandera schema validation. `build_training_features()` for batch generation. MVP skips drought/CCI.
 - Step 6: Model Training — `backend/models/price_model.py`: PriceEnsemble dataclass (SARIMAX + LightGBM point/quantile + Ridge meta-learner + IsotonicRegression calibrator). SHAP TreeExplainer key drivers with human-readable label map. Mahalanobis regime detection with regularized covariance. Calibrated probability via normal CDF + isotonic. Divergence flag (>5% from futures). `backend/models/train.py`: walk-forward training (2010-2019 train, 2020-2022 val, 2023-2024 test). Futures-baseline MAPE gate (model must beat futures + 1.5pp). 18 model sets saved as pickle to `backend/artifacts/{commodity}/horizon_{N}/`. Metrics JSON alongside. S3 upload to `models/price/`. CLI: `python -m backend.models.train [--commodity X] [--horizon N] [--local-only]`.
 

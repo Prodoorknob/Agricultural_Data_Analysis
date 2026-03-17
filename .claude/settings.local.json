@@ -11,7 +11,18 @@
       "Bash(set +a)",
       "Bash(alembic upgrade:*)",
       "Bash(python -c \"import psycopg2; print\\(psycopg2.__version__\\)\")",
-      "Bash(/c/Users/rajas/anaconda3/python -m pip install psycopg2-binary)"
+      "Bash(/c/Users/rajas/anaconda3/python -m pip install psycopg2-binary)",
+      "Bash(python -c \"import ast; ast.parse\\(open\\(''backend/features/price_features.py''\\).read\\(\\)\\); print\\(''Syntax OK''\\)\")",
+      "Bash(pip list:*)",
+      "Bash(npx tsc:*)",
+      "Bash(python -c \"from backend.routers.price import router; print\\(''Router OK''\\)\")",
+      "Bash(python -c \"from backend.main import app; print\\(''App OK, lifespan:'', app.router.lifespan_context\\)\")",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "WebSearch",
+      "Bash(pip show:*)",
+      "Bash(python -m backend.etl.ingest_futures)"
     ]
   }
 }

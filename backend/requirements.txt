@@ -28,3 +28,6 @@ pandera>=0.18.0
 # AWS + HTTP
 boto3>=1.28.0
 requests>=2.31.0
+
+# Market data
+yfinance>=0.2.30
