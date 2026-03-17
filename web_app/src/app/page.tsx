@@ -6,6 +6,7 @@ import LandDashboard from '@/components/LandDashboard';
 import LaborDashboard from '@/components/LaborDashboard';
 import CropsDashboard from '@/components/CropsDashboard';
 import AnimalsDashboard from '@/components/AnimalsDashboard';
+import PredictionsDashboard from '@/components/PredictionsDashboard';
 import StateInfoPanel from '@/components/StateInfoPanel';
 import StateSingleMap from '@/components/StateSingleMap';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
@@ -18,7 +19,7 @@ import { fetchStateData, fetchNationalCrops, fetchLandUseData, fetchLaborData } 
 import { getMapData, getLandUseTrends, getBoomCrops, filterData, getCropConditionTrends, getCropProgressSummary } from '../utils/processData';
 
 // --- Types ---
-type ViewMode = 'OVERVIEW' | 'CROPS' | 'ANIMALS' | 'LAND' | 'LABOR' | 'ECONOMICS';
+type ViewMode = 'OVERVIEW' | 'CROPS' | 'ANIMALS' | 'LAND' | 'LABOR' | 'ECONOMICS' | 'PREDICTIONS';
 
 // --- Filter Options ---
 const YEARS = Array.from({ length: 25 }, (_, i) => 2025 - i); // 2025 down to 2001
@@ -40,6 +41,7 @@ const VIEW_FILTER_DEFAULTS: Record<ViewMode, { sector?: string; group?: string }
   'LAND': {},
   'LABOR': { sector: 'All Sectors', group: 'All Groups' },
   'ECONOMICS': { sector: 'All Sectors', group: 'All Groups' },
+  'PREDICTIONS': {},
 };
 
 export default function Home() {
@@ -213,8 +215,8 @@ export default function Home() {
             </h1>
           </div>
           <nav className="hidden lg:flex items-center gap-6">
-            {(['OVERVIEW', 'CROPS', 'ANIMALS', 'LAND', 'LABOR', 'ECONOMICS'] as ViewMode[]).map(v => {
-              const labels: Record<ViewMode, string> = { OVERVIEW: 'Dashboard', CROPS: 'Crops', ANIMALS: 'Livestock', LAND: 'Land & Area', LABOR: 'Labor', ECONOMICS: 'Economics' };
+            {(['OVERVIEW', 'CROPS', 'ANIMALS', 'LAND', 'LABOR', 'ECONOMICS', 'PREDICTIONS'] as ViewMode[]).map(v => {
+              const labels: Record<ViewMode, string> = { OVERVIEW: 'Dashboard', CROPS: 'Crops', ANIMALS: 'Livestock', LAND: 'Land & Area', LABOR: 'Labor', ECONOMICS: 'Economics', PREDICTIONS: 'Predictions' };
               return (
                 <button
                   key={v}
@@ -633,6 +635,14 @@ export default function Home() {
 
         {viewMode === 'ECONOMICS' && (
           <EconomicsDashboard
+            data={filteredStateData}
+            year={selectedYear}
+            stateName={selectedState || 'National'}
+          />
+        )}
+
+        {viewMode === 'PREDICTIONS' && (
+          <PredictionsDashboard
             data={filteredStateData}
             year={selectedYear}
             stateName={selectedState || 'National'}

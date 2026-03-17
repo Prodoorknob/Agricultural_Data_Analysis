@@ -92,7 +92,7 @@ Agricultural_Data_Analysis/
 | S3 | `usda-analysis-datasets` (us-east-2) — parquet files, model artifacts |
 | EC2 | Pipeline cron + FastAPI backend (same instance) |
 | Athena | Database `usda_agricultural`, table `quickstats_data`, workgroup `usda-dashboard` |
-| RDS | PostgreSQL (db.t3.micro, us-east-2) — prediction module data [TO PROVISION] |
+| RDS | PostgreSQL (db.t4g.micro, us-east-2) — `ag-dashboard` instance, database `ag_dashboard`, user `ag_app` |
 | SNS | `arn:aws:sns:us-east-2:294733692749:usda-pipeline-alerts` |
 
 ## Environment Variables
@@ -102,10 +102,10 @@ Agricultural_Data_Analysis/
 QUICKSTATS_API_KEY=...     # USDA QuickStats API
 NOAA_API_KEY=...           # NOAA weather data
 
-# Required for prediction modules (add to .env)
-DATABASE_URL=postgresql+asyncpg://ag_app:PASSWORD@RDS_ENDPOINT:5432/ag_dashboard
-NASDAQ_DL_API_KEY=...      # Nasdaq Data Link (CME futures) — obtained
-FRED_API_KEY=...           # FRED API (DXY index) — obtained
+# Prediction modules (added to .env)
+DATABASE_URL=postgresql+asyncpg://ag_app:PASSWORD@ag-dashboard.cvuu6ce8odqc.us-east-2.rds.amazonaws.com:5432/ag_dashboard
+NASDAQ_DL_API_KEY=...      # Nasdaq Data Link (CME futures)
+FRED_API_KEY=...           # FRED API (DXY index)
 ```
 
 ## Data Flow
@@ -143,18 +143,31 @@ cd backend && pip install -r requirements.txt && uvicorn main:app --reload --por
 ### Commodity Price Forecasting (Module 02)
 - **Spec:** `research/commodity-price-tech-spec.md`
 - **Plan:** `.claude/plans/idempotent-fluttering-prism.md`
-- **API keys:** NASDAQ_DL_API_KEY and FRED_API_KEY obtained, need to add to `.env`
-- **RDS:** db.t4g.micro, identifier `ag-dashboard`, master user `ag_app`, database `ag_dashboard`, us-east-2
+- **RDS:** db.t4g.micro, identifier `ag-dashboard`, master user `ag_app`, database `ag_dashboard`, endpoint `ag-dashboard.cvuu6ce8odqc.us-east-2.rds.amazonaws.com`, us-east-2
+- **All API keys and DATABASE_URL configured in `.env`** (local + EC2)
+- **EC2 backend venv:** `~/Agricultural_Data_Analysis/backend/venv/`
 
 #### Completed
 - Step 1: CLAUDE.md created
 - Step 2: FastAPI backend skeleton (`backend/`) — main.py, config.py, database.py, routers/price.py (stub endpoints), models/schemas.py, models/db_tables.py (ORM), alembic migration 001
+- Step 3: DB Migration — 5 tables created on RDS (futures_daily, wasde_releases, price_forecasts, ers_production_costs, dxy_daily). Fixed: `config.py` extra="ignore", `database.py` lazy engine init for Alembic compatibility.
+- Step 4: ETL Scripts — `backend/etl/common.py` (sync DB engine, logging), `ingest_futures.py` (daily CME via Nasdaq DL, upsert to futures_daily), `ingest_fred.py` (daily FRED DXY, upsert to dxy_daily), `ingest_wasde.py` (monthly PSD CSV download, filter/pivot/compute stocks-to-use, upsert to wasde_releases), `load_ers_costs.py` (annual ERS Excel parse, upsert to ers_production_costs). Updated `pipeline/cron_runner.sh` with `--daily`, `--monthly-wasde`, `--annual-ers` modes.
+- Step 5: Feature Engineering — `backend/features/price_features.py`: `build_price_features(commodity, as_of_date, horizon_months)` returns single-row DataFrame with 18 features (market: futures_spot/deferred, basis, term_spread, OI change; fundamental: stocks_to_use, percentile, WASDE surprise, world STU; macro: DXY, DXY 30d change; cost: production_cost_bu, price_cost_ratio; interaction: corn_soy_ratio; seasonal: prior_year_price, seasonal_factor). Pandera schema validation. `build_training_features()` for batch generation. MVP skips drought/CCI.
+- Step 6: Model Training — `backend/models/price_model.py`: PriceEnsemble dataclass (SARIMAX + LightGBM point/quantile + Ridge meta-learner + IsotonicRegression calibrator). SHAP TreeExplainer key drivers with human-readable label map. Mahalanobis regime detection with regularized covariance. Calibrated probability via normal CDF + isotonic. Divergence flag (>5% from futures). `backend/models/train.py`: walk-forward training (2010-2019 train, 2020-2022 val, 2023-2024 test). Futures-baseline MAPE gate (model must beat futures + 1.5pp). 18 model sets saved as pickle to `backend/artifacts/{commodity}/horizon_{N}/`. Metrics JSON alongside. S3 upload to `models/price/`. CLI: `python -m backend.models.train [--commodity X] [--horizon N] [--local-only]`.
 
-#### Remaining Steps (in order)
-- **Step 3: DB Migration** — Add DATABASE_URL + API keys to `.env`, run `cd backend && alembic upgrade head` to create 5 tables (futures_daily, wasde_releases, price_forecasts, ers_production_costs, dxy_daily)
-- **Step 4: ETL Scripts** — `backend/etl/ingest_futures.py` (daily, Nasdaq Data Link CME), `ingest_fred.py` (daily, FRED DXY), `ingest_wasde.py` (monthly, USDA PSD CSV), `load_ers_costs.py` (annual, ERS Excel). Update `pipeline/cron_runner.sh`.
-- **Step 5: Feature Engineering** — `backend/features/price_features.py`: build_price_features() with market, fundamental, macro, cost features. Pandera validation. MVP skips drought/CCI.
-- **Step 6: Model Training** — `backend/models/price_model.py`: PriceEnsemble (SARIMAX + LightGBM point/quantile + Ridge meta + IsotonicRegression calibrator). SHAP key drivers, Mahalanobis regime detection. 18 model sets (3 commodities x 6 horizons). Artifacts to S3.
-- **Step 7: API Implementation** — Fill in stub endpoints in `backend/routers/price.py`: GET /, /probability, /wasde-signal, /history. Load models on startup.
-- **Step 8: Frontend** — `web_app/src/components/predictions/`: PriceFanChart, ProbabilityGauge, KeyDriverCallout, WasdeSignalCard, PriceRegimeAlert, PredictionsDashboard. New hook usePriceForecast.ts. Add PREDICTIONS tab to page.tsx.
-- **Step 9: Scheduling & Deployment** — Extend cron_runner.sh, systemd unit for FastAPI on EC2
+- Step 7: API Implementation — `backend/routers/price.py`: all 4 endpoints implemented (GET /, /probability, /wasde-signal, /history). Model loading at startup via `_load_models()` in `main.py` lifespan — loads PriceEnsemble pickles from `backend/artifacts/{commodity}/horizon_{N}/ensemble.pkl`. Forecast endpoint builds features, runs ensemble predict, persists to `price_forecasts` table (upsert). Probability endpoint uses `predict_probability()` with calibrated isotonic. WASDE signal queries last 2 releases, computes surprise/direction/percentile. History endpoint joins `price_forecasts` with `futures_daily` for realized prices.
+- Step 8: Frontend — `web_app/src/components/PredictionsDashboard.tsx`: single-file dashboard with sub-components (PriceRegimeAlert, KpiCard, PriceFanChart, ProbabilityGauge, WasdeSignalCard, KeyDriverCallout, ForecastHistoryChart). `web_app/src/hooks/usePriceForecast.ts`: custom hook with fetchAllHorizons, fetchProbability, fetchWasdeSignal, fetchHistory. PREDICTIONS tab added to page.tsx ViewMode. Backend URL configurable via `NEXT_PUBLIC_PREDICTION_API_URL` env var.
+
+- Step 9: Scheduling & Deployment — Architecture: **local PC trains models, EC2 serves predictions**.
+  - `_load_models()` in `main.py`: S3 fallback via boto3 — downloads pickles from `s3://usda-analysis-datasets/models/price/` if not on local disk.
+  - `backend/ag-prediction.service`: systemd unit for FastAPI on EC2 (port 8000, auto-restart on failure).
+  - `web_app/.env.production`: `NEXT_PUBLIC_PREDICTION_API_URL` placeholder for EC2 endpoint.
+  - `backend/models/inference.py`: CLI script (`python -m backend.models.inference`) — loads ensembles, builds features, runs predict for all 18 commodity/horizon combos, upserts results to `price_forecasts` table.
+  - `cron_runner.sh --monthly-wasde`: now triggers inference after WASDE ingest, restarts `ag-prediction` service to reload models.
+  - **Local workflow:** ETL (`ingest_futures`, `ingest_fred`, `ingest_wasde`, `load_ers_costs`) -> Train (`python -m backend.models.train`) -> S3 upload.
+  - **EC2 cron:** daily market data (weekdays 12pm), WASDE + inference (12th monthly 2pm), ERS costs (Jan 15 10am), NASS (15th monthly 6am).
+  - **EC2 deploy:** `sudo cp backend/ag-prediction.service /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl enable --now ag-prediction`
+  - **Cost target:** ~$22/mo (RDS $15 + EC2 serving-only $6 + S3/Athena <$1). No training compute on EC2.
+
+#### Module 02 Complete
+All 9 steps implemented. See `research/commodity-price-tech-spec.md` for full spec.
