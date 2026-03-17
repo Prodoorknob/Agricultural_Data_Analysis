@@ -1,0 +1,832 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QuickStats Analytics — Project Overview</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Instrument+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --night:    #0D1117;
+    --panel:    #161C24;
+    --surface:  #1E2733;
+    --border:   #2A3441;
+    --muted:    #4A5D6E;
+    --text:     #C9D6E0;
+    --bright:   #EDF2F7;
+    --green:    #3DBA7A;
+    --green-dim:#1A4D35;
+    --amber:    #E8A048;
+    --amber-dim:#3D2A0E;
+    --blue:     #5B9BD5;
+    --blue-dim: #132035;
+    --red:      #E05C5C;
+    --red-dim:  #3D1212;
+    --teal:     #4DB8B8;
+  }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    font-family: 'Instrument Sans', sans-serif;
+    background: var(--night);
+    color: var(--text);
+    min-height: 100vh;
+    line-height: 1.6;
+  }
+
+  /* ── TOP BAR ── */
+  .topbar {
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    padding: 14px 40px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+
+  .topbar-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--green);
+    box-shadow: 0 0 8px var(--green);
+    animation: pulse 2.4s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; } 50% { opacity: 0.4; }
+  }
+
+  .topbar-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--bright);
+  }
+
+  .topbar-sep { color: var(--muted); margin: 0 4px; }
+
+  .topbar-sub {
+    font-size: 12px;
+    color: var(--muted);
+    letter-spacing: 0.04em;
+  }
+
+  .topbar-status {
+    margin-left: auto;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--green);
+    background: var(--green-dim);
+    padding: 4px 10px;
+    border-radius: 20px;
+    border: 1px solid #2A5C3F;
+  }
+
+  /* ── HERO ── */
+  .hero {
+    padding: 64px 40px 52px;
+    max-width: 1000px;
+    margin: 0 auto;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .eyebrow {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--teal);
+    margin-bottom: 14px;
+  }
+
+  h1 {
+    font-family: 'Syne', sans-serif;
+    font-size: clamp(28px, 4.5vw, 46px);
+    font-weight: 800;
+    color: var(--bright);
+    line-height: 1.1;
+    margin-bottom: 20px;
+  }
+
+  h1 span { color: var(--green); }
+
+  .hero-desc {
+    font-size: 16px;
+    line-height: 1.75;
+    color: var(--text);
+    max-width: 680px;
+    margin-bottom: 36px;
+  }
+
+  /* Status pills row */
+  .status-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .pill {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 12.5px;
+    font-weight: 500;
+    padding: 6px 14px;
+    border-radius: 20px;
+    border: 1px solid;
+  }
+
+  .pill-dot { width: 7px; height: 7px; border-radius: 50%; }
+
+  .pill-green  { color: var(--green);  background: var(--green-dim);  border-color: #2A5C3F; }
+  .pill-amber  { color: var(--amber);  background: var(--amber-dim);  border-color: #5C3D14; }
+  .pill-blue   { color: var(--blue);   background: var(--blue-dim);   border-color: #1E3D5C; }
+
+  /* ── LAYOUT ── */
+  .content {
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 48px 40px 80px;
+    display: grid;
+    gap: 48px;
+  }
+
+  /* ── SECTION TITLES ── */
+  .section-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .section-title::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  /* ── AIM BLOCK ── */
+  .aim-block {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--teal);
+    border-radius: 10px;
+    padding: 28px 32px;
+  }
+
+  .aim-block p {
+    font-size: 15px;
+    line-height: 1.8;
+    color: var(--text);
+  }
+
+  .aim-block strong { color: var(--bright); font-weight: 600; }
+
+  /* ── DATA SOURCES GRID ── */
+  .sources-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 14px;
+  }
+
+  .source-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px 20px;
+    transition: border-color 0.2s;
+  }
+
+  .source-card:hover { border-color: var(--muted); }
+
+  .source-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+  }
+
+  .source-icon {
+    font-size: 18px;
+    width: 34px;
+    height: 34px;
+    border-radius: 8px;
+    background: var(--surface);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .source-name {
+    font-family: 'Syne', sans-serif;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--bright);
+  }
+
+  .source-desc {
+    font-size: 12.5px;
+    color: var(--muted);
+    line-height: 1.5;
+  }
+
+  .source-tag {
+    display: inline-block;
+    margin-top: 8px;
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: var(--surface);
+    color: var(--muted);
+    border: 1px solid var(--border);
+  }
+
+  /* ── FEATURES / PAGES ── */
+  .pages-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 14px;
+  }
+
+  .page-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px 22px;
+    transition: border-color 0.2s, transform 0.2s;
+  }
+
+  .page-card:hover {
+    border-color: var(--muted);
+    transform: translateY(-1px);
+  }
+
+  .page-label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 6px;
+  }
+
+  .page-name {
+    font-family: 'Syne', sans-serif;
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--bright);
+    margin-bottom: 10px;
+  }
+
+  .page-desc {
+    font-size: 13px;
+    line-height: 1.65;
+    color: var(--text);
+    margin-bottom: 14px;
+  }
+
+  .feature-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  .feature-list li {
+    font-size: 12px;
+    color: var(--muted);
+    padding-left: 14px;
+    position: relative;
+  }
+
+  .feature-list li::before {
+    content: '→';
+    position: absolute;
+    left: 0;
+    color: var(--green);
+    font-size: 11px;
+  }
+
+  /* ── TECH STACK ── */
+  .stack-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+  }
+
+  @media (max-width: 640px) { .stack-grid { grid-template-columns: 1fr; } }
+
+  .stack-panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 24px 26px;
+  }
+
+  .stack-panel-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    margin-bottom: 18px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .stack-panel-title .icon { font-size: 15px; }
+
+  .stack-fe { color: var(--blue); }
+  .stack-be { color: var(--amber); }
+  .stack-data { color: var(--green); }
+  .stack-infra { color: var(--teal); }
+
+  .tech-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .tech-item:last-child { border-bottom: none; }
+
+  .tech-name {
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--bright);
+    min-width: 120px;
+  }
+
+  .tech-role {
+    font-size: 12.5px;
+    color: var(--muted);
+    line-height: 1.45;
+  }
+
+  /* ── WHAT'S LEFT ── */
+  .wip-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 14px;
+  }
+
+  .wip-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px 20px;
+    display: flex;
+    gap: 14px;
+    align-items: flex-start;
+  }
+
+  .wip-icon {
+    font-size: 18px;
+    margin-top: 2px;
+    flex-shrink: 0;
+  }
+
+  .wip-title {
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--bright);
+    margin-bottom: 4px;
+  }
+
+  .wip-desc {
+    font-size: 12.5px;
+    color: var(--muted);
+    line-height: 1.5;
+  }
+
+  .wip-tag {
+    display: inline-block;
+    margin-top: 7px;
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 2px 8px;
+    border-radius: 4px;
+  }
+
+  .wip-tag-amber { background: var(--amber-dim); color: var(--amber); border: 1px solid #5C3D14; }
+  .wip-tag-blue  { background: var(--blue-dim);  color: var(--blue);  border: 1px solid #1E3D5C; }
+
+  /* ── QUICK FACTS ── */
+  .facts-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 12px;
+  }
+
+  .fact-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px 20px;
+    text-align: center;
+  }
+
+  .fact-value {
+    font-family: 'Syne', sans-serif;
+    font-size: 26px;
+    font-weight: 800;
+    color: var(--bright);
+    line-height: 1.1;
+    margin-bottom: 5px;
+  }
+
+  .fact-value span { color: var(--green); }
+
+  .fact-label {
+    font-size: 11.5px;
+    color: var(--muted);
+    line-height: 1.4;
+  }
+
+  /* ── FOOTER ── */
+  footer {
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 0 40px 40px;
+    font-size: 11.5px;
+    color: var(--muted);
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+    border-top: 1px solid var(--border);
+    padding-top: 20px;
+  }
+
+  /* Fade-in animation */
+  .fade-in {
+    opacity: 0;
+    transform: translateY(16px);
+    animation: fadeUp 0.5s ease forwards;
+  }
+
+  @keyframes fadeUp {
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .fade-in:nth-child(1) { animation-delay: 0.05s; }
+  .fade-in:nth-child(2) { animation-delay: 0.12s; }
+  .fade-in:nth-child(3) { animation-delay: 0.18s; }
+  .fade-in:nth-child(4) { animation-delay: 0.24s; }
+  .fade-in:nth-child(5) { animation-delay: 0.30s; }
+  .fade-in:nth-child(6) { animation-delay: 0.36s; }
+
+  @media (max-width: 600px) {
+    .hero, .content, footer { padding-left: 20px; padding-right: 20px; }
+    .topbar { padding: 12px 20px; }
+    .stack-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<div class="topbar">
+  <div class="topbar-dot"></div>
+  <span class="topbar-title">QuickStats Analytics</span>
+  <span class="topbar-sep">/</span>
+  <span class="topbar-sub">Agricultural Intelligence Dashboard</span>
+  <span class="topbar-status">Live · v1.0</span>
+</div>
+
+<!-- HERO -->
+<div class="hero">
+  <div class="eyebrow">Project Overview · March 2026</div>
+  <p class="hero-desc">
+    A full-stack agricultural analytics platform that pulls two decades of USDA survey data, processes it through an automated pipeline, and surfaces it as an interactive dashboard — built to help researchers, analysts, and anyone curious about US agriculture ask real questions and get real answers.
+  </p>
+  <div class="status-row">
+    <div class="pill pill-green"><span class="pill-dot" style="background:var(--green)"></span> Data Pipeline — Live</div>
+    <div class="pill pill-green"><span class="pill-dot" style="background:var(--green)"></span> Backend API — Running</div>
+    <div class="pill pill-green"><span class="pill-dot" style="background:var(--green)"></span> Frontend — Deployed</div>
+    <div class="pill pill-amber"><span class="pill-dot" style="background:var(--amber)"></span> UI Polish — In Progress</div>
+    <div class="pill pill-amber"><span class="pill-dot" style="background:var(--amber)"></span> Data Validation — In Progress</div>
+  </div>
+</div>
+
+<!-- MAIN CONTENT -->
+<div class="content">
+
+  <!-- AIM -->
+  <div class="fade-in">
+    <div class="section-title">Project Aim</div>
+    <div class="aim-block">
+      <p>
+        USDA NASS publishes rich agricultural survey data — crop yields, commodity prices, planted acreage, livestock counts, farm labor, economics — but it lives behind a clunky API with no good visual layer on top. <strong>Our goal is to make that data explorable.</strong>
+        <br><br>
+        The dashboard ingests historical NASS data from <strong>2001 to 2025</strong> across all US states, normalizes it into a clean data model, and presents it through a narrative-driven interface that answers agricultural questions — not just dumps numbers. Think of it as a <strong>Google Analytics for US farming data</strong>: fast, filterable, and built around what someone actually wants to know.
+      </p>
+    </div>
+  </div>
+
+  <!-- QUICK FACTS -->
+  <div class="fade-in">
+    <div class="section-title">By the Numbers</div>
+    <div class="facts-row">
+      <div class="fact-card">
+        <div class="fact-value"><span>24</span></div>
+        <div class="fact-label">Years of data<br>2001 – 2025</div>
+      </div>
+      <div class="fact-card">
+        <div class="fact-value"><span>50</span></div>
+        <div class="fact-label">US states covered + national rollups</div>
+      </div>
+      <div class="fact-card">
+        <div class="fact-value"><span>4</span></div>
+        <div class="fact-label">NASS data categories ingested</div>
+      </div>
+      <div class="fact-card">
+        <div class="fact-value"><span>5</span></div>
+        <div class="fact-label">Dashboard pages &amp; views live</div>
+      </div>
+      <div class="fact-card">
+        <div class="fact-value"><span>1</span></div>
+        <div class="fact-label">Unified REST API serving all pages</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- DATA SOURCES -->
+  <div class="fade-in">
+    <div class="section-title">Data Sources</div>
+    <div class="sources-grid">
+
+      <div class="source-card">
+        <div class="source-header">
+          <div class="source-icon">🌽</div>
+          <div class="source-name">NASS — Crops</div>
+        </div>
+        <div class="source-desc">Yield (bu/acre), planted & harvested area, production volume, crop progress ratings by commodity and state.</div>
+        <span class="source-tag">Primary Source</span>
+      </div>
+
+      <div class="source-card">
+        <div class="source-header">
+          <div class="source-icon">💰</div>
+          <div class="source-name">NASS — Economics</div>
+        </div>
+        <div class="source-desc">Prices received by farmers per commodity, farm revenue and income indicators, price index history.</div>
+        <span class="source-tag">Primary Source</span>
+      </div>
+
+      <div class="source-card">
+        <div class="source-header">
+          <div class="source-icon">🐄</div>
+          <div class="source-name">NASS — Livestock</div>
+        </div>
+        <div class="source-desc">Head counts, production values, and pricing for cattle, hogs, poultry, dairy, and other animal agriculture.</div>
+        <span class="source-tag">Primary Source</span>
+      </div>
+
+      <div class="source-card">
+        <div class="source-header">
+          <div class="source-icon">👷</div>
+          <div class="source-name">NASS — Labor</div>
+        </div>
+        <div class="source-desc">Farm worker counts, wage rates by region, hired vs. family labor splits, seasonal employment trends.</div>
+        <span class="source-tag">Primary Source</span>
+      </div>
+
+      <div class="source-card">
+        <div class="source-header">
+          <div class="source-icon">🔌</div>
+          <div class="source-name">USDA QuickStats API</div>
+        </div>
+        <div class="source-desc">The official NASS data endpoint. Our pipeline queries it with parameterized calls, handles pagination and rate limits, and stores results in a normalized schema.</div>
+        <span class="source-tag">API · Free</span>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- DASHBOARD PAGES -->
+  <div class="fade-in">
+    <div class="section-title">What the Dashboard Does</div>
+    <div class="pages-grid">
+
+      <div class="page-card">
+        <div class="page-label">Page 01</div>
+        <div class="page-name">Overview Dashboard</div>
+        <div class="page-desc">High-level snapshot of US agriculture. State selector, key KPIs, area trends over time, and crop progress bar chart.</div>
+        <ul class="feature-list">
+          <li>State-level filter with cross-page sync</li>
+          <li>Area Trends chart (planted vs. harvested)</li>
+          <li>Top crops by fastest growth</li>
+          <li>Crop progress completion %</li>
+        </ul>
+      </div>
+
+      <div class="page-card">
+        <div class="page-label">Page 02</div>
+        <div class="page-name">Crops Deep-Dive</div>
+        <div class="page-desc">Narrative-driven crop analysis. Follows a causal story: yield → acreage → revenue. Anomaly detection surfaced inline.</div>
+        <ul class="feature-list">
+          <li>KPI cards with YoY % + sparklines</li>
+          <li>Yield dip detection (e.g. 2002, 2012)</li>
+          <li>Harvested vs. planted discrepancy flags</li>
+          <li>Commodity switcher (corn, soy, wheat…)</li>
+        </ul>
+      </div>
+
+      <div class="page-card">
+        <div class="page-label">Page 03</div>
+        <div class="page-name">Economics & Prices</div>
+        <div class="page-desc">Prices received by farmers over time. Connects market price trends to production context.</div>
+        <ul class="feature-list">
+          <li>Price time series by commodity</li>
+          <li>Revenue trend over 20+ years</li>
+          <li>Year-over-year price change view</li>
+        </ul>
+      </div>
+
+      <div class="page-card">
+        <div class="page-label">Page 04</div>
+        <div class="page-name">Livestock</div>
+        <div class="page-desc">Animal agriculture counts and values. Head counts, pricing, and production breakdowns by species.</div>
+        <ul class="feature-list">
+          <li>Livestock inventory by type</li>
+          <li>Price received trends</li>
+          <li>State-level filtering</li>
+        </ul>
+      </div>
+
+      <div class="page-card">
+        <div class="page-label">Page 05</div>
+        <div class="page-name">Labor</div>
+        <div class="page-desc">Farm workforce data — wage rates, worker counts, and labor composition over time.</div>
+        <ul class="feature-list">
+          <li>Hired vs. family labor split</li>
+          <li>Regional wage comparisons</li>
+          <li>Seasonal labor trends</li>
+        </ul>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- TECH STACK -->
+  <div class="fade-in">
+    <div class="section-title">Tech Stack</div>
+    <div class="stack-grid">
+
+      <!-- Frontend -->
+      <div class="stack-panel">
+        <div class="stack-panel-title stack-fe"><span class="icon">🖥</span> Frontend</div>
+        <div class="tech-item">
+          <div class="tech-name">Next.js</div>
+          <div class="tech-role">React framework powering all dashboard pages. Handles routing, server-side rendering, and API calls.</div>
+        </div>
+        <div class="tech-item">
+          <div class="tech-name">React</div>
+          <div class="tech-role">Component library for all UI elements — charts, KPI cards, filters, tables.</div>
+        </div>
+        <div class="tech-item">
+          <div class="tech-name">Recharts / Chart.js</div>
+          <div class="tech-role">Charting libraries for time series, bar charts, sparklines, and trend visuals.</div>
+        </div>
+        <div class="tech-item">
+          <div class="tech-name">Tailwind CSS</div>
+          <div class="tech-role">Utility-first styling system keeping the UI consistent and fast to iterate.</div>
+        </div>
+      </div>
+
+      <!-- Backend -->
+      <div class="stack-panel">
+        <div class="stack-panel-title stack-be"><span class="icon">⚙️</span> Backend</div>
+        <div class="tech-item">
+          <div class="tech-name">Python</div>
+          <div class="tech-role">Core language for the data pipeline — API ingestion, transformation, validation, and loading.</div>
+        </div>
+        <div class="tech-item">
+          <div class="tech-name">FastAPI</div>
+          <div class="tech-role">REST API layer that the Next.js frontend queries. Serves pre-processed data to dashboard endpoints.</div>
+        </div>
+        <div class="tech-item">
+          <div class="tech-name">Pandas / NumPy</div>
+          <div class="tech-role">Data wrangling — normalization, reshaping, anomaly flagging, derived metric computation.</div>
+        </div>
+        <div class="tech-item">
+          <div class="tech-name">PostgreSQL</div>
+          <div class="tech-role">Relational database storing the cleaned, partitioned NASS data. Indexed by state, commodity, and year.</div>
+        </div>
+      </div>
+
+      <!-- Data Pipeline -->
+      <div class="stack-panel">
+        <div class="stack-panel-title stack-data"><span class="icon">🔄</span> Data Pipeline</div>
+        <div class="tech-item">
+          <div class="tech-name">USDA QuickStats API</div>
+          <div class="tech-role">Source of all agricultural data. Queried with parameterized requests by category, state, and year range.</div>
+        </div>
+        <div class="tech-item">
+          <div class="tech-name">ETL Scripts</div>
+          <div class="tech-role">Python scripts handling Extract → Transform → Load. Handles rate limits, pagination, and schema validation.</div>
+        </div>
+        <div class="tech-item">
+          <div class="tech-name">Scheduled Jobs</div>
+          <div class="tech-role">Automated pipeline runs to keep data current as NASS publishes new survey results.</div>
+        </div>
+      </div>
+
+      <!-- Infrastructure -->
+      <div class="stack-panel">
+        <div class="stack-panel-title stack-infra"><span class="icon">☁️</span> Infrastructure</div>
+        <div class="tech-item">
+          <div class="tech-name">AWS EC2</div>
+          <div class="tech-role">Ubuntu 24.04 server hosting the FastAPI backend and database. Accessed via SSH key pairs.</div>
+        </div>
+        <div class="tech-item">
+          <div class="tech-name">AWS IAM / SSM</div>
+          <div class="tech-role">Access control and secure instance management. IAM roles configured for pipeline permissions.</div>
+        </div>
+        <div class="tech-item">
+          <div class="tech-name">Vercel / GitHub</div>
+          <div class="tech-role">Next.js frontend deployed on Vercel. Source code version-controlled on GitHub.</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- WHAT'S LEFT -->
+  <div class="fade-in">
+    <div class="section-title">What's Still Being Worked On</div>
+    <div class="wip-grid">
+
+      <div class="wip-card">
+        <div class="wip-icon">🎨</div>
+        <div>
+          <div class="wip-title">Frontend Design Optimization</div>
+          <div class="wip-desc">Visual polish pass — fixing palette inconsistencies, empty map widget, axis label gaps, and layout alignment across pages.</div>
+          <span class="wip-tag wip-tag-amber">In Progress</span>
+        </div>
+      </div>
+
+      <div class="wip-card">
+        <div class="wip-icon">🔍</div>
+        <div>
+          <div class="wip-title">Granular Data Validation</div>
+          <div class="wip-desc">Edge case handling for NASS data quirks — suppressed values, survey methodology changes, unit discrepancies across categories.</div>
+          <span class="wip-tag wip-tag-amber">In Progress</span>
+        </div>
+      </div>
+
+      <div class="wip-card">
+        <div class="wip-icon">🗺️</div>
+        <div>
+          <div class="wip-title">County-Level Choropleth Map</div>
+          <div class="wip-desc">The map widget on the overview page is scaffolded but not yet populated. Needs county FIPS matching and a metric selector to go live.</div>
+          <span class="wip-tag wip-tag-blue">Planned</span>
+        </div>
+      </div>
+
+      <div class="wip-card">
+        <div class="wip-icon">⏱️</div>
+        <div>
+          <div class="wip-title">Temporal Filter Sync</div>
+          <div class="wip-desc">The year filter controls some but not all sections consistently. Needs a unified filter context that drives all charts on a page.</div>
+          <span class="wip-tag wip-tag-blue">Planned</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div><!-- end content -->
+
+<footer>
+  <span>QuickStats Analytics · Agricultural Intelligence Dashboard</span>
+  <span>Sport Innovation Institute · IU Indianapolis · March 2026</span>
+</footer>
+
+</body>
+</html>

@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AG Predictions — Team Explainer</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --soil:   #2C1F0E;
+    --wheat:  #C8963E;
+    --sage:   #5E7A5E;
+    --sky:    #6B9BBF;
+    --straw:  #F5EDD6;
+    --cream:  #FBF7EF;
+    --ink:    #1A1208;
+    --muted:  #8A7B6A;
+    --border: #DDD3BD;
+  }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--cream);
+    color: var(--ink);
+    min-height: 100vh;
+    padding: 48px 24px 80px;
+  }
+
+  header {
+    max-width: 860px;
+    margin: 0 auto 52px;
+    border-bottom: 1.5px solid var(--border);
+    padding-bottom: 32px;
+  }
+
+  .eyebrow {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--wheat);
+    margin-bottom: 12px;
+  }
+
+  h1 {
+    font-family: 'DM Serif Display', serif;
+    font-size: clamp(28px, 5vw, 44px);
+    line-height: 1.15;
+    color: var(--soil);
+    margin-bottom: 14px;
+  }
+
+  h1 em {
+    font-style: italic;
+    color: var(--sage);
+  }
+
+  .subtitle {
+    font-size: 15px;
+    line-height: 1.65;
+    color: var(--muted);
+    max-width: 600px;
+  }
+
+  .grid {
+    max-width: 860px;
+    margin: 0 auto;
+    display: grid;
+    gap: 20px;
+  }
+
+  .card {
+    background: white;
+    border: 1.5px solid var(--border);
+    border-radius: 12px;
+    padding: 28px 32px;
+    position: relative;
+    transition: box-shadow 0.2s, transform 0.2s;
+  }
+
+  .card:hover {
+    box-shadow: 0 8px 32px rgba(44,31,14,0.09);
+    transform: translateY(-2px);
+  }
+
+  .card-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 18px;
+    margin-bottom: 20px;
+  }
+
+  .icon-box {
+    width: 46px;
+    height: 46px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+
+  .card-title-group { flex: 1; }
+
+  .card-label {
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-bottom: 5px;
+  }
+
+  .card-title {
+    font-family: 'DM Serif Display', serif;
+    font-size: 20px;
+    color: var(--soil);
+    line-height: 1.25;
+  }
+
+  .pitch {
+    font-size: 14.5px;
+    line-height: 1.7;
+    color: #3D3020;
+    margin-bottom: 22px;
+    padding-left: 64px;
+  }
+
+  .tags-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding-left: 64px;
+    margin-bottom: 20px;
+  }
+
+  .tag {
+    font-size: 12px;
+    font-weight: 500;
+    padding: 4px 10px;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+    background: var(--straw);
+    color: var(--muted);
+  }
+
+  .meta-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    padding-left: 64px;
+    padding-top: 18px;
+    border-top: 1px solid var(--border);
+  }
+
+  .meta-cell {}
+
+  .meta-label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 5px;
+  }
+
+  .meta-value {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--ink);
+    line-height: 1.4;
+  }
+
+  /* Difficulty pips */
+  .pips { display: flex; gap: 4px; align-items: center; margin-top: 2px; }
+  .pip {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--border);
+  }
+  .pip.on { background: var(--wheat); }
+
+  /* Badge */
+  .badge {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    padding: 4px 10px;
+    border-radius: 20px;
+    text-transform: uppercase;
+  }
+  .badge-start  { background: #EAF4EA; color: #2D6A2D; border: 1px solid #B5D9B5; }
+  .badge-next   { background: #EEF4FB; color: #1F548A; border: 1px solid #B0CEEA; }
+  .badge-later  { background: #FDF4E7; color: #8A5D0E; border: 1px solid #E8CF96; }
+
+  /* Data sources section */
+  .sources-section {
+    max-width: 860px;
+    margin: 44px auto 0;
+    background: var(--soil);
+    border-radius: 14px;
+    padding: 32px 36px;
+    color: var(--straw);
+  }
+
+  .sources-section h2 {
+    font-family: 'DM Serif Display', serif;
+    font-size: 22px;
+    color: var(--wheat);
+    margin-bottom: 6px;
+  }
+
+  .sources-section .sub {
+    font-size: 13.5px;
+    color: #A0906A;
+    margin-bottom: 24px;
+  }
+
+  .sources-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 12px;
+  }
+
+  .source-chip {
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 8px;
+    padding: 10px 14px;
+  }
+
+  .source-name {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--straw);
+    margin-bottom: 3px;
+  }
+
+  .source-note {
+    font-size: 11.5px;
+    color: #8A7A5A;
+    line-height: 1.4;
+  }
+
+  /* Footer */
+  footer {
+    max-width: 860px;
+    margin: 36px auto 0;
+    font-size: 12px;
+    color: var(--muted);
+    text-align: center;
+    border-top: 1px solid var(--border);
+    padding-top: 20px;
+  }
+
+  @media (max-width: 600px) {
+    .meta-row { grid-template-columns: 1fr 1fr; padding-left: 0; }
+    .tags-row, .pitch { padding-left: 0; }
+    .card-header { flex-direction: column; gap: 12px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="eyebrow">Agricultural Dashboard · Predictive Analytics Planning</div>
+</header>
+
+<div class="grid">
+
+  <!-- Card 1: Crop Yield -->
+  <div class="card">
+    <span class="badge badge-start">Start here</span>
+    <div class="card-header">
+      <div class="icon-box" style="background:#EEF6EE;">🌽</div>
+      <div class="card-title-group">
+        <div class="card-label" style="color:var(--sage);">Option 1</div>
+        <div class="card-title">Crop Yield Prediction</div>
+      </div>
+    </div>
+
+    <p class="pitch">
+      <strong>What it does:</strong> Estimates how many bushels per acre a county will produce for corn, soybeans, or wheat — <em>before</em> harvest. The model looks at weather patterns (temperature, rainfall, drought stress), soil quality, and how crops are rated each week, then outputs a forecast like "Iowa corn expected at 192 bu/acre, down from last year's 198."
+      <br><br>
+      <strong>Why people care:</strong> Farmers can size grain storage and marketing contracts. Grain elevators can plan logistics. Analysts can flag counties likely to underperform USDA's benchmark before the official numbers come out.
+      <br><br>
+      <strong>Honest caveats:</strong> The model gets better as the season progresses. Early-season (April/May) forecasts are rough. By July/August, they're much more reliable. A simple county yield average often beats fancy ML when data is sparse — this isn't magic.
+    </p>
+
+    <div class="tags-row">
+      <span class="tag">Farmers</span>
+      <span class="tag">Grain traders</span>
+      <span class="tag">Crop analysts</span>
+      <span class="tag">County-level output</span>
+    </div>
+
+    <div class="meta-row">
+      <div class="meta-cell">
+        <div class="meta-label">Accuracy target</div>
+        <div class="meta-value">~9–12% error<br><span style="font-size:11px;color:var(--muted)">RRMSE, corn Corn Belt</span></div>
+      </div>
+      <div class="meta-cell">
+        <div class="meta-label">Build difficulty</div>
+        <div class="pips">
+          <span class="pip on"></span><span class="pip on"></span><span class="pip on"></span><span class="pip"></span><span class="pip"></span>
+        </div>
+        <div class="meta-value" style="margin-top:4px;">Moderate</div>
+      </div>
+      <div class="meta-cell">
+        <div class="meta-label">Est. time</div>
+        <div class="meta-value">4–6 weeks</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Card 2: Commodity Price -->
+  <div class="card">
+    <span class="badge badge-later">Hardest to beat</span>
+    <div class="card-header">
+      <div class="icon-box" style="background:#EEF3FA;">📈</div>
+      <div class="card-title-group">
+        <div class="card-label" style="color:var(--sky);">Option 2</div>
+        <div class="card-title">Commodity Price Forecasting</div>
+      </div>
+    </div>
+
+    <p class="pitch">
+      <strong>What it does:</strong> Predicts corn, soybean, or wheat prices 1–6 months out. The model combines futures market signals, USDA supply/demand reports (WASDE), weather and drought trends, and macroeconomic indicators like the dollar exchange rate.
+      <br><br>
+      <strong>Why people care:</strong> Farmers deciding when to sell grain. Cooperatives locking in forward contracts. Lenders estimating farm revenue for the next crop year. The question "should I sell now or wait?" is one of the most asked in agriculture.
+      <br><br>
+      <strong>Honest caveats:</strong> Grain futures markets are highly efficient — meaning prices already reflect most available information. Our model won't reliably beat the futures curve. The real value is <em>combining signals into a clean probability view</em> ("60% chance corn stays above $4.20 through October") and surfacing when fundamentals look unusual. Frame it as decision support, not a crystal ball.
+    </p>
+
+    <div class="tags-row">
+      <span class="tag">Farmers</span>
+      <span class="tag">Grain merchants</span>
+      <span class="tag">Lenders</span>
+      <span class="tag">Monthly output</span>
+    </div>
+
+    <div class="meta-row">
+      <div class="meta-cell">
+        <div class="meta-label">Accuracy target</div>
+        <div class="meta-value">5–15% error<br><span style="font-size:11px;color:var(--muted)">MAPE, grows at 6+ months</span></div>
+      </div>
+      <div class="meta-cell">
+        <div class="meta-label">Build difficulty</div>
+        <div class="pips">
+          <span class="pip on"></span><span class="pip on"></span><span class="pip on"></span><span class="pip on"></span><span class="pip"></span>
+        </div>
+        <div class="meta-value" style="margin-top:4px;">Hard</div>
+      </div>
+      <div class="meta-cell">
+        <div class="meta-label">Est. time</div>
+        <div class="meta-value">4–6 weeks</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Card 3: Planted Acreage -->
+  <div class="card">
+    <span class="badge badge-next">Build second</span>
+    <div class="card-header">
+      <div class="icon-box" style="background:#FDF5E8;">🗺️</div>
+      <div class="card-title-group">
+        <div class="card-label" style="color:var(--wheat);">Option 3</div>
+        <div class="card-title">Planted Acreage Prediction</div>
+      </div>
+    </div>
+
+    <p class="pitch">
+      <strong>What it does:</strong> Forecasts how many acres of corn vs. soybeans vs. wheat farmers will plant <em>before</em> the season starts — typically in early winter/spring. The model uses futures price ratios (is corn or soybeans paying better?), prior-year yields, input costs like fertilizer prices, and crop rotation patterns.
+      <br><br>
+      <strong>Why people care:</strong> USDA publishes its official "Prospective Plantings" report every late March, and markets move sharply when it surprises analysts. A model that posts a forecast in February before that report — even an imperfect one — has real value for traders, agronomists, and supply chain planners who need early visibility into next season's supply.
+      <br><br>
+      <strong>Honest caveats:</strong> Spring weather can shift planting decisions late (wet fields = delayed planting = acreage switches). The model's early-season estimates will be less reliable than those made closer to planting time.
+    </p>
+
+    <div class="tags-row">
+      <span class="tag">Traders & analysts</span>
+      <span class="tag">Cooperatives</span>
+      <span class="tag">Input suppliers</span>
+      <span class="tag">Annual output</span>
+    </div>
+
+    <div class="meta-row">
+      <div class="meta-cell">
+        <div class="meta-label">Accuracy target</div>
+        <div class="meta-value">5–10% error<br><span style="font-size:11px;color:var(--muted)">State level; county is harder</span></div>
+      </div>
+      <div class="meta-cell">
+        <div class="meta-label">Build difficulty</div>
+        <div class="pips">
+          <span class="pip on"></span><span class="pip on"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span>
+        </div>
+        <div class="meta-value" style="margin-top:4px;">Easier</div>
+      </div>
+      <div class="meta-cell">
+        <div class="meta-label">Est. time</div>
+        <div class="meta-value">2–3 weeks<br><span style="font-size:11px;color:var(--muted)">after Phase 1 infra</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Card 4: Drought / Risk Score -->
+  <div class="card">
+    <span class="badge badge-next">High farmer value</span>
+    <div class="card-header">
+      <div class="icon-box" style="background:#FAF0EE;">🌡️</div>
+      <div class="card-title-group">
+        <div class="card-label" style="color:#B05A3A;">Option 4</div>
+        <div class="card-title">Drought & Yield Risk Scoring</div>
+      </div>
+    </div>
+
+    <p class="pitch">
+      <strong>What it does:</strong> Produces a weekly county-level risk score that combines current drought conditions, temperature outlooks, soil water-holding capacity, and how crops are currently rated. Output is a simple color-coded risk level — like a weather alert but for crop stress — updated every Thursday when the US Drought Monitor releases new data.
+      <br><br>
+      <strong>Why people care:</strong> This is the most immediately actionable output for a working farmer. It answers "should I be worried this week?" in plain terms, without needing to understand model internals. It also directly maps to USDA disaster declarations, FSA emergency programs, and crop insurance triggers, so it's highly policy-relevant.
+      <br><br>
+      <strong>Honest caveats:</strong> This is less a "prediction" and more a <em>current-state risk composite</em>. It tells you where stress is happening now and what seasonal outlooks suggest — not a precise yield forecast. Accuracy is hard to measure in traditional ML terms, but the underlying data sources (US Drought Monitor, NOAA outlooks) are government-grade and highly trusted.
+    </p>
+
+    <div class="tags-row">
+      <span class="tag">Farmers</span>
+      <span class="tag">Extension agents</span>
+      <span class="tag">Insurers</span>
+      <span class="tag">Policy / FSA</span>
+      <span class="tag">Weekly output</span>
+    </div>
+
+    <div class="meta-row">
+      <div class="meta-cell">
+        <div class="meta-label">Accuracy target</div>
+        <div class="meta-value">Qualitative<br><span style="font-size:11px;color:var(--muted)">Risk tiers, not bu/acre</span></div>
+      </div>
+      <div class="meta-cell">
+        <div class="meta-label">Build difficulty</div>
+        <div class="pips">
+          <span class="pip on"></span><span class="pip on"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span>
+        </div>
+        <div class="meta-value" style="margin-top:4px;">Easier</div>
+      </div>
+      <div class="meta-cell">
+        <div class="meta-label">Est. time</div>
+        <div class="meta-value">3–4 weeks</div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- end grid -->
+
+<!-- Data sources -->
+<div class="sources-section">
+  <h2>Where the data comes from</h2>
+  <p class="sub">All of these are free, government-run APIs — no licensing fees or scraping required.</p>
+  <div class="sources-grid">
+    <div class="source-chip">
+      <div class="source-name">USDA NASS QuickStats</div>
+      <div class="source-note">Already in pipeline. Yields, prices, acreage, crop ratings.</div>
+    </div>
+    <div class="source-chip">
+      <div class="source-name">NOAA Climate Data</div>
+      <div class="source-note">Daily temperature & precipitation by station. Free API key.</div>
+    </div>
+    <div class="source-chip">
+      <div class="source-name">NASA POWER</div>
+      <div class="source-note">Solar radiation, humidity, VPD. No API key needed.</div>
+    </div>
+    <div class="source-chip">
+      <div class="source-name">US Drought Monitor</div>
+      <div class="source-note">Weekly drought severity by county. Free REST API, no auth.</div>
+    </div>
+    <div class="source-chip">
+      <div class="source-name">SSURGO (NRCS)</div>
+      <div class="source-note">Soil drainage class, water capacity by county. Static, one-time pull.</div>
+    </div>
+    <div class="source-chip">
+      <div class="source-name">USDA WASDE</div>
+      <div class="source-note">Monthly supply/demand report. Free CSV download.</div>
+    </div>
+    <div class="source-chip">
+      <div class="source-name">CME Futures (Nasdaq DL)</div>
+      <div class="source-note">Corn, soy, wheat daily prices. Free tier: 50 calls/day.</div>
+    </div>
+    <div class="source-chip">
+      <div class="source-name">USDA ERS Costs</div>
+      <div class="source-note">Annual cost of production per commodity. Free download.</div>
+    </div>
+  </div>
+</div>
+
+<footer>
+  Internal planning document · Agricultural Dashboard · March 2026
+</footer>
+
+</body>
+</html>

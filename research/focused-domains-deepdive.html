@@ -1,0 +1,1207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Four Domains — Deep Dive</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,700;0,9..144,900;1,9..144,300;1,9..144,700&family=Epilogue:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:       #FAFAF8;
+    --ink:      #18180F;
+    --muted:    #888878;
+    --border:   #E4E4D8;
+    --surface:  #FFFFFF;
+
+    /* Each domain has a primary + light pair */
+    --w-dark:   #1A3D2B;
+    --w-mid:    #2D6A4F;
+    --w-light:  #EAF4EE;
+    --w-accent: #52B788;
+
+    --f-dark:   #3B1F08;
+    --f-mid:    #7C4A1E;
+    --f-light:  #FBF0E6;
+    --f-accent: #D4845A;
+
+    --h-dark:   #1A1030;
+    --h-mid:    #3D2070;
+    --h-light:  #F0ECFB;
+    --h-accent: #8B5CF6;
+
+    --c-dark:   #0E2233;
+    --c-mid:    #1B4F72;
+    --c-light:  #E6F2FB;
+    --c-accent: #3B9FD4;
+  }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    font-family: 'Epilogue', sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    font-size: 14px;
+    line-height: 1.65;
+  }
+
+  /* ── NAV ── */
+  nav {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: rgba(250,250,248,0.95);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--border);
+    padding: 0 48px;
+    display: flex;
+    align-items: center;
+    gap: 0;
+    height: 50px;
+  }
+
+  .nav-label {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-right: 28px;
+    white-space: nowrap;
+  }
+
+  .nav-links {
+    display: flex;
+    gap: 2px;
+  }
+
+  .nav-link {
+    font-size: 12px;
+    font-weight: 500;
+    padding: 6px 14px;
+    border-radius: 6px;
+    text-decoration: none;
+    color: var(--muted);
+    transition: background 0.15s, color 0.15s;
+    white-space: nowrap;
+  }
+
+  .nav-link:hover { background: var(--border); color: var(--ink); }
+  .nav-link.w { color: var(--w-mid); }
+  .nav-link.f { color: var(--f-mid); }
+  .nav-link.h { color: var(--h-mid); }
+  .nav-link.c { color: var(--c-mid); }
+
+  /* ── HERO ── */
+  .hero {
+    padding: 72px 48px 60px;
+    max-width: 1040px;
+    margin: 0 auto;
+  }
+
+  .hero-eyebrow {
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 16px;
+  }
+
+  .hero h1 {
+    font-family: 'Fraunces', serif;
+    font-size: clamp(32px, 5vw, 56px);
+    font-weight: 900;
+    line-height: 1.05;
+    color: var(--ink);
+    margin-bottom: 20px;
+  }
+
+  .hero h1 em { font-style: italic; font-weight: 300; }
+
+  .hero-desc {
+    font-size: 15.5px;
+    line-height: 1.8;
+    color: #4A4A3A;
+    max-width: 660px;
+    margin-bottom: 40px;
+  }
+
+  /* Domain pills in hero */
+  .domain-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .dpill {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-size: 12.5px;
+    font-weight: 600;
+    border: 1.5px solid;
+    text-decoration: none;
+    transition: transform 0.15s;
+  }
+
+  .dpill:hover { transform: translateY(-1px); }
+  .dpill-num { font-size: 10px; opacity: 0.7; font-weight: 400; }
+
+  .dpill.w { background: var(--w-light); color: var(--w-dark); border-color: #B8DDBF; }
+  .dpill.f { background: var(--f-light); color: var(--f-dark); border-color: #E8C8A8; }
+  .dpill.h { background: var(--h-light); color: var(--h-dark); border-color: #C8B0F0; }
+  .dpill.c { background: var(--c-light); color: var(--c-dark); border-color: #A8CDE8; }
+
+  /* ── DOMAIN SECTION ── */
+  .domain-section {
+    max-width: 1040px;
+    margin: 0 auto 0;
+    padding: 0 48px 64px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .domain-section:last-of-type { border-bottom: none; }
+
+  /* Domain header band */
+  .domain-band {
+    border-radius: 14px;
+    padding: 36px 40px;
+    margin-bottom: 36px;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 24px;
+    align-items: start;
+  }
+
+  .domain-band.w { background: var(--w-light); }
+  .domain-band.f { background: var(--f-light); }
+  .domain-band.h { background: var(--h-light); }
+  .domain-band.c { background: var(--c-light); }
+
+  .band-num {
+    font-family: 'Fraunces', serif;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    margin-bottom: 8px;
+  }
+
+  .band-title {
+    font-family: 'Fraunces', serif;
+    font-size: clamp(22px, 3vw, 30px);
+    font-weight: 900;
+    line-height: 1.15;
+    margin-bottom: 14px;
+  }
+
+  .band-tagline {
+    font-size: 14px;
+    line-height: 1.75;
+    max-width: 560px;
+  }
+
+  .band-stats {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    align-items: flex-end;
+    text-align: right;
+    flex-shrink: 0;
+  }
+
+  .stat-big {
+    font-family: 'Fraunces', serif;
+    font-size: 36px;
+    font-weight: 900;
+    line-height: 1;
+  }
+
+  .stat-label {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--muted);
+    line-height: 1.4;
+    max-width: 140px;
+  }
+
+  .w .band-num, .w .band-title, .w .stat-big { color: var(--w-dark); }
+  .f .band-num, .f .band-title, .f .stat-big { color: var(--f-dark); }
+  .h .band-num, .h .band-title, .h .stat-big { color: var(--h-dark); }
+  .c .band-num, .c .band-title, .c .stat-big { color: var(--c-dark); }
+
+  .w .band-tagline { color: var(--w-dark); }
+  .f .band-tagline { color: var(--f-dark); }
+  .h .band-tagline { color: var(--h-dark); }
+  .c .band-tagline { color: var(--c-dark); }
+
+  /* ── TWO-COL LAYOUT INSIDE DOMAIN ── */
+  .domain-body {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    margin-bottom: 24px;
+  }
+
+  .domain-body.trio {
+    grid-template-columns: 1fr 1fr 1fr;
+  }
+
+  @media (max-width: 720px) {
+    .domain-body, .domain-body.trio { grid-template-columns: 1fr; }
+  }
+
+  /* ── CARD ── */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 22px 24px;
+    transition: box-shadow 0.2s;
+  }
+
+  .card:hover { box-shadow: 0 6px 24px rgba(0,0,0,0.07); }
+
+  .card-label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 8px;
+  }
+
+  .card-title {
+    font-family: 'Fraunces', serif;
+    font-size: 17px;
+    font-weight: 700;
+    line-height: 1.25;
+    margin-bottom: 10px;
+  }
+
+  .card-body {
+    font-size: 13px;
+    line-height: 1.7;
+    color: #444438;
+  }
+
+  /* Accent top border per domain */
+  .card.w { border-top: 3px solid var(--w-accent); }
+  .card.f { border-top: 3px solid var(--f-accent); }
+  .card.h { border-top: 3px solid var(--h-accent); }
+  .card.c { border-top: 3px solid var(--c-accent); }
+
+  .card.w .card-title { color: var(--w-dark); }
+  .card.f .card-title { color: var(--f-dark); }
+  .card.h .card-title { color: var(--h-dark); }
+  .card.c .card-title { color: var(--c-dark); }
+
+  /* ── PIPELINE BLOCK ── */
+  .pipeline {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px 26px;
+    margin-bottom: 24px;
+  }
+
+  .pipeline-title {
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 20px;
+  }
+
+  .pipeline-steps {
+    display: flex;
+    align-items: flex-start;
+    gap: 0;
+    overflow-x: auto;
+    padding-bottom: 4px;
+  }
+
+  .pstep {
+    flex: 1;
+    min-width: 110px;
+    position: relative;
+  }
+
+  .pstep:not(:last-child)::after {
+    content: '→';
+    position: absolute;
+    right: -10px;
+    top: 12px;
+    font-size: 14px;
+    color: var(--border);
+    z-index: 1;
+  }
+
+  .pstep-box {
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin-right: 20px;
+    min-height: 68px;
+  }
+
+  .pstep-name {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    margin-bottom: 5px;
+  }
+
+  .pstep-detail {
+    font-size: 11px;
+    color: var(--muted);
+    line-height: 1.45;
+  }
+
+  .w .pstep-box { background: var(--w-light); }
+  .f .pstep-box { background: var(--f-light); }
+  .h .pstep-box { background: var(--h-light); }
+  .c .pstep-box { background: var(--c-light); }
+
+  .w .pstep-name { color: var(--w-dark); }
+  .f .pstep-name { color: var(--f-dark); }
+  .h .pstep-name { color: var(--h-dark); }
+  .c .pstep-name { color: var(--c-dark); }
+
+  /* ── DATA SOURCE TABLE ── */
+  .data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12.5px;
+    background: var(--surface);
+    border-radius: 10px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    margin-bottom: 24px;
+  }
+
+  .data-table thead tr {
+    border-bottom: 1px solid var(--border);
+  }
+
+  .data-table th {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding: 10px 14px;
+    text-align: left;
+    background: var(--bg);
+  }
+
+  .data-table td {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+    line-height: 1.5;
+    color: #333328;
+  }
+
+  .data-table tr:last-child td { border-bottom: none; }
+
+  .data-table td:first-child { font-weight: 600; color: var(--ink); }
+
+  .free-tag {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 7px;
+    border-radius: 4px;
+    background: #EAF4EE;
+    color: #1A5C30;
+    border: 1px solid #B8DDBF;
+    white-space: nowrap;
+  }
+
+  /* ── FEASIBILITY METER ── */
+  .feasibility-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+
+  @media (max-width: 600px) { .feasibility-row { grid-template-columns: 1fr 1fr; } }
+
+  .feas-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+    text-align: center;
+  }
+
+  .feas-label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 8px;
+  }
+
+  .feas-value {
+    font-family: 'Fraunces', serif;
+    font-size: 22px;
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+
+  .feas-note {
+    font-size: 11px;
+    color: var(--muted);
+    line-height: 1.4;
+  }
+
+  .feas-dots {
+    display: flex;
+    justify-content: center;
+    gap: 4px;
+    margin-bottom: 4px;
+  }
+
+  .fdot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--border);
+  }
+
+  .fdot.on.w { background: var(--w-mid); }
+  .fdot.on.f { background: var(--f-mid); }
+  .fdot.on.h { background: var(--h-mid); }
+  .fdot.on.c { background: var(--c-mid); }
+
+  /* ── SECTION LABEL ── */
+  .section-label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .section-label::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  /* ── WHO BENEFITS ── */
+  .beneficiaries {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 24px;
+  }
+
+  .ben-chip {
+    font-size: 12px;
+    font-weight: 500;
+    padding: 5px 13px;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: #444;
+  }
+
+  /* ── GRAD PROJECT BOX ── */
+  .grad-box {
+    border-radius: 10px;
+    padding: 20px 24px;
+    margin-bottom: 0;
+  }
+
+  .w .grad-box { background: var(--w-light); border: 1.5px solid #B8DDBF; }
+  .f .grad-box { background: var(--f-light); border: 1.5px solid #E8C8A8; }
+  .h .grad-box { background: var(--h-light); border: 1.5px solid #C8B0F0; }
+  .c .grad-box { background: var(--c-light); border: 1.5px solid #A8CDE8; }
+
+  .grad-box-title {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+
+  .w .grad-box-title { color: var(--w-dark); }
+  .f .grad-box-title { color: var(--f-dark); }
+  .h .grad-box-title { color: var(--h-dark); }
+  .c .grad-box-title { color: var(--c-dark); }
+
+  .grad-box p {
+    font-size: 13px;
+    line-height: 1.7;
+  }
+
+  .w .grad-box p { color: var(--w-dark); }
+  .f .grad-box p { color: var(--f-dark); }
+  .h .grad-box p { color: var(--h-dark); }
+  .c .grad-box p { color: var(--c-dark); }
+
+  /* ── FOOTER ── */
+  footer {
+    max-width: 1040px;
+    margin: 0 auto;
+    padding: 24px 48px 40px;
+    font-size: 11.5px;
+    color: var(--muted);
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+    border-top: 1px solid var(--border);
+  }
+
+  /* Animations */
+  .domain-section {
+    opacity: 0;
+    transform: translateY(18px);
+    animation: slideUp 0.55s ease forwards;
+  }
+
+  @keyframes slideUp { to { opacity: 1; transform: translateY(0); } }
+  .domain-section:nth-child(1) { animation-delay: 0.08s; }
+  .domain-section:nth-child(2) { animation-delay: 0.18s; }
+  .domain-section:nth-child(3) { animation-delay: 0.28s; }
+  .domain-section:nth-child(4) { animation-delay: 0.38s; }
+
+  @media (max-width: 680px) {
+    nav { padding: 0 20px; }
+    .hero, .domain-section, footer { padding-left: 20px; padding-right: 20px; }
+    .domain-band { grid-template-columns: 1fr; }
+    .band-stats { align-items: flex-start; text-align: left; }
+    .pipeline-steps { flex-direction: column; gap: 10px; }
+    .pstep::after { display: none; }
+    .pstep-box { margin-right: 0; }
+  }
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <span class="nav-label">4 Domains</span>
+  <div class="nav-links">
+    <a href="#water"   class="nav-link w">💧 Water Security</a>
+    <a href="#food"    class="nav-link f">🌾 Food Access</a>
+    <a href="#housing" class="nav-link h">🏘 Housing</a>
+    <a href="#climate" class="nav-link c">🌊 Climate Migration</a>
+  </div>
+</nav>
+
+<!-- HERO -->
+<div class="hero">
+  <div class="hero-eyebrow">Deep Dive · Socio-Ecological Predictive Analytics</div>
+  <h1>Four domains,<br><em>examined closely</em></h1>
+  <p class="hero-desc">
+    For each area: the core problem, two concrete ML projects, a full data pipeline breakdown, every free data source mapped, who benefits, and an honest assessment of what's feasible for a grad-level project scope.
+  </p>
+  <div class="domain-pills">
+    <a href="#water"   class="dpill w"><span class="dpill-num">01</span> Water Security &amp; Quality</a>
+    <a href="#food"    class="dpill f"><span class="dpill-num">02</span> Food Access &amp; Nutrition</a>
+    <a href="#housing" class="dpill h"><span class="dpill-num">04</span> Housing &amp; Displacement</a>
+    <a href="#climate" class="dpill c"><span class="dpill-num">07</span> Climate Migration</a>
+  </div>
+</div>
+
+<!-- ════════════════════════════════ -->
+<!-- DOMAIN 1 — WATER                -->
+<!-- ════════════════════════════════ -->
+<div class="domain-section w" id="water">
+
+  <div class="domain-band w">
+    <div>
+      <div class="band-num">Domain 01 / Water Security &amp; Quality</div>
+      <div class="band-title">Predicting where water<br>runs out or turns toxic</div>
+      <div class="band-tagline">Aquifer depletion and waterway contamination are slow-moving crises that almost always have detectable early signals — if someone is looking for them. That's the job.</div>
+    </div>
+    <div class="band-stats">
+      <div>
+        <div class="stat-big">46M</div>
+        <div class="stat-label">Americans on unmonitored private wells</div>
+      </div>
+      <div>
+        <div class="stat-big">40%</div>
+        <div class="stat-label">of US aquifers declining faster than recharge rate</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Feasibility -->
+  <div class="section-label">Feasibility for Grad Scope</div>
+  <div class="feasibility-row">
+    <div class="feas-card">
+      <div class="feas-label">Data availability</div>
+      <div class="feas-dots"><span class="fdot on w"></span><span class="fdot on w"></span><span class="fdot on w"></span><span class="fdot on w"></span><span class="fdot"></span></div>
+      <div class="feas-note">USGS, NOAA, NASA — all free and well-documented</div>
+    </div>
+    <div class="feas-card">
+      <div class="feas-label">ML complexity</div>
+      <div class="feas-dots"><span class="fdot on w"></span><span class="fdot on w"></span><span class="fdot on w"></span><span class="fdot"></span><span class="fdot"></span></div>
+      <div class="feas-note">Time series + spatial features. XGBoost or LSTM both viable</div>
+    </div>
+    <div class="feas-card">
+      <div class="feas-label">Build time</div>
+      <div class="feas-value" style="color:var(--w-dark)">8–12 wk</div>
+      <div class="feas-note">Including data wrangling and model validation</div>
+    </div>
+    <div class="feas-card">
+      <div class="feas-label">Real-world impact</div>
+      <div class="feas-dots"><span class="fdot on w"></span><span class="fdot on w"></span><span class="fdot on w"></span><span class="fdot on w"></span><span class="fdot on w"></span></div>
+      <div class="feas-note">Directly actionable for utilities & rural municipalities</div>
+    </div>
+  </div>
+
+  <!-- Two projects -->
+  <div class="section-label">Projects</div>
+  <div class="domain-body">
+    <div class="card w">
+      <div class="card-label">Project A</div>
+      <div class="card-title">Groundwater Depletion Forecasting</div>
+      <div class="card-body">
+        Predict aquifer water table levels 3–12 months ahead at the county level. The model combines historical USGS well depth measurements with NASA GRACE satellite gravity anomalies (which detect mass loss underground), NOAA precipitation, and drought indices.<br><br>
+        <strong>Target users:</strong> Rural water utilities, state environmental agencies, farmers deciding whether to drill a new well.<br><br>
+        <strong>Why it works:</strong> Groundwater depletion follows physical laws — drawdown is predictable from recharge rates, precipitation deficit, and extraction pressure. The USGS has 800,000+ monitoring wells with decades of readings.
+      </div>
+    </div>
+    <div class="card w">
+      <div class="card-label">Project B</div>
+      <div class="card-title">Nutrient Runoff &amp; River Contamination Windows</div>
+      <div class="card-body">
+        Predict 48–72 hr windows of elevated nitrate and phosphorus runoff into river systems by combining upstream NASS fertilizer application timing, NOAA rainfall forecasts, USGS stream gauge levels, and land cover (NLCD) to characterize how much agricultural surface drains to each monitoring point.<br><br>
+        <strong>Target users:</strong> Downstream drinking water utilities, fisheries managers, recreational water safety officials.<br><br>
+        <strong>Why it works:</strong> Runoff pulses are highly predictable — the first heavy rain after spring fertilizer application almost always spikes nitrate levels. Getting ahead of it by 48 hrs is the difference between a utility issuing a precautionary notice vs. a boil-water order.
+      </div>
+    </div>
+  </div>
+
+  <!-- Pipeline -->
+  <div class="section-label">Data Pipeline</div>
+  <div class="pipeline w">
+    <div class="pipeline-title">From raw sensors to county-level forecasts</div>
+    <div class="pipeline-steps">
+      <div class="pstep">
+        <div class="pstep-box">
+          <div class="pstep-name">Ingest</div>
+          <div class="pstep-detail">USGS well depth API, NASA GRACE monthly files, NOAA CDO daily weather, EPA WQX water quality readings</div>
+        </div>
+      </div>
+      <div class="pstep">
+        <div class="pstep-box">
+          <div class="pstep-name">Align</div>
+          <div class="pstep-detail">Spatially join well locations to county FIPS. Resample all data to monthly cadence. Impute sparse well records.</div>
+        </div>
+      </div>
+      <div class="pstep">
+        <div class="pstep-box">
+          <div class="pstep-name">Engineer</div>
+          <div class="pstep-detail">Rolling precip anomaly, PDSI drought index, cumulative GDD, 3/6/12-month groundwater trend, aquifer stress ratio</div>
+        </div>
+      </div>
+      <div class="pstep">
+        <div class="pstep-box">
+          <div class="pstep-name">Model</div>
+          <div class="pstep-detail">XGBoost with lag features OR LSTM on monthly sequences. SHAP for county-level explanation.</div>
+        </div>
+      </div>
+      <div class="pstep">
+        <div class="pstep-box">
+          <div class="pstep-name">Surface</div>
+          <div class="pstep-detail">County choropleth risk map. 3-month rolling forecast. Threshold-triggered alerts by aquifer.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Data sources -->
+  <div class="section-label">Data Sources — All Free</div>
+  <table class="data-table">
+    <thead>
+      <tr><th>Source</th><th>What it provides</th><th>Access</th><th>Update freq.</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>USGS NWIS</td><td>800K+ well depth measurements, stream gauge levels, water quality readings going back 50+ years</td><td><span class="free-tag">Free API</span> waterservices.usgs.gov</td><td>Real-time / daily</td></tr>
+      <tr><td>NASA GRACE / GRACE-FO</td><td>Monthly satellite gravity anomalies revealing underground water mass changes at regional scale</td><td><span class="free-tag">Free download</span> grace.jpl.nasa.gov</td><td>Monthly</td></tr>
+      <tr><td>NOAA CDO</td><td>Daily precip, temperature, snowpack by station; drought indices (PDSI)</td><td><span class="free-tag">Free API key</span> ncei.noaa.gov</td><td>Daily</td></tr>
+      <tr><td>EPA WQX</td><td>Water quality monitoring data — nitrate, phosphorus, dissolved oxygen — across 400K+ monitoring points</td><td><span class="free-tag">Free API</span> waterqualitydata.us</td><td>Varies by station</td></tr>
+      <tr><td>USDA NASS QuickStats</td><td>Fertilizer application timing and volumes by state/county — key for runoff prediction windows</td><td><span class="free-tag">Free API</span> Already in your pipeline</td><td>Annual / survey</td></tr>
+      <tr><td>NLCD Land Cover</td><td>30m resolution land use — identifies agricultural drainage areas feeding each stream</td><td><span class="free-tag">Free download</span> mrlc.gov</td><td>Every 2–3 years</td></tr>
+    </tbody>
+  </table>
+
+  <!-- Who benefits -->
+  <div class="section-label">Who Benefits</div>
+  <div class="beneficiaries">
+    <span class="ben-chip">Rural water utilities</span>
+    <span class="ben-chip">Private well owners (46M Americans)</span>
+    <span class="ben-chip">State environmental agencies</span>
+    <span class="ben-chip">Farmers planning irrigation</span>
+    <span class="ben-chip">Downstream drinking water systems</span>
+    <span class="ben-chip">Recreational water users</span>
+    <span class="ben-chip">Fisheries managers</span>
+  </div>
+
+  <div class="grad-box w">
+    <div class="grad-box-title">💡 Grad Project Angle</div>
+    <p>Project A (groundwater depletion) is the stronger single-semester project — the data is clean, the modeling is well-precedented, and the output (a county risk map with 3-month forecasts) is immediately legible to non-technical stakeholders. Project B is more technically interesting but requires careful spatial matching of watersheds to monitoring points, which adds scope. <strong>Either works as a standalone; combined, they'd make a strong capstone or publication.</strong></p>
+  </div>
+
+</div>
+
+<!-- ════════════════════════════════ -->
+<!-- DOMAIN 2 — FOOD ACCESS          -->
+<!-- ════════════════════════════════ -->
+<div class="domain-section f" id="food">
+
+  <div class="domain-band f">
+    <div>
+      <div class="band-num">Domain 02 / Food Access &amp; Nutrition Security</div>
+      <div class="band-title">Predicting where hunger<br>arrives before it's visible</div>
+      <div class="band-tagline">Food banks run on donations that spike after a crisis is already in the news. A model that flags rising insecurity 6 months ahead lets them pre-position supplies, apply for emergency grants, and lobby before the line forms.</div>
+    </div>
+    <div class="band-stats">
+      <div>
+        <div class="stat-big">13.5%</div>
+        <div class="stat-label">US households food insecure in 2023 — highest in a decade</div>
+      </div>
+      <div>
+        <div class="stat-big">$2.4T</div>
+        <div class="stat-label">Annual economic cost of food insecurity in the US</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Feasibility -->
+  <div class="section-label">Feasibility for Grad Scope</div>
+  <div class="feasibility-row">
+    <div class="feas-card">
+      <div class="feas-label">Data availability</div>
+      <div class="feas-dots"><span class="fdot on f"></span><span class="fdot on f"></span><span class="fdot on f"></span><span class="fdot on f"></span><span class="fdot on f"></span></div>
+      <div class="feas-note">Best-in-class public datasets. USDA FARA, Map the Meal Gap, Census ACS are all free and well-maintained.</div>
+    </div>
+    <div class="feas-card">
+      <div class="feas-label">ML complexity</div>
+      <div class="feas-dots"><span class="fdot on f"></span><span class="fdot on f"></span><span class="fdot on f"></span><span class="fdot"></span><span class="fdot"></span></div>
+      <div class="feas-note">Tabular regression + time series. Panel data across counties. Moderate complexity.</div>
+    </div>
+    <div class="feas-card">
+      <div class="feas-label">Build time</div>
+      <div class="feas-value" style="color:var(--f-dark)">6–10 wk</div>
+      <div class="feas-note">Fastest to prototype of the four domains. Data is annual but rich.</div>
+    </div>
+    <div class="feas-card">
+      <div class="feas-label">Real-world impact</div>
+      <div class="feas-dots"><span class="fdot on f"></span><span class="fdot on f"></span><span class="fdot on f"></span><span class="fdot on f"></span><span class="fdot on f"></span></div>
+      <div class="feas-note">Food banks, SNAP administrators, and city governments are active consumers of this kind of analysis</div>
+    </div>
+  </div>
+
+  <!-- Two projects -->
+  <div class="section-label">Projects</div>
+  <div class="domain-body">
+    <div class="card f">
+      <div class="card-label">Project A</div>
+      <div class="card-title">Food Insecurity Early Warning System</div>
+      <div class="card-body">
+        Predict county-level food insecurity rates 6–12 months ahead by treating Feeding America's annual Map the Meal Gap county estimates as ground truth and building a lagged prediction model from economic, agricultural, and demographic leading indicators.<br><br>
+        <strong>Key insight:</strong> Food insecurity is a lagged economic outcome — unemployment spikes show up in insecurity rates 3–9 months later. Commodity price increases for staples (wheat, corn, eggs) hit low-income households 2–4 months before they register in food bank demand data. <br><br>
+        <strong>Target users:</strong> Food bank networks (Feeding America's 200 member banks), SNAP state agencies, community foundations allocating emergency grants.
+      </div>
+    </div>
+    <div class="card f">
+      <div class="card-label">Project B</div>
+      <div class="card-title">Urban Food Desert Expansion Prediction</div>
+      <div class="card-body">
+        Predict which census tracts are on a 2-year trajectory toward losing adequate food access by modeling grocery store closures as a function of neighborhood demographic shifts (Census ACS income trends), commercial lease market pressure (building permit filings, business license data), and competitor proximity.<br><br>
+        <strong>Key insight:</strong> Grocery store closures in low-income neighborhoods almost never happen suddenly — they follow a predictable decline: rising vacancy rates nearby, slipping foot traffic, demographic income decline, and a 12–18 month warning window in business permit filings before the closure.<br><br>
+        <strong>Target users:</strong> City planners, USDA Rural Development grants program, community development financial institutions (CDFIs).
+      </div>
+    </div>
+  </div>
+
+  <!-- Pipeline -->
+  <div class="section-label">Data Pipeline</div>
+  <div class="pipeline f">
+    <div class="pipeline-title">From economic signals to county food insecurity forecasts</div>
+    <div class="pipeline-steps">
+      <div class="pstep">
+        <div class="pstep-box">
+          <div class="pstep-name">Ingest</div>
+          <div class="pstep-detail">BLS unemployment claims (weekly), CPI food subcategories (monthly), SNAP enrollment (monthly), Census ACS (annual), USDA FARA (annual)</div>
+        </div>
+      </div>
+      <div class="pstep">
+        <div class="pstep-box">
+          <div class="pstep-name">Align</div>
+          <div class="pstep-detail">Harmonize to county FIPS. Upsample annual census data using interpolation. Merge commodity price indices to household income quintiles.</div>
+        </div>
+      </div>
+      <div class="pstep">
+        <div class="pstep-box">
+          <div class="pstep-name">Engineer</div>
+          <div class="pstep-detail">Unemployment shock index, food price burden ratio (CPI food / median income), SNAP enrollment rate change, grocery access score, housing cost pressure index</div>
+        </div>
+      </div>
+      <div class="pstep">
+        <div class="pstep-box">
+          <div class="pstep-name">Model</div>
+          <div class="pstep-detail">Panel regression for baselines. XGBoost + lag features for prediction. Uncertainty bands via quantile regression.</div>
+        </div>
+      </div>
+      <div class="pstep">
+        <div class="pstep-box">
+          <div class="pstep-name">Surface</div>
+          <div class="pstep-detail">County risk tier map. 6-month insecurity rate forecast with confidence interval. Top-5 driver explanation per county.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Data sources -->
+  <div class="section-label">Data Sources — All Free</div>
+  <table class="data-table">
+    <thead>
+      <tr><th>Source</th><th>What it provides</th><th>Access</th><th>Update freq.</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Map the Meal Gap (Feeding America)</td><td>County-level food insecurity rate and food budget shortfall — the gold standard target variable for this domain</td><td><span class="free-tag">Free download</span> map.feedingamerica.org</td><td>Annual</td></tr>
+      <tr><td>USDA Food Access Research Atlas</td><td>Census tract–level grocery access scores, low-income + low-access designations, vehicle access data</td><td><span class="free-tag">Free download</span> ers.usda.gov/FARA</td><td>Every 3–4 years</td></tr>
+      <tr><td>BLS Local Area Unemployment</td><td>Monthly unemployment rate by county going back to 1990</td><td><span class="free-tag">Free API</span> bls.gov/lau</td><td>Monthly</td></tr>
+      <tr><td>BLS CPI — Food subcategories</td><td>Monthly price indices for food at home, food away from home, specific staples</td><td><span class="free-tag">Free API</span> bls.gov/cpi</td><td>Monthly</td></tr>
+      <tr><td>USDA FNS SNAP data</td><td>Monthly SNAP participation and benefit levels by state; some county-level data available</td><td><span class="free-tag">Free download</span> fns.usda.gov/pd/supplemental-nutrition-assistance-program-snap</td><td>Monthly</td></tr>
+      <tr><td>Census ACS 5-year</td><td>Median household income, poverty rate, vehicle ownership, demographics — all by census tract</td><td><span class="free-tag">Free API</span> api.census.gov</td><td>Annual (5yr rolling)</td></tr>
+      <tr><td>USDA NASS QuickStats</td><td>Commodity prices received — connects farm-gate price movements to food access dynamics</td><td><span class="free-tag">Already in pipeline</span></td><td>Monthly / annual</td></tr>
+    </tbody>
+  </table>
+
+  <!-- Who benefits -->
+  <div class="section-label">Who Benefits</div>
+  <div class="beneficiaries">
+    <span class="ben-chip">Food bank networks</span>
+    <span class="ben-chip">SNAP state agencies</span>
+    <span class="ben-chip">WIC administrators</span>
+    <span class="ben-chip">Community foundations</span>
+    <span class="ben-chip">City & county planners</span>
+    <span class="ben-chip">CDFIs &amp; rural development programs</span>
+    <span class="ben-chip">Low-income households (indirectly)</span>
+  </div>
+
+  <div class="grad-box f">
+    <div class="grad-box-title">💡 Grad Project Angle</div>
+    <p>This is the most immediately publishable of the four. Map the Meal Gap is a well-known benchmark, which means your model has a clear evaluation target and a built-in comparison baseline. <strong>A county-level food insecurity forecasting model with SHAP explanations and a 6-month lead time would be genuinely novel</strong> — published work in this space focuses mostly on describing current insecurity, not predicting it. Strong fit for an applied data science capstone or journal submission. Also the easiest to pitch to Dr. Wanless or external collaborators because the social narrative is immediate and concrete.</p>
+  </div>
+
+</div>
+
+<!-- ════════════════════════════════ -->
+<!-- DOMAIN 4 — HOUSING              -->
+<!-- ════════════════════════════════ -->
+<div class="domain-section h" id="housing">
+
+  <div class="domain-band h">
+    <div>
+      <div class="band-num">Domain 04 / Housing &amp; Displacement Risk</div>
+      <div class="band-title">Predicting displacement<br>before families lose housing</div>
+      <div class="band-tagline">Every eviction that reaches court has been building for months in the data — rent burden climbing, local unemployment ticking up, a missed utility payment. The signal is there. Most cities just aren't reading it.</div>
+    </div>
+    <div class="band-stats">
+      <div>
+        <div class="stat-big">3.6M</div>
+        <div class="stat-label">Eviction filings per year in the US</div>
+      </div>
+      <div>
+        <div class="stat-big">$35K</div>
+        <div class="stat-label">Avg. public cost per family entering shelter system after eviction</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Feasibility -->
+  <div class="section-label">Feasibility for Grad Scope</div>
+  <div class="feasibility-row">
+    <div class="feas-card">
+      <div class="feas-label">Data availability</div>
+      <div class="feas-dots"><span class="fdot on h"></span><span class="fdot on h"></span><span class="fdot on h"></span><span class="fdot on h"></span><span class="fdot"></span></div>
+      <div class="feas-note">Eviction Lab data is gold standard. Census + BLS + HUD round out the feature set well.</div>
+    </div>
+    <div class="feas-card">
+      <div class="feas-label">ML complexity</div>
+      <div class="feas-dots"><span class="fdot on h"></span><span class="fdot on h"></span><span class="fdot on h"></span><span class="fdot on h"></span><span class="fdot"></span></div>
+      <div class="feas-note">Spatial panel model + classification. Harder than food/water due to data granularity gaps.</div>
+    </div>
+    <div class="feas-card">
+      <div class="feas-label">Build time</div>
+      <div class="feas-value" style="color:var(--h-dark)">10–14 wk</div>
+      <div class="feas-note">Data joining across sources at tract level adds time. Ethical review recommended.</div>
+    </div>
+    <div class="feas-card">
+      <div class="feas-label">Real-world impact</div>
+      <div class="feas-dots"><span class="fdot on h"></span><span class="fdot on h"></span><span class="fdot on h"></span><span class="fdot on h"></span><span class="fdot on h"></span></div>
+      <div class="feas-note">Cities and housing nonprofits actively seek this kind of early warning infrastructure</div>
+    </div>
+  </div>
+
+  <!-- Two projects -->
+  <div class="section-label">Projects</div>
+  <div class="domain-body">
+    <div class="card h">
+      <div class="card-label">Project A</div>
+      <div class="card-title">Eviction Risk Scoring by Census Tract</div>
+      <div class="card-body">
+        Predict census tracts with elevated eviction filing probability in the next 6 months. Eviction Lab provides historical filing rates going back to 2000 across 50 states — this is the target variable. Features include rent burden (% income on rent), unemployment shock, SNAP enrollment change, utility shutoff rates, and local housing court backlog estimates.<br><br>
+        <strong>Critical ethical note:</strong> The output should be framed as <em>where to deploy resources</em>, not <em>which tenants are risky</em>. The goal is directing legal aid, rental assistance, and mediation programs — not flagging individuals.<br><br>
+        <strong>Target users:</strong> Housing stability programs, legal aid organizations, city housing departments, community development corporations.
+      </div>
+    </div>
+    <div class="card h">
+      <div class="card-label">Project B</div>
+      <div class="card-title">Gentrification Trajectory Mapping</div>
+      <div class="card-body">
+        Predict which neighborhoods are 3–5 years from significant demographic displacement using a multi-signal model: building permit velocity, transit proximity changes (new stops announced), median rent appreciation rate, income in-migration from IRS migration data, and business type transition (laundromat → coffee shop as a signal of neighborhood repositioning).<br><br>
+        <strong>Key insight:</strong> Gentrification has a detectable pre-displacement phase — rising permits and rent appreciation precede displacement by 2–4 years on average. Getting a signal that early gives communities time to push for inclusionary zoning, community land trusts, and tenant protections.<br><br>
+        <strong>Target users:</strong> City planning departments, community land trust organizations, affordable housing advocates.
+      </div>
+    </div>
+  </div>
+
+  <!-- Pipeline -->
+  <div class="section-label">Data Pipeline</div>
+  <div class="pipeline h">
+    <div class="pipeline-title">From housing market signals to tract-level displacement risk</div>
+    <div class="pipeline-steps">
+      <div class="pstep">
+        <div class="pstep-box">
+          <div class="pstep-name">Ingest</div>
+          <div class="pstep-detail">Eviction Lab filings, Census ACS rent/income, HUD CHAS housing affordability, BLS unemployment, IRS migration flows, local permit APIs</div>
+        </div>
+      </div>
+      <div class="pstep">
+        <div class="pstep-box">
+          <div class="pstep-name">Align</div>
+          <div class="pstep-detail">Join all data to Census tract FIPS. Handle annual vs. monthly cadence mismatches. Geocode business license data.</div>
+        </div>
+      </div>
+      <div class="pstep">
+        <div class="pstep-box">
+          <div class="pstep-name">Engineer</div>
+          <div class="pstep-detail">Rent burden index, rent appreciation velocity (3yr), permit density growth, income in-migration ratio, displacement pressure composite score</div>
+        </div>
+      </div>
+      <div class="pstep">
+        <div class="pstep-box">
+          <div class="pstep-name">Model</div>
+          <div class="pstep-detail">Random Forest classifier for eviction risk tier. Gradient boosting regression for gentrification trajectory score. Spatial autocorrelation correction via Moran's I.</div>
+        </div>
+      </div>
+      <div class="pstep">
+        <div class="pstep-box">
+          <div class="pstep-name">Surface</div>
+          <div class="pstep-detail">Tract-level risk choropleth. 6-month high-risk alert list. "Why this tract?" SHAP waterfall by neighborhood.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Data sources -->
+  <div class="section-label">Data Sources — Mostly Free</div>
+  <table class="data-table">
+    <thead>
+      <tr><th>Source</th><th>What it provides</th><th>Access</th><th>Update freq.</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Princeton Eviction Lab</td><td>County and tract-level eviction filing rates 2000–present across 50 states — the only comprehensive national eviction dataset</td><td><span class="free-tag">Free download</span> evictionlab.org/get-the-data</td><td>Annual</td></tr>
+      <tr><td>Census ACS</td><td>Rent-to-income ratio, housing cost burden %, median gross rent, poverty, demographics by tract</td><td><span class="free-tag">Free API</span> api.census.gov</td><td>Annual</td></tr>
+      <tr><td>HUD CHAS</td><td>Comprehensive Housing Affordability Strategy data — housing cost burden severity by income tier and tenure</td><td><span class="free-tag">Free download</span> huduser.gov/portal/datasets/cp.html</td><td>Every 3–5 years</td></tr>
+      <tr><td>IRS SOI Migration Data</td><td>County-to-county migration flows with income data — tracks who is moving in and out and at what income levels</td><td><span class="free-tag">Free download</span> irs.gov/statistics/soi-tax-stats</td><td>Annual</td></tr>
+      <tr><td>HUD Utility Allowance Data</td><td>Regional utility cost benchmarks — proxy for utility burden on low-income renters</td><td><span class="free-tag">Free download</span> huduser.gov</td><td>Annual</td></tr>
+      <tr><td>Zillow Research Data</td><td>Monthly median rent by zip code and metro — best freely available rent time series</td><td><span class="free-tag">Free download</span> zillow.com/research/data</td><td>Monthly</td></tr>
+      <tr><td>Local permit APIs</td><td>Building permit counts, type, and value — available via city open data portals (varies by municipality)</td><td><span class="free-tag">Varies</span> Most major cities have open data portals</td><td>Monthly</td></tr>
+    </tbody>
+  </table>
+
+  <!-- Who benefits -->
+  <div class="section-label">Who Benefits</div>
+  <div class="beneficiaries">
+    <span class="ben-chip">Renters facing eviction</span>
+    <span class="ben-chip">Legal aid organizations</span>
+    <span class="ben-chip">City housing departments</span>
+    <span class="ben-chip">Community land trusts</span>
+    <span class="ben-chip">Affordable housing advocates</span>
+    <span class="ben-chip">Emergency rental assistance programs</span>
+    <span class="ben-chip">Community development corporations</span>
+  </div>
+
+  <div class="grad-box h">
+    <div class="grad-box-title">💡 Grad Project Angle</div>
+    <p>The Eviction Lab dataset is genuinely excellent and underused in predictive modeling — most published work describes eviction patterns retrospectively. A <strong>6-month forward-looking risk model at the census tract level with ethical framing around resource allocation</strong> would be novel, publishable, and directly useful to housing nonprofits. The ethical dimension also makes this strong for interdisciplinary work or policy-facing presentations. One caution: scope to 1–3 cities for the tract-level work rather than attempting all 50 states — the permit and local data joining gets complex fast at national scale.</p>
+  </div>
+
+</div>
+
+<!-- ════════════════════════════════ -->
+<!-- DOMAIN 7 — CLIMATE MIGRATION    -->
+<!-- ════════════════════════════════ -->
+<div class="domain-section c" id="climate">
+
+  <div class="domain-band c">
+    <div>
+      <div class="band-num">Domain 07 / Climate Migration &amp; Displacement</div>
+      <div class="band-title">Predicting where people<br>will flee — and where they'll land</div>
+      <div class="band-tagline">Climate displacement isn't a future problem. It's happening now in slow motion — insurance markets withdrawing, property values softening, people quietly leaving. The communities that will receive them have almost no idea what's coming.</div>
+    </div>
+    <div class="band-stats">
+      <div>
+        <div class="stat-big">1.2M</div>
+        <div class="stat-label">Americans already displaced by climate-related disasters annually</div>
+      </div>
+      <div>
+        <div class="stat-big">13M</div>
+        <div class="stat-label">Projected US residents in climate-threatened coastal areas by 2100</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Feasibility -->
+  <div class="section-label">Feasibility for Grad Scope</div>
+  <div class="feasibility-row">
+    <div class="feas-card">
+      <div class="feas-label">Data availability</div>
+      <div class="feas-dots"><span class="fdot on c"></span><span class="fdot on c"></span><span class="fdot on c"></span><span class="fdot on c"></span><span class="fdot"></span></div>
+      <div class="feas-note">FEMA, Census, NOAA, First Street Foundation all provide strong free data. Some gaps in insurance withdrawal signals.</div>
+    </div>
+    <div class="feas-card">
+      <div class="feas-label">ML complexity</div>
+      <div class="feas-dots"><span class="fdot on c"></span><span class="fdot on c"></span><span class="fdot on c"></span><span class="fdot on c"></span><span class="fdot"></span></div>
+      <div class="feas-note">Multi-horizon migration modeling is genuinely hard. Survival analysis + regression hybrid needed.</div>
+    </div>
+    <div class="feas-card">
+      <div class="feas-label">Build time</div>
+      <div class="feas-value" style="color:var(--c-dark)">12–16 wk</div>
+      <div class="feas-note">Most complex of the four. Better suited for a full capstone or 2-semester project.</div>
+    </div>
+    <div class="feas-card">
+      <div class="feas-label">Real-world impact</div>
+      <div class="feas-dots"><span class="fdot on c"></span><span class="fdot on c"></span><span class="fdot on c"></span><span class="fdot on c"></span><span class="fdot on c"></span></div>
+      <div class="feas-note">Enormous long-term impact. Receiving cities desperately lack planning tools for this.</div>
+    </div>
+  </div>
+
+  <!-- Two projects -->
+  <div class="section-label">Projects</div>
+  <div class="domain-body">
+    <div class="card c">
+      <div class="card-label">Project A</div>
+      <div class="card-title">Wildfire Displacement Risk Forecasting</div>
+      <div class="card-body">
+        Predict which counties in fire-prone regions (Western US, increasingly Southeast) face significant population displacement risk over a 3–5 year horizon. The model combines USFS wildfire hazard potential maps, housing density in Wildland-Urban Interface (WUI) zones, insurance market withdrawal signals (NFIP non-renewals, state FAIR plan enrollment spikes), and historical post-fire census migration patterns.<br><br>
+        <strong>Key insight:</strong> Insurance withdrawal is an especially powerful early signal — when private insurers stop writing homeowner policies in a county, it precedes significant population decline by 3–5 years. California counties like El Dorado and Tuolumne show this pattern clearly.<br><br>
+        <strong>Target users:</strong> State emergency management agencies, county planners in fire-prone regions, FEMA's hazard mitigation grant programs.
+      </div>
+    </div>
+    <div class="card c">
+      <div class="card-label">Project B</div>
+      <div class="card-title">Receiving City Infrastructure Stress Prediction</div>
+      <div class="card-body">
+        Predict which mid-size inland cities (Boise, Spokane, Chattanooga, Knoxville, Bozeman, Indianapolis) will face housing, school, and infrastructure capacity stress from climate in-migration within 5–10 years. Combines historical migration flow patterns from IRS and Census data, climate exposure scores of the sending counties, housing affordability and capacity data of receiving metros, and employment market absorption capacity.<br><br>
+        <strong>Key insight:</strong> Most people don't move far — climate migrants from coastal Florida overwhelmingly move to inland Florida, Georgia, and the Carolinas. Understanding these gravity-model migration patterns makes the receiving-city forecast tractable.<br><br>
+        <strong>Target users:</strong> Receiving city planners, school districts, infrastructure investment programs, regional housing authorities.
+      </div>
+    </div>
+  </div>
+
+  <!-- Pipeline -->
+  <div class="section-label">Data Pipeline</div>
+  <div class="pipeline c">
+    <div class="pipeline-title">From climate risk signals to migration pressure forecasts</div>
+    <div class="pipeline-steps">
+      <div class="pstep">
+        <div class="pstep-box">
+          <div class="pstep-name">Ingest</div>
+          <div class="pstep-detail">NOAA SLR projections, USFS wildfire hazard, FEMA NFIP claims/non-renewals, IRS migration flows, Census ACS, First Street Foundation flood/fire risk scores</div>
+        </div>
+      </div>
+      <div class="pstep">
+        <div class="pstep-box">
+          <div class="pstep-name">Align</div>
+          <div class="pstep-detail">Build county-pair origin-destination matrix. Match climate exposure scores to sending counties. Map historic migration to climate event timelines.</div>
+        </div>
+      </div>
+      <div class="pstep">
+        <div class="pstep-box">
+          <div class="pstep-name">Engineer</div>
+          <div class="pstep-detail">Insurance withdrawal rate, cumulative disaster declaration count, property value trajectory, flood/fire exposure score, housing affordability index at destination</div>
+        </div>
+      </div>
+      <div class="pstep">
+        <div class="pstep-box">
+          <div class="pstep-name">Model</div>
+          <div class="pstep-detail">Gravity model baseline. XGBoost augmented with climate risk features. Survival analysis for time-to-displacement. Uncertainty cone for 5/10/20-year horizons.</div>
+        </div>
+      </div>
+      <div class="pstep">
+        <div class="pstep-box">
+          <div class="pstep-name">Surface</div>
+          <div class="pstep-detail">Sending county displacement risk map. Receiving city pressure forecast (housing, schools, jobs). Origin-destination flow visualization.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Data sources -->
+  <div class="section-label">Data Sources — Mostly Free</div>
+  <table class="data-table">
+    <thead>
+      <tr><th>Source</th><th>What it provides</th><th>Access</th><th>Update freq.</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>First Street Foundation</td><td>Property-level flood, wildfire, wind, and heat risk scores. County aggregates freely available; property-level requires academic access request.</td><td><span class="free-tag">Free (county)</span> firststreet.org/data</td><td>Annual updates</td></tr>
+      <tr><td>FEMA NFIP</td><td>National Flood Insurance Program claims, policies, and non-renewal data by county — insurance withdrawal signal</td><td><span class="free-tag">Free download</span> fema.gov/flood-insurance</td><td>Annual</td></tr>
+      <tr><td>NOAA Sea Level Rise Projections</td><td>Foot-by-foot inundation projections for US coasts under different emissions scenarios out to 2100</td><td><span class="free-tag">Free download</span> coast.noaa.gov/slr</td><td>Periodic updates</td></tr>
+      <tr><td>USFS Wildfire Hazard Potential</td><td>90m resolution wildfire hazard potential for all US forested land</td><td><span class="free-tag">Free download</span> fs.usda.gov/rds/archive</td><td>Annual</td></tr>
+      <tr><td>IRS SOI Migration Data</td><td>County-to-county migration flows with adjusted gross income — best available signal for who is moving where and at what economic level</td><td><span class="free-tag">Free download</span> irs.gov/statistics/soi-tax-stats</td><td>Annual</td></tr>
+      <tr><td>FEMA Disaster Declarations</td><td>Full history of all federal disaster declarations by county going back to 1953 — disaster exposure count is a strong predictor of eventual out-migration</td><td><span class="free-tag">Free API</span> fema.gov/api/open/v2/disasterDeclarations</td><td>Real-time</td></tr>
+      <tr><td>Census TIGER/ACS</td><td>County population, housing units, demographic composition — both sending and receiving community characteristics</td><td><span class="free-tag">Free API</span> api.census.gov</td><td>Annual</td></tr>
+    </tbody>
+  </table>
+
+  <!-- Who benefits -->
+  <div class="section-label">Who Benefits</div>
+  <div class="beneficiaries">
+    <span class="ben-chip">Coastal &amp; wildfire-exposed communities</span>
+    <span class="ben-chip">State emergency management agencies</span>
+    <span class="ben-chip">Receiving city planners</span>
+    <span class="ben-chip">School districts in high-migration corridors</span>
+    <span class="ben-chip">Regional housing authorities</span>
+    <span class="ben-chip">FEMA hazard mitigation programs</span>
+    <span class="ben-chip">Climate-exposed homeowners making relocation decisions</span>
+  </div>
+
+  <div class="grad-box c">
+    <div class="grad-box-title">💡 Grad Project Angle</div>
+    <p>This is the highest-ceiling of the four — but also the most complex. The wildfire displacement model (Project A) is the more tractable single-project scope: the data is clean, the insurance-withdrawal signal is underexplored in academic literature, and the Western US case studies are well-documented. <strong>Indianapolis is actually a strong receiving-city case study for Project B</strong> — it sits in a relatively low-risk climate corridor and has been experiencing in-migration from more climate-exposed metros. That local angle could make it especially relevant for the SII and IU context. Strongly recommend scoping to one sending region + one receiving corridor rather than attempting national coverage.</p>
+  </div>
+
+</div>
+
+<footer>
+  <span>Four Domains Deep Dive · Socio-Ecological Predictive Analytics</span>
+  <span>Raj Vedire · IU Indianapolis · March 2026</span>
+</footer>
+
+</body>
+</html>
