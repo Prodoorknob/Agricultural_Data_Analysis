@@ -195,6 +195,33 @@ COUNTY_REQUEST_DELAY = 2.0
 # 4 threads × 2s delay = one request every ~0.5s effective — safe for QuickStats.
 COUNTY_FETCH_WORKERS = 4
 
+# Census of Agriculture years — CENSUS source_desc is ONLY valid for these years.
+# Requesting CENSUS for any other year will always 400. Do not add interim years.
+CENSUS_AG_YEARS = {2002, 2007, 2012, 2017, 2022}
+
+# State/commodity combinations known to not exist in NASS county data.
+# These are structural gaps (no agriculture of that type in that state),
+# not transient API errors. Skipping them avoids pointless 400s.
+# Key = commodity_desc, Value = set of state_alpha codes to skip.
+COUNTY_SKIP_STATES: dict[str, set[str]] = {
+    # Alaska has no commercial corn, soybean, cotton, or wheat production
+    "CORN":                    {"AK", "HI", "DC"},
+    "SOYBEANS":                {"AK", "HI", "DC", "NV", "AZ", "NM", "UT", "WY", "MT", "ID"},
+    "WINTER WHEAT":            {"AK", "HI", "DC"},
+    "SPRING WHEAT, (EXCL DURUM)": {"AK", "HI", "DC", "AL", "FL", "GA", "SC", "MS", "LA"},
+    "COTTON":                  {"AK", "HI", "DC", "ME", "NH", "VT", "MA", "RI", "CT",
+                                "NY", "NJ", "PA", "OH", "IN", "IL", "IA", "WI", "MI",
+                                "MN", "ND", "SD", "NE", "KS", "CO", "UT", "NV", "WY",
+                                "ID", "OR", "WA", "MT"},
+    "RICE":                    {"AK", "HI", "DC", "ME", "NH", "VT", "MA", "RI", "CT",
+                                "NY", "NJ", "PA", "OH", "IN", "IL", "IA", "WI", "MI",
+                                "MN", "ND", "SD", "NE", "KS", "CO", "UT", "NV", "WY",
+                                "ID", "OR", "WA", "MT", "AZ", "NM"},
+    "SUNFLOWER":               {"AK", "HI", "DC", "ME", "NH", "VT", "MA", "RI", "CT",
+                                "NJ", "DE", "MD", "VA", "SC", "GA", "FL", "AL", "MS",
+                                "LA", "AR", "TN", "KY", "WV"},
+}
+
 
 # ---------------------------------------------------------------------------
 # API Key Management
@@ -615,31 +642,43 @@ def _fetch_county_state_year(
     Each (state, commodity, stat_cat) request is guaranteed to return well
     under 50K records (typically 50–500), so no sub-chunking is needed.
 
+    Skips:
+      - CENSUS source for non-Census years (only 2002,2007,2012,2017,2022 are valid)
+      - State/commodity pairs in COUNTY_SKIP_STATES (structural data gaps)
+
     Writes chunk files to temp_dir/{state}/COUNTY_{commodity}_{stat_cat}_{year}.parquet.
     Returns total records fetched for this state+year.
     """
     state_chunk_dir = os.path.join(temp_dir, state)
     os.makedirs(state_chunk_dir, exist_ok=True)
 
+    is_census_year = year in CENSUS_AG_YEARS
     total = 0
+
     for commodity in COUNTY_COMMODITIES:
+        # Skip known non-producing state/commodity pairs
+        skip_states = COUNTY_SKIP_STATES.get(commodity, set())
+        if state in skip_states:
+            continue
+
         for stat_cat in COUNTY_STAT_CATS:
-            params = {
+            base_params = {
                 "agg_level_desc": "COUNTY",
                 "year": str(year),
                 "state_alpha": state,
                 "commodity_desc": commodity,
                 "statisticcat_desc": stat_cat,
-                "source_desc": "SURVEY",
             }
-            time.sleep(COUNTY_REQUEST_DELAY)
-            records = api_get_data(api_key, params)
 
-            # Also pull CENSUS vintage (e.g. 2017, 2022 Ag Census years)
-            census_params = {**params, "source_desc": "CENSUS"}
+            # --- Annual SURVEY pull ---
             time.sleep(COUNTY_REQUEST_DELAY)
-            census_records = api_get_data(api_key, census_params)
-            records = records + census_records
+            records = api_get_data(api_key, {**base_params, "source_desc": "SURVEY"})
+
+            # --- CENSUS pull only on actual Census-of-Ag years ---
+            if is_census_year:
+                time.sleep(COUNTY_REQUEST_DELAY)
+                census_records = api_get_data(api_key, {**base_params, "source_desc": "CENSUS"})
+                records = records + census_records
 
             if not records:
                 continue
