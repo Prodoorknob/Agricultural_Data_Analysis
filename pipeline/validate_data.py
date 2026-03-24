@@ -257,17 +257,38 @@ def validate(files: dict[str, pd.DataFrame]) -> ValidationResult:
         # --- Check 9: Stat category coverage ---
         if 'statisticcat_desc' in sample_df.columns:
             cats = sample_df['statisticcat_desc'].dropna().unique()
-            core_cats = {'AREA HARVESTED', 'PRODUCTION', 'YIELD', 'SALES'}
+            core_cats = {'AREA HARVESTED', 'PRODUCTION', 'YIELD'}
             found_cats = set(c.upper() for c in cats)
             missing_cats = core_cats - found_cats
 
             if not missing_cats:
                 result.add("Core stat categories", "PASS",
-                           f"All 4 core categories present ({len(cats)} total)")
+                           f"All 3 core categories present ({len(cats)} total)")
             else:
                 result.add("Core stat categories", "WARN",
                            f"Missing: {', '.join(sorted(missing_cats))}")
 
+        # --- Check 10: County data presence and FIPS format ---
+        if 'agg_level_desc' in sample_df.columns:
+            county_rows = sample_df[sample_df['agg_level_desc'] == 'COUNTY']
+            if len(county_rows) == 0:
+                result.add("County data", "WARN",
+                           "No COUNTY rows found — run with --include-county to populate")
+            else:
+                result.add("County data", "PASS",
+                           f"{len(county_rows):,} county rows present")
+
+                # Validate FIPS format: must be 5-digit numeric string
+                if 'fips' in county_rows.columns:
+                    bad_fips = county_rows['fips'].dropna()
+                    bad_fips = bad_fips[~bad_fips.str.match(r'^\d{5}$', na=False)]
+                    if len(bad_fips) == 0:
+                        result.add("County FIPS format", "PASS",
+                                   f"All FIPS codes are 5-digit numeric")
+                    else:
+                        result.add("County FIPS format", "WARN",
+                                   f"{len(bad_fips):,} rows with malformed FIPS: "
+                                   f"{bad_fips.unique()[:5].tolist()}")
     # --- Check 10: Cross-state year consistency ---
     state_year_counts: dict[str, int] = {}
     for state, df in files.items():

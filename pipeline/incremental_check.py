@@ -57,6 +57,7 @@ def check_counts(api_key: str, manifest: dict) -> tuple[bool, dict]:
     current_year = datetime.now().year
     check_years = range(max(current_year - 2, DEFAULT_YEAR_START), current_year + 1)
 
+    # ---- State-level count checks ----
     for sector in SECTORS:
         for year in check_years:
             key = f"{sector}_{year}"
@@ -90,6 +91,35 @@ def check_counts(api_key: str, manifest: dict) -> tuple[bool, dict]:
                     wait = RETRY_BACKOFF_BASE ** (attempt + 1)
                     logger.warning(f"  Check failed for {key}: {e}. Retry in {wait}s...")
                     time.sleep(wait)
+
+    # ---- County-level count checks (Tier 1 crops only, most recent year) ----
+    # Detect new Census-of-Ag releases or corrections to annual county data.
+    logger.info("")
+    logger.info("Checking county-level counts (Tier 1 crops, most recent year)...")
+    tier1 = ["CORN", "SOYBEANS", "WINTER WHEAT"]
+    for commodity in tier1:
+        key = f"COUNTY_{commodity}_{current_year - 1}"
+        params = {
+            "key": api_key,
+            "agg_level_desc": "COUNTY",
+            "commodity_desc": commodity,
+            "statisticcat_desc": "YIELD",
+            "year": str(current_year - 1),
+        }
+        try:
+            resp = requests.get(API_COUNT_ENDPOINT, params=params, timeout=60)
+            resp.raise_for_status()
+            count = int(resp.json().get("count", 0))
+            current_counts[key] = count
+            prev_count = manifest.get("record_counts", {}).get(key, 0)
+            if count > prev_count:
+                logger.info(f"  NEW COUNTY DATA: {key}: {prev_count:,} -> {count:,}")
+                has_new_data = True
+            else:
+                logger.info(f"  {key}: {count:,} (unchanged)")
+            time.sleep(0.3)
+        except Exception as e:
+            logger.warning(f"  County check failed for {key}: {e}")
 
     return has_new_data, current_counts
 

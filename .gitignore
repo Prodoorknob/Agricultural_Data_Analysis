@@ -49,6 +49,7 @@ desktop.ini
 .env
 .env.local
 .env.*.local
+secrets.txt
 
 # -----------------------------------------------------------------------------
 # Data Files (large/generated - live on S3)
@@ -57,6 +58,7 @@ survey_datasets/
 census_datasets/
 *.parquet
 !web_app/public/data/**
+UI/
 
 # Backup files
 *.bak
