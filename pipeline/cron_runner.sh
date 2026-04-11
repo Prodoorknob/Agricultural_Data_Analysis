@@ -8,12 +8,18 @@
 #   0 12 * * 1-5 /home/ec2-user/Agricultural_Data_Analysis/pipeline/cron_runner.sh --daily      # Daily market data
 #   0 14 12 * * /home/ec2-user/Agricultural_Data_Analysis/pipeline/cron_runner.sh --monthly-wasde  # Monthly WASDE
 #   0 10 15 1 * /home/ec2-user/Agricultural_Data_Analysis/pipeline/cron_runner.sh --annual-ers  # Annual ERS costs
+#   0 12 1 2 *  /home/ec2-user/Agricultural_Data_Analysis/pipeline/cron_runner.sh --annual-acreage  # Annual acreage forecast
+#   0 12 1 1,4,7,10 * /home/ec2-user/Agricultural_Data_Analysis/pipeline/cron_runner.sh --quarterly-fertilizer  # Quarterly fertilizer prices
+#   0 10 * * 4  /home/ec2-user/Agricultural_Data_Analysis/pipeline/cron_runner.sh --weekly-yield   # Weekly yield pipeline (Thursday 10 AM)
 #
 # Modes:
-#   (default)        NASS QuickStats ingestion pipeline
-#   --daily          CME futures + FRED DXY daily ingest
-#   --monthly-wasde  WASDE supply/demand + price model inference
-#   --annual-ers     ERS production costs (January only)
+#   (default)              NASS QuickStats ingestion pipeline
+#   --daily                CME futures + FRED DXY daily ingest
+#   --monthly-wasde        WASDE supply/demand + price model inference
+#   --annual-ers           ERS production costs (January only)
+#   --annual-acreage       Acreage model inference + publish (February only)
+#   --quarterly-fertilizer ERS fertilizer price update (Jan, Apr, Jul, Oct)
+#   --weekly-yield         Yield pipeline: weather/drought ETL + features + inference (Thursdays)
 #
 # Flow (default mode):
 #   1. Activate virtual environment
@@ -187,6 +193,69 @@ if [ "${RUN_MODE}" = "--annual-ers" ]; then
         --subject "Price ETL: ERS Costs SUCCESS" \
         --message "ERS production costs updated at $(date)." \
         --region "${AWS_REGION}" 2>/dev/null || true
+    exit 0
+fi
+
+# ---------------------------------------------------------------------------
+# Mode: --weekly-yield  (Weather/drought ETL + feature build + yield inference)
+# ---------------------------------------------------------------------------
+if [ "${RUN_MODE}" = "--weekly-yield" ]; then
+    echo "Running WEEKLY yield pipeline..."
+    activate_backend_venv
+    cd "${PROJECT_ROOT}"
+
+    set +e
+
+    # Step 1: ETL - fetch latest data from all sources
+    echo "Step 1a: NOAA weather data..."
+    python -m backend.etl.ingest_noaa
+    NOAA_EXIT=$?
+
+    echo "Step 1b: NASA POWER solar/VPD..."
+    python -m backend.etl.ingest_nasa_power
+    NASA_EXIT=$?
+
+    echo "Step 1c: US Drought Monitor..."
+    python -m backend.etl.ingest_drought
+    DROUGHT_EXIT=$?
+
+    echo "Step 1d: NASS crop conditions..."
+    python -m backend.etl.ingest_crop_conditions
+    NASS_EXIT=$?
+
+    # Step 2: Run yield inference
+    echo "Step 2: Running yield inference..."
+    python -m backend.models.yield_inference
+    INFERENCE_EXIT=$?
+
+    set -e
+
+    # Check results
+    FAILED=0
+    [ ${NOAA_EXIT} -ne 0 ] && echo "WARNING: NOAA ingest failed" && FAILED=1
+    [ ${NASA_EXIT} -ne 0 ] && echo "WARNING: NASA POWER ingest failed" && FAILED=1
+    [ ${DROUGHT_EXIT} -ne 0 ] && echo "WARNING: Drought ingest failed" && FAILED=1
+    [ ${NASS_EXIT} -ne 0 ] && echo "WARNING: NASS conditions ingest failed" && FAILED=1
+    [ ${INFERENCE_EXIT} -ne 0 ] && echo "WARNING: Yield inference failed" && FAILED=1
+
+    # Restart FastAPI to reload model cache
+    sudo systemctl restart ag-prediction 2>/dev/null || true
+
+    if [ ${FAILED} -ne 0 ]; then
+        aws sns publish \
+            --topic-arn "${SNS_TOPIC_ARN}" \
+            --subject "Yield Pipeline: Partial FAILURE" \
+            --message "Weekly yield pipeline completed with errors at $(date). NOAA=${NOAA_EXIT} NASA=${NASA_EXIT} Drought=${DROUGHT_EXIT} NASS=${NASS_EXIT} Inference=${INFERENCE_EXIT}. See log: ${LOGFILE}" \
+            --region "${AWS_REGION}" 2>/dev/null || true
+    else
+        aws sns publish \
+            --topic-arn "${SNS_TOPIC_ARN}" \
+            --subject "Yield Pipeline: SUCCESS" \
+            --message "Weekly yield pipeline completed successfully at $(date)." \
+            --region "${AWS_REGION}" 2>/dev/null || true
+    fi
+
+    echo "Weekly yield pipeline completed at $(date)"
     exit 0
 fi
 

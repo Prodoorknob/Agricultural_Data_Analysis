@@ -13,6 +13,8 @@ import {
   PriceProbability,
   ForecastHistoryItem,
 } from '../hooks/usePriceForecast';
+import AcreagePredictionSection from './AcreagePredictionSection';
+import YieldForecastSection from './YieldForecastSection';
 
 interface PredictionsDashboardProps {
   data: any[];
@@ -492,6 +494,16 @@ export default function PredictionsDashboard({ data, year, stateName }: Predicti
           </div>
         </div>
       )}
+
+      {/* ──── Module 03: Planted Acreage Prediction ──── */}
+      <div className="pt-6 mt-6" style={{ borderTop: `1px solid ${palette.border}` }}>
+        <AcreagePredictionSection />
+      </div>
+
+      {/* ──── Module 04: Crop Yield Forecasting ──── */}
+      <div className="pt-6 mt-6" style={{ borderTop: `1px solid ${palette.border}` }}>
+        <YieldForecastSection />
+      </div>
     </div>
   );
 }

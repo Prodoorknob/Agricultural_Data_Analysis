@@ -19,9 +19,9 @@ logger = setup_logging("load_ers_costs")
 
 # ERS cost-and-return spreadsheet URLs
 ERS_URLS = {
-    "corn": "https://www.ers.usda.gov/webdocs/DataFiles/50048/CornCostReturn.xlsx",
-    "soybean": "https://www.ers.usda.gov/webdocs/DataFiles/50048/SoybeanCostReturn.xlsx",
-    "wheat": "https://www.ers.usda.gov/webdocs/DataFiles/50048/WheatCostReturn.xlsx",
+    "corn": "https://www.ers.usda.gov/media/4961/corn.xlsx",
+    "soybean": "https://www.ers.usda.gov/media/4975/soybeans.xlsx",
+    "wheat": "https://www.ers.usda.gov/media/4977/wheat.xlsx",
 }
 
 # Local cache directory for downloaded Excel files
@@ -45,37 +45,91 @@ def download_ers_excel(commodity: str) -> Path:
 def parse_ers_excel(filepath: Path, commodity: str) -> pd.DataFrame:
     """Parse ERS cost-and-return Excel into standardized rows.
 
-    The ERS Excel files have a complex layout with multiple header rows.
-    We look for rows containing year and cost data in the main sheet.
+    The ERS Excel files (updated 2025+) have a 'Data sheet (machine readable)'
+    with tidy-format data: columns [Commodity, Category, Item, Units, Region, Year, Value].
+    Falls back to the pivot-sheet scan for older file formats.
     """
     logger.info(f"Parsing {filepath}")
 
-    # Try reading the first sheet — ERS files vary in structure
     try:
-        # Read all sheets to find the one with cost data
         xls = pd.ExcelFile(filepath)
         sheet_names = xls.sheet_names
         logger.info(f"  Sheets found: {sheet_names}")
-
-        # The main data is typically in a sheet containing "Cost" or the first sheet
-        target_sheet = None
-        for name in sheet_names:
-            if "cost" in name.lower() or "return" in name.lower():
-                target_sheet = name
-                break
-        if target_sheet is None:
-            target_sheet = sheet_names[0]
-
-        df = pd.read_excel(filepath, sheet_name=target_sheet, header=None)
     except Exception as e:
         logger.error(f"  Failed to read Excel: {e}")
         return pd.DataFrame()
 
-    # Strategy: scan rows for year-like values (2000-2030) and extract costs
-    # ERS files have "Item" column with cost labels and year columns
+    # --- Prefer machine-readable sheet (new ERS format) ---
+    mr_sheet = None
+    for name in sheet_names:
+        if "machine readable" in name.lower() or "data sheet" in name.lower():
+            mr_sheet = name
+            break
+
+    if mr_sheet:
+        return _parse_machine_readable(filepath, mr_sheet, commodity)
+
+    # --- Fallback: pivot-sheet scan (legacy format) ---
+    return _parse_pivot_sheet(filepath, sheet_names, commodity)
+
+
+def _parse_machine_readable(filepath: Path, sheet_name: str, commodity: str) -> pd.DataFrame:
+    """Parse the tidy 'Data sheet (machine readable)' format."""
+    df = pd.read_excel(filepath, sheet_name=sheet_name, header=0)
+    logger.info(f"  Machine-readable sheet: {len(df)} rows")
+
+    # Filter to U.S. total only
+    us = df[df["Region"].str.contains("U.S. total", case=False, na=False)].copy()
+
+    # Extract operating costs (variable), total costs, and yield per year
+    operating = us[us["Item"].str.contains("Total, operating costs", case=False, na=False)]
+    total = us[us["Item"].str.contains("Total, costs listed", case=False, na=False)]
+    yields = us[us["Item"].str.contains("^Yield$", case=False, na=False, regex=True)]
+
+    # Build year-indexed lookups
+    op_by_year = dict(zip(operating["Year"], operating["Value"]))
+    tot_by_year = dict(zip(total["Year"], total["Value"]))
+    yield_by_year = dict(zip(yields["Year"], yields["Value"]))
+
+    rows = []
+    all_years = sorted(set(op_by_year.keys()) | set(tot_by_year.keys()))
+    for year in all_years:
+        if year < 2000:
+            continue
+        y = yield_by_year.get(year)
+        op = op_by_year.get(year)
+        tot = tot_by_year.get(year)
+
+        # Convert per-acre costs to per-bushel using yield
+        var_per_bu = (op / y) if op and y and y > 0 else None
+        tot_per_bu = (tot / y) if tot and y and y > 0 else None
+
+        if var_per_bu is not None or tot_per_bu is not None:
+            rows.append({
+                "year": int(year),
+                "commodity": commodity,
+                "variable_cost_per_bu": round(var_per_bu, 4) if var_per_bu else None,
+                "total_cost_per_bu": round(tot_per_bu, 4) if tot_per_bu else None,
+            })
+
+    result = pd.DataFrame(rows)
+    logger.info(f"  Extracted {len(result)} year-commodity cost records (machine-readable)")
+    return result
+
+
+def _parse_pivot_sheet(filepath: Path, sheet_names: list[str], commodity: str) -> pd.DataFrame:
+    """Fallback parser for older ERS pivot-format Excel files."""
+    target_sheet = None
+    for name in sheet_names:
+        if "cost" in name.lower() or "return" in name.lower() or "pivot" in name.lower():
+            target_sheet = name
+            break
+    if target_sheet is None:
+        target_sheet = sheet_names[0]
+
+    df = pd.read_excel(filepath, sheet_name=target_sheet, header=None)
     rows = []
 
-    # Try to find header row (contains years as column headers)
     header_row = None
     for idx in range(min(20, len(df))):
         row_vals = df.iloc[idx].astype(str)
@@ -85,10 +139,9 @@ def parse_ers_excel(filepath: Path, commodity: str) -> pd.DataFrame:
             break
 
     if header_row is None:
-        logger.warning("  Could not find header row with year columns — skipping")
+        logger.warning("  Could not find header row with year columns - skipping")
         return pd.DataFrame()
 
-    # Extract years from header
     headers = df.iloc[header_row]
     year_cols = {}
     for col_idx, val in enumerate(headers):
@@ -101,36 +154,28 @@ def parse_ers_excel(filepath: Path, commodity: str) -> pd.DataFrame:
 
     logger.info(f"  Found {len(year_cols)} year columns (header row {header_row})")
 
-    # Find rows for variable cost and total cost
-    # Common labels: "Variable costs", "Total costs listed"
-    item_col = 0  # First column usually has the item labels
     variable_cost_row = None
     total_cost_row = None
-
     for idx in range(header_row + 1, len(df)):
-        label = str(df.iloc[idx, item_col]).strip().lower()
+        label = str(df.iloc[idx, 0]).strip().lower()
         if "variable cost" in label and variable_cost_row is None:
             variable_cost_row = idx
         if "total cost" in label and "listed" not in label and total_cost_row is None:
             total_cost_row = idx
 
-    # Build output rows
     for col_idx, year in year_cols.items():
         var_cost = None
         tot_cost = None
-
         if variable_cost_row is not None:
             try:
                 var_cost = float(df.iloc[variable_cost_row, col_idx])
             except (ValueError, TypeError):
                 pass
-
         if total_cost_row is not None:
             try:
                 tot_cost = float(df.iloc[total_cost_row, col_idx])
             except (ValueError, TypeError):
                 pass
-
         if var_cost is not None or tot_cost is not None:
             rows.append({
                 "year": year,
@@ -140,7 +185,7 @@ def parse_ers_excel(filepath: Path, commodity: str) -> pd.DataFrame:
             })
 
     result = pd.DataFrame(rows)
-    logger.info(f"  Extracted {len(result)} year-commodity cost records")
+    logger.info(f"  Extracted {len(result)} year-commodity cost records (pivot)")
     return result
 
 

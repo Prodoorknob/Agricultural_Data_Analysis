@@ -1,0 +1,1102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FieldPulse · Design System · v1</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&family=Barlow+Condensed:wght@600;700;800;900&display=swap" rel="stylesheet">
+<style>
+
+/* ============================================================
+   FIELDPULSE DESIGN SYSTEM — v1.0
+   Source of truth for the U.S. Agricultural Intelligence Dashboard.
+
+   AUDIENCE (priority order):
+   1. FARMERS & PRODUCERS — "Where does my yield stand? What should
+      I plant? When should I sell?" These are the hero questions.
+   2. ANALYSTS & RESEARCHERS — historical depth, trend comparisons,
+      export-ready data. They'll find it, but it doesn't drive layout.
+   3. DISCOVERERS — curiosity browsers. Nice to have, not designed for.
+
+   PERSONALITY: Grounded, warm, decisive. A trusted field partner,
+   not a government report or a startup dashboard. This is a tool
+   that helps you make planting decisions in February and selling
+   decisions in October.
+
+   INSPIRATION: Farming Simulator 2025's planning layer —
+   crop profitability tables, market price tracking, field management.
+   John Deere Operations Center. Climate FieldView. Granular.
+   Not Bloomberg. Not Grafana.
+   ============================================================ */
+
+
+/* ─────────────────────────────────────────────
+   DESIGN TOKENS — LIGHT (DEFAULT)
+   Light-first. Warm whites, earth tones, high
+   readability. A farmer checks this on a tablet
+   in the cab or on a phone at the elevator.
+   ───────────────────────────────────────────── */
+
+:root {
+  /* Backgrounds — 3 depth levels */
+  --bg:        #FAF8F4;             /* warm off-white — slight parchment tone */
+  --surface:   #FFFFFF;             /* card, panel, modal */
+  --surface2:  #F3EFE8;             /* inset areas, table headers, filter bar */
+
+  /* Borders */
+  --border:    rgba(0, 0, 0, 0.08); /* default dividers, card outlines */
+  --border2:   rgba(0, 0, 0, 0.14); /* hover, stronger dividers, focused inputs */
+
+  /* Text — 4 levels */
+  --text:      #1B1B18;             /* primary — near-black, warm undertone */
+  --text2:     #5C564E;             /* secondary — descriptions, subtitles */
+  --text3:     #9C9488;             /* tertiary — metadata, timestamps, axis labels */
+  --muted:     #D1CBBF;             /* decorative ONLY — faint rules, disabled states. NEVER readable text */
+
+  /* ─── Field Green (primary) ─── */
+  /* The color of a mid-season crop canopy. Trust, growth, vitality. */
+  --field:         #2D6A4F;         /* primary — nav, CTA, yield data, positive */
+  --field-light:   #40916C;         /* hover, lighter accents */
+  --field-dark:    #1B4332;         /* pressed states, high-contrast text */
+  --field-subtle:  rgba(45, 106, 79, 0.07);  /* hover backgrounds, tinted cards */
+  --field-tint:    #E8F5EE;         /* very light tint for positive result cards */
+
+  /* ─── Harvest Gold (secondary) ─── */
+  /* Revenue, economics, market prices. The color of ripe wheat. */
+  --harvest:       #B8860B;         /* revenue data, economics, price lines */
+  --harvest-light: #D4A017;         /* hover, lighter accents */
+  --harvest-dark:  #8B6914;         /* pressed, high-contrast */
+  --harvest-subtle: rgba(184, 134, 11, 0.07);
+  --harvest-tint:  #FDF6E3;         /* light tint for price/revenue cards */
+
+  /* ─── Soil (accent) ─── */
+  /* Warmth, earth, grounding. Terracotta/sienna. Used sparingly. */
+  --soil:          #A0522D;         /* accent CTA, warm highlights, callouts */
+  --soil-light:    #C17644;
+  --soil-subtle:   rgba(160, 82, 45, 0.07);
+  --soil-tint:     #FDF0E8;
+
+  /* ─── Sky (informational) ─── */
+  /* Production data, structural elements, links. Honest blue. */
+  --sky:           #2B6CB0;         /* production charts, links, info badges */
+  --sky-light:     #3B82C4;
+  --sky-subtle:    rgba(43, 108, 176, 0.07);
+  --sky-tint:      #EBF2FB;
+
+  /* Semantic Colors */
+  --positive:  #2D6A4F;             /* growth, yield up, good condition */
+  --negative:  #B42318;             /* decline, yield drop, poor condition — barn red, not neon */
+  --warning:   #B8860B;             /* caution, WASDE surprise, market alert */
+  --info:      #2B6CB0;             /* informational, survey source, methodology */
+
+  /* Chart Palette (multi-commodity comparisons) */
+  --chart-corn:     #D4A017;        /* golden — the king of American agriculture */
+  --chart-soy:      #40916C;        /* green — second-largest row crop */
+  --chart-wheat:    #C17644;        /* sienna — amber waves of grain */
+  --chart-cotton:   #7B68A0;        /* muted purple — the South */
+  --chart-hay:      #6B8E5A;        /* olive — pasture and forage */
+  --chart-cattle:   #8B4513;        /* saddle brown */
+  --chart-hogs:     #B85C5C;        /* muted rose */
+  --chart-dairy:    #4A90A0;        /* teal-blue — milk, cream */
+
+  /* Choropleth gradient (warm: low → high) */
+  --map-1: #F3EFE8;  --map-2: #E8E0D0;  --map-3: #D0C4A8;
+  --map-4: #B8A878;  --map-5: #8CAA6C;  --map-6: #6B9E5A;
+  --map-7: #4A8B48;  --map-8: #3A7A3E;  --map-9: #2D6A4F;
+  --map-10: #1B4332;
+
+  /* Shadows */
+  --shadow-sm:  0 1px 3px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.03);
+  --shadow-md:  0 4px 16px rgba(0, 0, 0, 0.06);
+  --shadow-lg:  0 8px 32px rgba(0, 0, 0, 0.08);
+  --shadow-focus: 0 0 0 3px rgba(45, 106, 79, 0.18);
+
+  /* Typography */
+  --font-body: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-stat: 'Barlow Condensed', 'Plus Jakarta Sans', sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+  /* NOTE: Plus Jakarta Sans for all UI — warmer than Inter, crafted not clinical.
+     Barlow Condensed for hero KPI numbers — big, bold, undeniable.
+     JetBrains Mono for data values, metadata, labels, axis ticks. */
+
+  /* Spacing scale (8px base) */
+  --space-1: 4px;   --space-2: 8px;   --space-3: 12px;
+  --space-4: 16px;  --space-5: 24px;  --space-6: 32px;
+  --space-7: 48px;  --space-8: 64px;  --space-9: 96px;
+
+  /* Border Radii */
+  --radius-sm:  4px;
+  --radius-md:  8px;
+  --radius-lg:  12px;
+  --radius-xl:  16px;
+  --radius-full: 999px;
+
+  /* Transitions */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --duration-fast:   150ms;
+  --duration-normal: 250ms;
+  --duration-slow:   400ms;
+}
+
+
+/* ─────────────────────────────────────────────
+   DESIGN TOKENS — DARK MODE
+   ───────────────────────────────────────────── */
+
+[data-theme='dark'] {
+  --bg:        #111B16;             /* dark forest */
+  --surface:   #1A2820;             /* deep green-charcoal */
+  --surface2:  #20322A;             /* elevated surface */
+
+  --border:    rgba(255, 255, 255, 0.08);
+  --border2:   rgba(255, 255, 255, 0.14);
+
+  --text:      #F0EDE8;             /* warm white */
+  --text2:     #A8A090;             /* warm gray */
+  --text3:     #706858;             /* muted warm */
+  --muted:     #3A3428;             /* decorative only */
+
+  --field:         #52B788;         /* brighter green for dark bg */
+  --field-light:   #6ECF9A;
+  --field-dark:    #40916C;
+  --field-subtle:  rgba(82, 183, 136, 0.1);
+  --field-tint:    rgba(82, 183, 136, 0.08);
+
+  --harvest:       #D4A017;
+  --harvest-light: #E8B82A;
+  --harvest-dark:  #B8860B;
+  --harvest-subtle: rgba(212, 160, 23, 0.1);
+  --harvest-tint:  rgba(212, 160, 23, 0.06);
+
+  --soil:          #C17644;
+  --soil-light:    #D4904E;
+  --soil-subtle:   rgba(193, 118, 68, 0.1);
+
+  --sky:           #5B9BD5;
+  --sky-light:     #7BB3E0;
+  --sky-subtle:    rgba(91, 155, 213, 0.1);
+
+  --positive:  #52B788;
+  --negative:  #E05A4A;
+  --warning:   #D4A017;
+  --info:      #5B9BD5;
+
+  --shadow-sm:  0 1px 3px rgba(0,0,0,0.2);
+  --shadow-md:  0 4px 16px rgba(0,0,0,0.25);
+  --shadow-lg:  0 8px 32px rgba(0,0,0,0.3);
+  --shadow-focus: 0 0 0 3px rgba(82, 183, 136, 0.25);
+
+  /* Choropleth stays saturated in dark mode */
+  --map-1: #1A2820;  --map-2: #20322A;  --map-3: #2A4535;
+  --map-4: #356040;  --map-5: #40784C;  --map-6: #4A8B48;
+  --map-7: #52A054;  --map-8: #52B760;  --map-9: #52B788;
+  --map-10: #74D4A0;
+}
+
+
+/* ============================================================
+   DOC SHELL — styles for this reference document only
+   ============================================================ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body {
+  background: var(--bg); color: var(--text);
+  font-family: var(--font-body); font-size: 15px;
+  line-height: 1.65; -webkit-font-smoothing: antialiased;
+}
+.doc-page { max-width: 1020px; margin: 0 auto; padding: 0 28px 140px; }
+.doc-section { padding: 64px 0 0; border-top: 1px solid var(--border); margin-top: 64px; }
+.doc-section:first-child { border-top: none; margin-top: 0; }
+.doc-label { font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: var(--text3); margin-bottom: 6px; }
+.doc-heading { font-family: var(--font-body); font-size: 32px; font-weight: 800; color: var(--text); line-height: 1.1; margin-bottom: 12px; letter-spacing: -0.02em; }
+.doc-heading span { color: var(--field); }
+.doc-desc { font-size: 15px; color: var(--text2); line-height: 1.7; max-width: 640px; margin-bottom: 40px; }
+.doc-sub { font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--text3); margin: 48px 0 16px; display: flex; align-items: center; gap: 12px; }
+.doc-sub::after { content: ''; flex: 1; height: 1px; background: var(--border2); }
+.doc-row { display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 24px; align-items: flex-start; }
+.doc-col { flex: 1; min-width: 260px; }
+.doc-note { font-family: var(--font-mono); font-size: 11px; color: var(--text2); line-height: 1.75; margin-top: 8px; padding: 14px 18px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); }
+.doc-note .do   { color: var(--field); font-weight: 700; }
+.doc-note .dont { color: var(--negative); font-weight: 700; }
+.doc-note .note { color: var(--harvest); font-weight: 700; }
+.doc-code { font-family: var(--font-mono); font-size: 11px; color: var(--field); background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 2px 8px; display: inline-block; margin-top: 4px; }
+.swatch-row { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 18px; }
+.swatch { display: flex; flex-direction: column; gap: 5px; }
+.swatch-block { width: 76px; height: 48px; border-radius: var(--radius-sm); border: 1px solid var(--border); }
+.swatch-name { font-family: var(--font-mono); font-size: 9px; color: var(--text3); letter-spacing: 0.08em; }
+.swatch-hex  { font-family: var(--font-mono); font-size: 9px; color: var(--text2); }
+
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--muted); border-radius: 3px; }
+
+.preview-box { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 32px; margin-bottom: 16px; }
+.preview-box.white { background: var(--surface); }
+
+.code-block { font-family: var(--font-mono); font-size: 12px; line-height: 1.8; background: #1B1B18; color: #F0EDE8; padding: 20px 24px; border-radius: var(--radius-md); overflow-x: auto; margin: 16px 0; }
+.code-block .kw  { color: #93C5FD; }
+.code-block .str { color: #86EFAC; }
+.code-block .cmt { color: #706858; }
+.code-block .num { color: #FCD34D; }
+
+
+</style>
+</head>
+<body>
+<div class="doc-page">
+
+
+<!-- ============================================================
+     HEADER
+     ============================================================ -->
+<div class="doc-section" style="padding-top:80px;">
+  <div class="doc-label">fieldpulse &middot; design system &middot; v1.0 &middot; april 2026</div>
+  <div class="doc-heading">Agricultural Intelligence <span>Design System</span></div>
+  <div class="doc-desc">
+    Source of truth for colors, typography, layout, components, chart conventions,
+    and interaction patterns for FieldPulse &mdash; the U.S. Agricultural Intelligence
+    Dashboard. Strategy-first: answers "what should I plant?", "where does my yield
+    rank?", and "when should I sell?" before anything else. Built on USDA QuickStats,
+    commodity price models, and WASDE signals.
+  </div>
+  <div class="doc-note">
+    <span class="note">STACK:</span> Next.js 16 (App Router) &middot; React 19 &middot; TailwindCSS 4 &middot; Recharts 3.7 &middot; Deck.gl 9.2 &middot; MapLibre GL 5.18 &middot; TypeScript 5<br>
+    <span class="note">THEME:</span> Light-first, dark-ready. Both themes are full citizens. Test both before shipping.<br>
+    <span class="note">DATA:</span> USDA QuickStats &middot; Parquet on S3 &middot; Athena SQL &middot; FastAPI (price forecasts, WASDE, SHAP)<br>
+    <span class="note">AUDIENCE:</span> Farmers/producers (primary), analysts/researchers (secondary), discoverers (tertiary).
+  </div>
+</div>
+
+
+<!-- ============================================================
+     01. IDENTITY & PRINCIPLES
+     ============================================================ -->
+<div class="doc-section">
+  <div class="doc-label">01</div>
+  <div class="doc-heading">Identity & <span>Principles</span></div>
+  <div class="doc-desc">
+    FieldPulse is a strategy tool for people who make decisions about American agriculture.
+    Not a dashboard for browsing data. Not a government report. A trusted field partner
+    that helps you plan in February and sell in October. The Farming Simulator 2025 planning
+    layer &mdash; crop profitability tables, market signals, field comparisons &mdash; is the
+    north star, not Bloomberg or Grafana.
+  </div>
+
+  <div class="doc-sub">Brand Identity</div>
+  <div class="doc-row">
+    <div class="doc-col">
+      <strong style="font-size:14px;">Product:</strong> FieldPulse<br>
+      <strong style="font-size:14px;">Studio:</strong> Cobbles &amp; Currents Studios<br>
+      <strong style="font-size:14px;">Primary Color:</strong> Field Green (#2D6A4F)<br>
+      <strong style="font-size:14px;">Secondary Color:</strong> Harvest Gold (#B8860B)<br>
+      <strong style="font-size:14px;">Typeface:</strong> Plus Jakarta Sans (warm, crafted, not clinical)<br>
+      <strong style="font-size:14px;">Coverage:</strong> All 50 states, 2001&ndash;2025, USDA QuickStats + commodity models
+    </div>
+    <div class="doc-col">
+      <strong style="font-size:14px;">Voice:</strong> Direct, warm, decisive. Speak like a trusted agronomist,
+      not a data scientist. "Corn yields in your county are 12% above the state average"
+      is better than "Statistical deviation: +1.2&sigma;". Use farmer vocabulary:
+      bushels/acre, $/bushel, planting window, harvest outlook.<br>
+      <strong style="font-size:14px;">Not:</strong> Clinical, jargon-heavy, government-bureaucratic, startup-flashy,
+      or patronizing. Don't dumb it down &mdash; farmers are sharp. Just speak their language.
+    </div>
+  </div>
+
+  <div class="doc-sub">Design Principles</div>
+  <div class="doc-row">
+    <div class="doc-col">
+      <strong>1. Answer first, explain second.</strong><br>
+      <span style="color:var(--text2);font-size:13px;">
+        The farmer's question is always some form of "what should I do?" The answer
+        &mdash; the yield ranking, the price forecast, the planting recommendation &mdash;
+        comes first and big. Methodology, data source, and caveats follow for the analyst
+        audience but never block the primary answer. KPI cards lead. Charts support.
+        Footnotes explain.
+      </span>
+    </div>
+    <div class="doc-col">
+      <strong>2. Seasonal awareness.</strong><br>
+      <span style="color:var(--text2);font-size:13px;">
+        Agriculture is cyclical. The UI should reflect what matters <em>right now</em>.
+        In February: planting intentions, acreage decisions, price-per-bushel comparisons.
+        In July: crop conditions, yield projections, drought alerts.
+        In October: harvest progress, market prices, sell/hold signals.
+        Default views and highlighted metrics shift with the agricultural calendar.
+      </span>
+    </div>
+  </div>
+  <div class="doc-row">
+    <div class="doc-col">
+      <strong>3. Comparison is the killer feature.</strong><br>
+      <span style="color:var(--text2);font-size:13px;">
+        "How does my state compare?" &mdash; state vs national, this year vs last, corn vs
+        soybeans per acre. Every view should make at least one meaningful comparison
+        immediately visible. Side-by-side layouts, dual-axis charts, and delta badges
+        make differences obvious without forcing the user to hold numbers in their head.
+      </span>
+    </div>
+    <div class="doc-col">
+      <strong>4. Warm, not clinical.</strong><br>
+      <span style="color:var(--text2);font-size:13px;">
+        Earth tones. Warm whites. Green that looks like a crop canopy, not a terminal
+        prompt. Gold that looks like ripe wheat, not a stock ticker. This is a tool for
+        people who work the land, and the visual language should honor that.
+        No neon. No dark-mode-by-default. No "hacker aesthetic."
+      </span>
+    </div>
+  </div>
+  <div class="doc-row">
+    <div class="doc-col">
+      <strong>5. Trust through provenance.</strong><br>
+      <span style="color:var(--text2);font-size:13px;">
+        USDA source badges and data freshness timestamps should be visible but unobtrusive.
+        "Source: USDA NASS QuickStats &middot; Updated Apr 2026" tucked below the chart, not
+        hidden in a modal. Confidence intervals (P10/P50/P90) on forecasts, never just
+        a point estimate. Farmers and analysts both need to trust the numbers.
+      </span>
+    </div>
+    <div class="doc-col">
+      <strong>6. Tablet-ready density.</strong><br>
+      <span style="color:var(--text2);font-size:13px;">
+        A farmer checks this on an iPad in the truck cab, not a 32" monitor. Touch targets
+        are 44px minimum. Cards are readable at arm's length. Filters are top-of-screen,
+        not sidebar. Charts are legible at 768px. The desktop experience can be denser,
+        but the tablet experience drives the minimum viability.
+      </span>
+    </div>
+  </div>
+</div>
+
+
+<!-- ============================================================
+     02. INFORMATION ARCHITECTURE
+     ============================================================ -->
+<div class="doc-section">
+  <div class="doc-label">02</div>
+  <div class="doc-heading">Information <span>Architecture</span></div>
+  <div class="doc-desc">
+    Strategy-first hierarchy. The dashboard opens with the question that matters most
+    today (seasonally aware), not a generic overview. The 7 ViewModes are reordered
+    by farmer utility, not data taxonomy.
+  </div>
+
+  <div class="doc-sub">ViewMode Tabs (Farmer Priority Order)</div>
+  <div class="doc-row">
+    <div class="doc-col">
+      <div style="display:flex;flex-direction:column;gap:12px;">
+
+        <!-- Predictions -->
+        <div style="border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;border-left:4px solid var(--harvest);">
+          <div style="padding:16px 18px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+              <span style="font-family:var(--font-mono);font-size:9px;font-weight:700;letter-spacing:0.12em;color:var(--harvest);text-transform:uppercase;">Market Outlook</span>
+              <span style="font-family:var(--font-mono);font-size:8px;font-weight:700;letter-spacing:0.1em;color:var(--text3);background:var(--harvest-tint);padding:2px 8px;border-radius:var(--radius-full);">HERO VIEW</span>
+            </div>
+            <div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:4px;">Price Forecasts &amp; Sell Signals</div>
+            <div style="font-size:12px;color:var(--text2);line-height:1.55;">
+              The farmer's first stop. Fan chart (P10/P50/P90) &middot; Probability gauge ("chance corn exceeds $4.80")
+              &middot; WASDE supply signal (bullish/bearish/neutral) &middot; Key price drivers (SHAP) &middot;
+              Regime alert (abnormal market conditions) &middot; Forecast accuracy history
+            </div>
+          </div>
+        </div>
+
+        <!-- Crops -->
+        <div style="border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;border-left:4px solid var(--field);">
+          <div style="padding:16px 18px;">
+            <span style="font-family:var(--font-mono);font-size:9px;font-weight:700;letter-spacing:0.12em;color:var(--field);text-transform:uppercase;">Crop Intelligence</span>
+            <div style="font-size:15px;font-weight:700;color:var(--text);margin-top:6px;margin-bottom:4px;">Yields, Rankings &amp; What to Plant</div>
+            <div style="font-size:12px;color:var(--text2);line-height:1.55;">
+              State yield vs national benchmark &middot; Commodity profitability comparison ($/acre) &middot;
+              Yield trend with anomaly detection &middot; Top 5 crops by revenue &middot; Boom/decline crops
+            </div>
+          </div>
+        </div>
+
+        <!-- Overview -->
+        <div style="border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;border-left:4px solid var(--sky);">
+          <div style="padding:16px 18px;">
+            <span style="font-family:var(--font-mono);font-size:9px;font-weight:700;letter-spacing:0.12em;color:var(--sky);text-transform:uppercase;">State Overview</span>
+            <div style="font-size:15px;font-weight:700;color:var(--text);margin-top:6px;margin-bottom:4px;">Agricultural Fingerprint</div>
+            <div style="font-size:12px;color:var(--text2);line-height:1.55;">
+              US map (choropleth) &middot; State KPIs (crop count, operations, area, revenue) &middot;
+              Planted vs Harvested trends &middot; Crop conditions &middot; Crop progress
+            </div>
+          </div>
+        </div>
+
+        <!-- Remaining views (compact) -->
+        <div style="display:flex;gap:12px;">
+          <div style="flex:1;border:1px solid var(--border);border-radius:var(--radius-lg);padding:14px 16px;border-left:4px solid var(--harvest);">
+            <span style="font-family:var(--font-mono);font-size:9px;font-weight:700;letter-spacing:0.12em;color:var(--harvest);text-transform:uppercase;">Economics</span>
+            <div style="font-size:12px;color:var(--text2);margin-top:6px;line-height:1.5;">Revenue rankings &middot; Boom crops &middot; Census data</div>
+          </div>
+          <div style="flex:1;border:1px solid var(--border);border-radius:var(--radius-lg);padding:14px 16px;border-left:4px solid var(--soil);">
+            <span style="font-family:var(--font-mono);font-size:9px;font-weight:700;letter-spacing:0.12em;color:var(--soil);text-transform:uppercase;">Animals</span>
+            <div style="font-size:12px;color:var(--text2);margin-top:6px;line-height:1.5;">Livestock &middot; Poultry &middot; Dairy inventories &amp; sales</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:12px;">
+          <div style="flex:1;border:1px solid var(--border);border-radius:var(--radius-lg);padding:14px 16px;border-left:4px solid var(--field-light);">
+            <span style="font-family:var(--font-mono);font-size:9px;font-weight:700;letter-spacing:0.12em;color:var(--field-light);text-transform:uppercase;">Land</span>
+            <div style="font-size:12px;color:var(--text2);margin-top:6px;line-height:1.5;">Acreage &middot; Planted vs Harvested &middot; Land use</div>
+          </div>
+          <div style="flex:1;border:1px solid var(--border);border-radius:var(--radius-lg);padding:14px 16px;border-left:4px solid var(--sky-light);">
+            <span style="font-family:var(--font-mono);font-size:9px;font-weight:700;letter-spacing:0.12em;color:var(--sky-light);text-transform:uppercase;">Labor</span>
+            <div style="font-size:12px;color:var(--text2);margin-top:6px;line-height:1.5;">Wages &middot; State vs national &middot; Peer comparison</div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <div class="doc-col">
+      <div class="doc-sub" style="margin-top:0;">Header (2 Layers)</div>
+      <!-- Nav preview -->
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;margin-bottom:16px;">
+        <div style="padding:14px 20px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <div style="width:28px;height:28px;background:var(--field);border-radius:6px;display:flex;align-items:center;justify-content:center;">
+              <span style="color:#fff;font-size:12px;font-weight:800;font-family:var(--font-stat);">F</span>
+            </div>
+            <span style="font-weight:700;font-size:15px;color:var(--text);">FieldPulse</span>
+          </div>
+          <div style="display:flex;gap:20px;align-items:center;">
+            <span style="font-size:13px;font-weight:600;color:var(--field);border-bottom:2px solid var(--field);padding-bottom:3px;">Market</span>
+            <span style="font-size:13px;font-weight:500;color:var(--text2);">Crops</span>
+            <span style="font-size:13px;font-weight:500;color:var(--text2);">Overview</span>
+            <span style="font-size:13px;font-weight:500;color:var(--text2);">Economics</span>
+            <span style="font-size:13px;font-weight:500;color:var(--text3);">More</span>
+          </div>
+        </div>
+        <div style="padding:10px 20px;display:flex;gap:16px;align-items:center;background:var(--surface2);">
+          <span style="font-size:12px;font-weight:600;color:var(--text);padding:5px 14px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-full);">Indiana</span>
+          <span style="font-size:12px;color:var(--text2);padding:5px 14px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-full);">2024</span>
+          <span style="font-size:12px;color:var(--text2);padding:5px 14px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-full);">Crops</span>
+          <div style="margin-left:auto;display:flex;align-items:center;gap:6px;">
+            <div style="width:6px;height:6px;background:var(--field);border-radius:50%;"></div>
+            <span style="font-family:var(--font-mono);font-size:10px;color:var(--text3);">Updated Apr 09</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="doc-note">
+        <span class="note">LAYER 1 &mdash; NAV:</span> Sticky, white bg, 56px. Logo mark (green square + "FieldPulse").
+        Tabs in priority order: Market, Crops, Overview, Economics, More (dropdown: Animals, Land, Labor).
+        Active tab: field green underline + weight 600.<br><br>
+        <span class="note">LAYER 2 &mdash; FILTERS:</span> surface2 bg. State pill + Year pill + Sector pill.
+        Live indicator (green dot + timestamp) on the right. Compact. Touch-friendly (44px targets).
+      </div>
+
+      <div class="doc-sub">Filter Behavior</div>
+      <div class="doc-note">
+        <span class="do">RULE:</span> State selection is the primary action. It persists across ALL views.
+        Everything else (year, sector, group) resets per tab via VIEW_FILTER_DEFAULTS.<br><br>
+        <span class="do">RULE:</span> Market Outlook tab defaults to the user's selected state. If no
+        state is selected, show national + prompt to select.<br><br>
+        <span class="dont">DON'T:</span> Carry sector filters across tabs. Each tab owns its defaults.
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ============================================================
+     03. COLOR SYSTEM
+     ============================================================ -->
+<div class="doc-section">
+  <div class="doc-label">03</div>
+  <div class="doc-heading">Color <span>System</span></div>
+  <div class="doc-desc">
+    Two complete palettes (light default, dark toggle). Four semantic families: Field (green),
+    Harvest (gold), Soil (terracotta), Sky (blue). Colors reference the agricultural landscape,
+    not a software UI kit. Every color earns its place through meaning.
+  </div>
+
+  <div class="doc-sub">Core Palette (Light)</div>
+  <div class="swatch-row">
+    <div class="swatch"><div class="swatch-block" style="background:#FAF8F4;"></div><div class="swatch-name">--bg</div><div class="swatch-hex">#FAF8F4</div></div>
+    <div class="swatch"><div class="swatch-block" style="background:#FFFFFF;"></div><div class="swatch-name">--surface</div><div class="swatch-hex">#FFFFFF</div></div>
+    <div class="swatch"><div class="swatch-block" style="background:#F3EFE8;"></div><div class="swatch-name">--surface2</div><div class="swatch-hex">#F3EFE8</div></div>
+    <div class="swatch"><div class="swatch-block" style="background:#1B1B18;"></div><div class="swatch-name">--text</div><div class="swatch-hex">#1B1B18</div></div>
+    <div class="swatch"><div class="swatch-block" style="background:#5C564E;"></div><div class="swatch-name">--text2</div><div class="swatch-hex">#5C564E</div></div>
+    <div class="swatch"><div class="swatch-block" style="background:#9C9488;"></div><div class="swatch-name">--text3</div><div class="swatch-hex">#9C9488</div></div>
+  </div>
+
+  <div class="doc-sub">Field Green (Primary)</div>
+  <div class="swatch-row">
+    <div class="swatch"><div class="swatch-block" style="background:#1B4332;"></div><div class="swatch-name">--field-dark</div><div class="swatch-hex">#1B4332</div></div>
+    <div class="swatch"><div class="swatch-block" style="background:#2D6A4F;"></div><div class="swatch-name">--field</div><div class="swatch-hex">#2D6A4F</div></div>
+    <div class="swatch"><div class="swatch-block" style="background:#40916C;"></div><div class="swatch-name">--field-light</div><div class="swatch-hex">#40916C</div></div>
+    <div class="swatch"><div class="swatch-block" style="background:#E8F5EE;"></div><div class="swatch-name">--field-tint</div><div class="swatch-hex">#E8F5EE</div></div>
+  </div>
+  <div class="doc-note">
+    <span class="do">USE FOR:</span> Yield data, positive deltas, primary CTA, nav active state, "good" crop condition,
+    state highlight on map. This is the product's identity color &mdash; it should feel like standing
+    in a healthy field in July.
+  </div>
+
+  <div class="doc-sub">Harvest Gold (Secondary)</div>
+  <div class="swatch-row">
+    <div class="swatch"><div class="swatch-block" style="background:#8B6914;"></div><div class="swatch-name">--harvest-dark</div><div class="swatch-hex">#8B6914</div></div>
+    <div class="swatch"><div class="swatch-block" style="background:#B8860B;"></div><div class="swatch-name">--harvest</div><div class="swatch-hex">#B8860B</div></div>
+    <div class="swatch"><div class="swatch-block" style="background:#D4A017;"></div><div class="swatch-name">--harvest-light</div><div class="swatch-hex">#D4A017</div></div>
+    <div class="swatch"><div class="swatch-block" style="background:#FDF6E3;"></div><div class="swatch-name">--harvest-tint</div><div class="swatch-hex">#FDF6E3</div></div>
+  </div>
+  <div class="doc-note">
+    <span class="do">USE FOR:</span> Revenue data, market prices, economics view, sell signals, $/bushel values,
+    WASDE alerts. The color of ripe wheat and golden corn. When a farmer sees harvest gold,
+    they should think "money and market."
+  </div>
+
+  <div class="doc-sub">Soil (Accent) &amp; Sky (Info)</div>
+  <div class="swatch-row">
+    <div class="swatch"><div class="swatch-block" style="background:#A0522D;"></div><div class="swatch-name">--soil</div><div class="swatch-hex">#A0522D</div></div>
+    <div class="swatch"><div class="swatch-block" style="background:#C17644;"></div><div class="swatch-name">--soil-light</div><div class="swatch-hex">#C17644</div></div>
+    <div class="swatch"><div class="swatch-block" style="background:#FDF0E8;"></div><div class="swatch-name">--soil-tint</div><div class="swatch-hex">#FDF0E8</div></div>
+    <div class="swatch"><div class="swatch-block" style="background:#2B6CB0;"></div><div class="swatch-name">--sky</div><div class="swatch-hex">#2B6CB0</div></div>
+    <div class="swatch"><div class="swatch-block" style="background:#EBF2FB;"></div><div class="swatch-name">--sky-tint</div><div class="swatch-hex">#EBF2FB</div></div>
+  </div>
+  <div class="doc-note">
+    <span class="do">SOIL:</span> Warm accent. Livestock/animal data, secondary CTAs, callout boxes,
+    "attention" moments that aren't warnings. Sparingly &mdash; max 2 elements per view.<br>
+    <span class="do">SKY:</span> Production data, informational badges, links, methodology references.
+    The cool counterpoint to the warm palette. Used for "structural" rather than "actionable" data.
+  </div>
+
+  <div class="doc-sub">Semantic Status</div>
+  <div class="swatch-row">
+    <div class="swatch"><div class="swatch-block" style="background:#2D6A4F;"></div><div class="swatch-name">--positive</div><div class="swatch-hex">#2D6A4F</div></div>
+    <div class="swatch"><div class="swatch-block" style="background:#B42318;"></div><div class="swatch-name">--negative</div><div class="swatch-hex">#B42318</div></div>
+    <div class="swatch"><div class="swatch-block" style="background:#B8860B;"></div><div class="swatch-name">--warning</div><div class="swatch-hex">#B8860B</div></div>
+    <div class="swatch"><div class="swatch-block" style="background:#2B6CB0;"></div><div class="swatch-name">--info</div><div class="swatch-hex">#2B6CB0</div></div>
+  </div>
+  <div class="doc-note"><span class="dont">NOTE:</span> Negative is barn red (#B42318), not neon. It should look like a weather warning on a barn radio, not a Silicon Valley error state.</div>
+
+  <div class="doc-sub">Commodity Chart Palette</div>
+  <div class="swatch-row">
+    <div class="swatch"><div class="swatch-block" style="background:#D4A017;"></div><div class="swatch-name">corn</div><div class="swatch-hex">#D4A017</div></div>
+    <div class="swatch"><div class="swatch-block" style="background:#40916C;"></div><div class="swatch-name">soy</div><div class="swatch-hex">#40916C</div></div>
+    <div class="swatch"><div class="swatch-block" style="background:#C17644;"></div><div class="swatch-name">wheat</div><div class="swatch-hex">#C17644</div></div>
+    <div class="swatch"><div class="swatch-block" style="background:#7B68A0;"></div><div class="swatch-name">cotton</div><div class="swatch-hex">#7B68A0</div></div>
+    <div class="swatch"><div class="swatch-block" style="background:#6B8E5A;"></div><div class="swatch-name">hay</div><div class="swatch-hex">#6B8E5A</div></div>
+    <div class="swatch"><div class="swatch-block" style="background:#8B4513;"></div><div class="swatch-name">cattle</div><div class="swatch-hex">#8B4513</div></div>
+    <div class="swatch"><div class="swatch-block" style="background:#B85C5C;"></div><div class="swatch-name">hogs</div><div class="swatch-hex">#B85C5C</div></div>
+    <div class="swatch"><div class="swatch-block" style="background:#4A90A0;"></div><div class="swatch-name">dairy</div><div class="swatch-hex">#4A90A0</div></div>
+  </div>
+  <div class="doc-note">Earth-toned. Each commodity has a fixed color that references what it looks or feels like.
+  Corn = gold. Soy = green. Wheat = sienna. These override semantic families within multi-commodity charts only.</div>
+
+  <div class="doc-sub">Choropleth Map Gradient</div>
+  <div style="display:flex;align-items:center;gap:0;margin-bottom:8px;border-radius:4px;overflow:hidden;">
+    <div style="flex:1;height:28px;background:#F3EFE8;"></div>
+    <div style="flex:1;height:28px;background:#E8E0D0;"></div>
+    <div style="flex:1;height:28px;background:#D0C4A8;"></div>
+    <div style="flex:1;height:28px;background:#B8A878;"></div>
+    <div style="flex:1;height:28px;background:#8CAA6C;"></div>
+    <div style="flex:1;height:28px;background:#6B9E5A;"></div>
+    <div style="flex:1;height:28px;background:#4A8B48;"></div>
+    <div style="flex:1;height:28px;background:#3A7A3E;"></div>
+    <div style="flex:1;height:28px;background:#2D6A4F;"></div>
+    <div style="flex:1;height:28px;background:#1B4332;"></div>
+  </div>
+  <div style="display:flex;justify-content:space-between;font-family:var(--font-mono);font-size:9px;color:var(--text3);">
+    <span>Low &mdash; sandy beige</span><span>High &mdash; deep field green</span>
+  </div>
+  <div class="doc-note">Warm-to-green gradient. Low values are sandy/neutral (unplanted land). High values are deep green (productive fields). This feels agricultural, not statistical.</div>
+</div>
+
+
+<!-- ============================================================
+     04. TYPOGRAPHY
+     ============================================================ -->
+<div class="doc-section">
+  <div class="doc-label">04</div>
+  <div class="doc-heading">Typography</div>
+  <div class="doc-desc">
+    Three typefaces with strict roles. Plus Jakarta Sans is warmer than Inter &mdash;
+    slightly rounded terminals give it a crafted, approachable feel without losing
+    professionalism. Barlow Condensed makes numbers undeniable. JetBrains Mono
+    handles everything technical.
+  </div>
+
+  <div class="doc-sub">Barlow Condensed &mdash; Hero Numbers, State Names</div>
+  <div style="display:flex;flex-direction:column;gap:16px;margin-bottom:24px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:28px;">
+    <div>
+      <div style="font-family:'Barlow Condensed',sans-serif;font-size:48px;font-weight:900;line-height:0.95;letter-spacing:-0.02em;color:var(--field);">181.3</div>
+      <div style="font-family:var(--font-mono);font-size:11px;color:var(--text3);margin-top:4px;">bu/acre &middot; state yield</div>
+      <div class="doc-code">KPI hero value &mdash; 48px 900</div>
+    </div>
+    <div>
+      <div style="font-family:'Barlow Condensed',sans-serif;font-size:36px;font-weight:800;line-height:1;color:var(--harvest);">$4.82</div>
+      <div style="font-family:var(--font-mono);font-size:11px;color:var(--text3);margin-top:4px;">/bushel &middot; 3-month forecast</div>
+      <div class="doc-code">Price KPI &mdash; 36px 800</div>
+    </div>
+    <div>
+      <div style="font-family:'Barlow Condensed',sans-serif;font-size:28px;font-weight:800;line-height:1;color:var(--text);text-transform:uppercase;">Indiana</div>
+      <div class="doc-code">State display &mdash; 28px 800 uppercase</div>
+    </div>
+  </div>
+
+  <div class="doc-sub">Plus Jakarta Sans &mdash; All UI, Headings, Body</div>
+  <div style="display:flex;flex-direction:column;gap:14px;margin-bottom:24px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:28px;">
+    <div>
+      <span style="font-size:28px;font-weight:800;letter-spacing:-0.02em;line-height:1.1;">Market Outlook</span>
+      <div class="doc-code">Page title &mdash; 28px 800</div>
+    </div>
+    <div>
+      <span style="font-size:18px;font-weight:700;">Corn Price Forecast &mdash; 3 Month</span>
+      <div class="doc-code">Card title &mdash; 18px 700</div>
+    </div>
+    <div>
+      <span style="font-size:15px;font-weight:400;color:var(--text);">Indiana corn yields averaged 181.3 bushels per acre in 2024, ranking 5th nationally and 12.1% above the prior year. Current futures suggest holding until Q4.</span>
+      <div class="doc-code">Body &mdash; 15px 400 &middot; line-height 1.65</div>
+    </div>
+    <div>
+      <span style="font-size:13px;font-weight:500;color:var(--text2);">Based on USDA NASS QuickStats, survey data, state-level aggregation.</span>
+      <div class="doc-code">Supporting &mdash; 13px 500 &middot; color: var(--text2)</div>
+    </div>
+  </div>
+
+  <div class="doc-sub">JetBrains Mono &mdash; Data, Labels, Metadata</div>
+  <div style="display:flex;flex-direction:column;gap:12px;margin-bottom:24px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:28px;">
+    <div>
+      <div style="font-family:var(--font-mono);font-size:13px;font-weight:700;color:var(--field);">+12.1% YoY</div>
+      <div class="doc-code">Delta value &mdash; 13px 700</div>
+    </div>
+    <div>
+      <div style="font-family:var(--font-mono);font-size:12px;font-weight:500;color:var(--text);">2,412,000 ACRES &middot; CORN &middot; AREA PLANTED</div>
+      <div class="doc-code">Data row &mdash; 12px 500</div>
+    </div>
+    <div>
+      <div style="font-family:var(--font-mono);font-size:10px;color:var(--text3);letter-spacing:0.1em;text-transform:uppercase;">Source: USDA NASS QuickStats &middot; Updated Apr 09, 2026</div>
+      <div class="doc-code">Attribution &mdash; 10px uppercase 0.1em</div>
+    </div>
+    <div>
+      <div style="font-family:var(--font-mono);font-size:9px;color:var(--text3);letter-spacing:0.12em;text-transform:uppercase;">FIELD CROPS &middot; SURVEY &middot; STATE LEVEL</div>
+      <div class="doc-code">Badge / pill &mdash; 9px ALL CAPS 0.12em</div>
+    </div>
+  </div>
+
+  <div class="doc-note">
+    <span class="do">DO:</span> Plus Jakarta Sans for all prose, headings, nav, buttons. Barlow Condensed for anything that communicates magnitude (yield numbers, prices, state names). JetBrains Mono for data values, axis ticks, badges, timestamps, USDA terminology.<br>
+    <span class="dont">DON'T:</span> Use Barlow Condensed for sentences. Don't use Plus Jakarta for axis ticks. Roles are strict. No fourth typeface.
+  </div>
+</div>
+
+
+<!-- ============================================================
+     05. COMPONENTS
+     ============================================================ -->
+<div class="doc-section">
+  <div class="doc-label">05</div>
+  <div class="doc-heading">Component <span>Library</span></div>
+  <div class="doc-desc">
+    Strategy-first components. The hero component is the Forecast Card, not a generic chart.
+    Every component works in both light and dark themes using tokens only.
+  </div>
+
+  <!-- FORECAST CARD (hero) -->
+  <div class="doc-sub">Forecast Card (Hero Component)</div>
+  <div class="doc-note">The farmer's first stop. Shows P50 price forecast + confidence range + signal badge.
+  Harvest gold accent. The number is the answer &mdash; everything else supports it.</div>
+  <div class="preview-box white" style="max-width:420px;">
+    <div style="border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;">
+      <div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;">
+        <div>
+          <div style="font-family:var(--font-mono);font-size:9px;color:var(--text3);letter-spacing:0.1em;text-transform:uppercase;">Corn &middot; 3-Month Outlook</div>
+          <div style="font-size:16px;font-weight:700;color:var(--text);margin-top:4px;">Price Forecast</div>
+        </div>
+        <span style="font-family:var(--font-mono);font-size:9px;font-weight:700;color:var(--field);background:var(--field-tint);padding:4px 10px;border-radius:var(--radius-full);letter-spacing:0.08em;text-transform:uppercase;">Bullish</span>
+      </div>
+      <div style="padding:20px;">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:20px;">
+          <div>
+            <div style="font-family:var(--font-mono);font-size:9px;color:var(--text3);letter-spacing:0.1em;text-transform:uppercase;margin-bottom:4px;">Median Forecast</div>
+            <div style="font-family:'Barlow Condensed',sans-serif;font-size:42px;font-weight:900;color:var(--harvest);line-height:1;">$4.82</div>
+            <div style="font-family:var(--font-mono);font-size:11px;color:var(--text3);margin-top:2px;">/bushel</div>
+          </div>
+          <div style="text-align:right;">
+            <div style="font-family:var(--font-mono);font-size:9px;color:var(--text3);letter-spacing:0.08em;text-transform:uppercase;margin-bottom:4px;">Confidence Range</div>
+            <div style="font-family:var(--font-mono);font-size:14px;font-weight:600;color:var(--text);">$4.35 &mdash; $5.28</div>
+            <div style="font-family:var(--font-mono);font-size:9px;color:var(--text3);margin-top:2px;">P10 &mdash; P90</div>
+          </div>
+        </div>
+        <!-- Confidence bar -->
+        <div style="height:8px;background:var(--surface2);border-radius:4px;overflow:hidden;position:relative;">
+          <div style="position:absolute;left:18%;right:18%;height:100%;background:var(--harvest-tint);border-radius:4px;border:1px solid rgba(184,134,11,0.2);"></div>
+          <div style="position:absolute;left:47%;width:6%;height:100%;background:var(--harvest);border-radius:4px;"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-top:6px;">
+          <span style="font-family:var(--font-mono);font-size:9px;color:var(--text3);">$3.80</span>
+          <span style="font-family:var(--font-mono);font-size:9px;color:var(--text3);">$5.80</span>
+        </div>
+        <!-- Key driver callout -->
+        <div style="margin-top:16px;padding:12px;background:var(--field-subtle);border-radius:var(--radius-md);display:flex;align-items:flex-start;gap:10px;">
+          <span style="font-size:14px;">&#127793;</span>
+          <div>
+            <div style="font-family:var(--font-mono);font-size:9px;color:var(--field);font-weight:700;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:2px;">Key Driver</div>
+            <div style="font-size:12px;color:var(--text2);line-height:1.5;">WASDE stocks-to-use ratio dropped to 9.2%, tightest since 2012. Supply pressure supports upside.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- KPI CARD -->
+  <div class="doc-sub">KPI Card</div>
+  <div class="doc-note">Answer card. Mono label, Barlow Condensed value, delta badge (positive/negative). Entry animation: fadeSlideUp 500ms staggered. Used in Overview (4 across) and Crops dashboards.</div>
+  <div class="preview-box white" style="display:flex;gap:16px;flex-wrap:wrap;">
+    <div style="flex:1;min-width:180px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px;">
+      <div style="font-family:var(--font-mono);font-size:9px;color:var(--text3);letter-spacing:0.1em;text-transform:uppercase;margin-bottom:8px;">State Yield</div>
+      <div style="display:flex;align-items:baseline;gap:8px;">
+        <span style="font-family:'Barlow Condensed',sans-serif;font-size:32px;font-weight:800;color:var(--text);line-height:1;">181.3</span>
+        <span style="font-family:var(--font-mono);font-size:11px;color:var(--text3);">bu/ac</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;margin-top:6px;">
+        <span style="font-family:var(--font-mono);font-size:11px;font-weight:700;color:var(--field);">+12.1%</span>
+        <span style="font-size:11px;color:var(--text3);">vs prior year</span>
+      </div>
+    </div>
+    <div style="flex:1;min-width:180px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px;">
+      <div style="font-family:var(--font-mono);font-size:9px;color:var(--text3);letter-spacing:0.1em;text-transform:uppercase;margin-bottom:8px;">Revenue</div>
+      <div style="display:flex;align-items:baseline;gap:8px;">
+        <span style="font-family:'Barlow Condensed',sans-serif;font-size:32px;font-weight:800;color:var(--harvest);line-height:1;">$14.2B</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;margin-top:6px;">
+        <span style="font-family:var(--font-mono);font-size:11px;font-weight:700;color:var(--negative);">-2.1%</span>
+        <span style="font-size:11px;color:var(--text3);">vs prior year</span>
+      </div>
+    </div>
+    <div style="flex:1;min-width:180px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px;">
+      <div style="font-family:var(--font-mono);font-size:9px;color:var(--text3);letter-spacing:0.1em;text-transform:uppercase;margin-bottom:8px;">National Rank</div>
+      <div style="display:flex;align-items:baseline;gap:8px;">
+        <span style="font-family:'Barlow Condensed',sans-serif;font-size:32px;font-weight:800;color:var(--sky);line-height:1;">#5</span>
+        <span style="font-family:var(--font-mono);font-size:11px;color:var(--text3);">of 50 states</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;margin-top:6px;">
+        <span style="font-family:var(--font-mono);font-size:11px;font-weight:700;color:var(--field);">+2 spots</span>
+        <span style="font-size:11px;color:var(--text3);">from 2023</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- BADGE SYSTEM -->
+  <div class="doc-sub">Badges &amp; Status Pills</div>
+  <div class="doc-note">JetBrains Mono 9px, uppercase, 700 weight. Tinted background + pill radius. Five semantic variants. Used for WASDE signals, crop conditions, data source tags.</div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">
+    <span style="font-family:var(--font-mono);font-size:9px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--field);background:var(--field-tint);padding:4px 10px;border-radius:var(--radius-full);">Bullish</span>
+    <span style="font-family:var(--font-mono);font-size:9px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--negative);background:rgba(180,35,24,0.08);padding:4px 10px;border-radius:var(--radius-full);">Bearish</span>
+    <span style="font-family:var(--font-mono);font-size:9px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--harvest);background:var(--harvest-tint);padding:4px 10px;border-radius:var(--radius-full);">Watch</span>
+    <span style="font-family:var(--font-mono);font-size:9px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--sky);background:var(--sky-tint);padding:4px 10px;border-radius:var(--radius-full);">Survey</span>
+    <span style="font-family:var(--font-mono);font-size:9px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--text3);background:var(--surface2);padding:4px 10px;border-radius:var(--radius-full);">Census</span>
+  </div>
+
+  <!-- COMPARISON ROW -->
+  <div class="doc-sub">Comparison Row (Strategy Component)</div>
+  <div class="doc-note">The "should I plant corn or soybeans?" component. Side-by-side metrics with winner highlighted.
+  Used in Crops view for crop profitability comparisons.</div>
+  <div class="preview-box white" style="max-width:500px;">
+    <div style="border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;">
+      <div style="padding:12px 18px;border-bottom:1px solid var(--border);background:var(--surface2);">
+        <div style="font-family:var(--font-mono);font-size:9px;color:var(--text3);letter-spacing:0.1em;text-transform:uppercase;">Profitability Comparison &middot; Indiana 2024</div>
+      </div>
+      <div style="padding:16px 18px;">
+        <div style="display:flex;gap:16px;">
+          <!-- Corn -->
+          <div style="flex:1;padding:14px;background:var(--harvest-tint);border:1px solid rgba(184,134,11,0.15);border-radius:var(--radius-md);">
+            <div style="font-family:var(--font-mono);font-size:9px;color:var(--harvest);font-weight:700;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:8px;">Corn</div>
+            <div style="font-family:'Barlow Condensed',sans-serif;font-size:28px;font-weight:800;color:var(--text);line-height:1;">$842</div>
+            <div style="font-family:var(--font-mono);font-size:10px;color:var(--text3);margin-top:2px;">/acre revenue</div>
+            <div style="margin-top:8px;font-family:var(--font-mono);font-size:10px;color:var(--text2);">181.3 bu/ac &times; $4.65/bu</div>
+          </div>
+          <!-- Soybeans -->
+          <div style="flex:1;padding:14px;background:var(--field-subtle);border:1px solid rgba(45,106,79,0.15);border-radius:var(--radius-md);">
+            <div style="display:flex;align-items:center;gap:6px;">
+              <span style="font-family:var(--font-mono);font-size:9px;color:var(--field);font-weight:700;letter-spacing:0.1em;text-transform:uppercase;">Soybeans</span>
+              <span style="font-family:var(--font-mono);font-size:8px;font-weight:700;color:var(--field);background:rgba(45,106,79,0.15);padding:2px 6px;border-radius:2px;">WINNER</span>
+            </div>
+            <div style="font-family:'Barlow Condensed',sans-serif;font-size:28px;font-weight:800;color:var(--field);line-height:1;margin-top:8px;">$896</div>
+            <div style="font-family:var(--font-mono);font-size:10px;color:var(--text3);margin-top:2px;">/acre revenue</div>
+            <div style="margin-top:8px;font-family:var(--font-mono);font-size:10px;color:var(--text2);">56.8 bu/ac &times; $15.78/bu</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ALERT / ANOMALY -->
+  <div class="doc-sub">Alert Card (Drought, Anomaly, Regime)</div>
+  <div class="doc-note">Barn red left border. soil-tint or negative-tint background. Mono label + body description.
+  Used for drought years, price regime alerts, data discontinuities.</div>
+  <div style="background:rgba(180,35,24,0.05);border:1px solid rgba(180,35,24,0.12);border-left:3px solid var(--negative);border-radius:var(--radius-md);padding:14px 18px;display:flex;align-items:flex-start;gap:12px;max-width:480px;margin-bottom:16px;">
+    <span style="font-size:16px;flex-shrink:0;">&#9888;&#65039;</span>
+    <div>
+      <div style="font-family:var(--font-mono);font-size:10px;font-weight:700;color:var(--negative);letter-spacing:0.08em;text-transform:uppercase;margin-bottom:4px;">Drought Year &middot; 2012</div>
+      <div style="font-size:13px;color:var(--text2);line-height:1.55;">Corn yield dropped 27% due to severe Midwest drought. This year is flagged in trend calculations and excluded from baseline comparisons.</div>
+    </div>
+  </div>
+
+  <!-- CHART TOOLTIP -->
+  <div class="doc-sub">Chart Tooltip</div>
+  <div class="doc-note">White surface, subtle shadow, 10px radius. Color dot (8px) matches line. Mono values, body labels.</div>
+  <div style="display:inline-block;background:var(--surface);border:1px solid var(--border);border-radius:10px;box-shadow:var(--shadow-md);padding:12px 16px;min-width:200px;">
+    <div style="font-size:12px;color:var(--text3);margin-bottom:8px;font-weight:500;">Indiana &middot; 2024</div>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px;">
+      <div style="width:8px;height:8px;border-radius:50%;background:var(--field);flex-shrink:0;"></div>
+      <span style="font-size:12px;color:var(--text2);">Yield</span>
+      <span style="font-family:var(--font-mono);font-size:12px;font-weight:600;color:var(--text);margin-left:auto;">181.3 bu/ac</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;">
+      <div style="width:8px;height:8px;border-radius:50%;background:var(--harvest);flex-shrink:0;"></div>
+      <span style="font-size:12px;color:var(--text2);">Revenue</span>
+      <span style="font-family:var(--font-mono);font-size:12px;font-weight:600;color:var(--text);margin-left:auto;">$14.2B</span>
+    </div>
+  </div>
+</div>
+
+
+<!-- ============================================================
+     06. CHART SYSTEM
+     ============================================================ -->
+<div class="doc-section">
+  <div class="doc-label">06</div>
+  <div class="doc-heading">Chart <span>System</span></div>
+  <div class="doc-desc">
+    All charts use Recharts with shared tokens. Light backgrounds, warm grid lines,
+    earth-tone data series. No neon. No default Recharts colors.
+  </div>
+
+  <div class="doc-sub">Shared Configuration</div>
+  <div class="code-block">
+<span class="cmt">// Grid</span>
+strokeDasharray: <span class="str">"3 3"</span>
+stroke: <span class="str">var(--border)</span>   <span class="cmt">// light: rgba(0,0,0,0.08)</span>
+vertical: <span class="kw">false</span>           <span class="cmt">// horizontal gridlines only</span>
+
+<span class="cmt">// Axes</span>
+axisLine: <span class="kw">false</span>
+tickLine: <span class="kw">false</span>
+tick.fill: <span class="str">var(--text3)</span>   <span class="cmt">// #9C9488</span>
+tick.fontSize: <span class="num">11</span>
+tick.fontFamily: <span class="str">var(--font-mono)</span>
+
+<span class="cmt">// Tooltip</span>
+background: <span class="str">var(--surface)</span>  <span class="cmt">// white</span>
+border: <span class="str">1px solid var(--border)</span>
+borderRadius: <span class="num">10px</span>
+boxShadow: <span class="str">var(--shadow-md)</span>
+
+<span class="cmt">// Animation</span>
+duration: <span class="num">800ms</span>
+easing: <span class="str">ease-out</span>
+<span class="cmt">// Animate on mount only. No animation on data updates.</span>
+
+<span class="cmt">// Area fills</span>
+<span class="cmt">// Use 8-10% opacity of the line color for area gradients.</span>
+<span class="cmt">// Gradient from line opacity at top to 0% at bottom.</span>
+  </div>
+
+  <div class="doc-sub">Chart Type Assignments</div>
+  <table style="width:100%;border-collapse:collapse;font-size:12px;">
+    <thead>
+      <tr style="border-bottom:1px solid var(--border2);">
+        <th style="text-align:left;padding:8px;color:var(--text3);font-weight:700;font-family:var(--font-mono);font-size:10px;">Data</th>
+        <th style="text-align:left;padding:8px;color:var(--text3);font-weight:700;font-family:var(--font-mono);font-size:10px;">Chart Type</th>
+        <th style="text-align:left;padding:8px;color:var(--text3);font-weight:700;font-family:var(--font-mono);font-size:10px;">Color</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="border-bottom:1px solid var(--border);"><td style="padding:8px;color:var(--text2);">Yield trend</td><td style="padding:8px;color:var(--text);">Line + Area gradient</td><td style="padding:8px;"><span style="color:var(--field);font-weight:600;">--field</span></td></tr>
+      <tr style="border-bottom:1px solid var(--border);"><td style="padding:8px;color:var(--text2);">Revenue trend</td><td style="padding:8px;color:var(--text);">Line + Area gradient</td><td style="padding:8px;"><span style="color:var(--harvest);font-weight:600;">--harvest</span></td></tr>
+      <tr style="border-bottom:1px solid var(--border);"><td style="padding:8px;color:var(--text2);">Production</td><td style="padding:8px;color:var(--text);">Line</td><td style="padding:8px;"><span style="color:var(--sky);font-weight:600;">--sky</span></td></tr>
+      <tr style="border-bottom:1px solid var(--border);"><td style="padding:8px;color:var(--text2);">Price forecast</td><td style="padding:8px;color:var(--text);">Fan chart (Area bands + Line)</td><td style="padding:8px;"><span style="color:var(--harvest);font-weight:600;">--harvest bands</span></td></tr>
+      <tr style="border-bottom:1px solid var(--border);"><td style="padding:8px;color:var(--text2);">Top N ranking</td><td style="padding:8px;color:var(--text);">Horizontal bar</td><td style="padding:8px;"><span style="color:var(--field);font-weight:600;">--field</span></td></tr>
+      <tr style="border-bottom:1px solid var(--border);"><td style="padding:8px;color:var(--text2);">Growth/decline</td><td style="padding:8px;color:var(--text);">Bidirectional bar</td><td style="padding:8px;"><span style="color:var(--field);">pos</span> / <span style="color:var(--negative);">neg</span></td></tr>
+      <tr style="border-bottom:1px solid var(--border);"><td style="padding:8px;color:var(--text2);">Crop condition</td><td style="padding:8px;color:var(--text);">Stacked area</td><td style="padding:8px;"><span style="color:var(--text2);">5-step green&rarr;red</span></td></tr>
+      <tr style="border-bottom:1px solid var(--border);"><td style="padding:8px;color:var(--text2);">Multi-commodity</td><td style="padding:8px;color:var(--text);">Multi-line</td><td style="padding:8px;"><span style="color:var(--text2);">Commodity palette</span></td></tr>
+      <tr><td style="padding:8px;color:var(--text2);">Sparkline</td><td style="padding:8px;color:var(--text);">Tiny area (no axis)</td><td style="padding:8px;"><span style="color:var(--field);font-weight:600;">--field-subtle</span></td></tr>
+    </tbody>
+  </table>
+
+  <div class="doc-note" style="margin-top:16px;">
+    <span class="dont">NO PIE CHARTS.</span> Bar charts are always more readable for agricultural ranking data.<br>
+    <span class="dont">NO VERTICAL GRIDLINES.</span> Horizontal only.<br>
+    <span class="dont">NO DEFAULT RECHARTS COLORS.</span> Every series uses the semantic palette or commodity palette.<br>
+    <span class="do">ALWAYS</span> use ResponsiveContainer width="100%". Charts must be legible at 768px.
+  </div>
+</div>
+
+
+<!-- ============================================================
+     07. MAP SYSTEM
+     ============================================================ -->
+<div class="doc-section">
+  <div class="doc-label">07</div>
+  <div class="doc-heading">Map <span>System</span></div>
+  <div class="doc-desc">
+    The US map is the geographic anchor. Warm choropleth gradient (sandy beige to deep field green)
+    replaces the cold blue-teal of a generic dashboard. State selection is the primary discovery action.
+  </div>
+
+  <div class="doc-sub">Choropleth Gradient</div>
+  <div style="display:flex;align-items:center;gap:0;margin-bottom:8px;border-radius:4px;overflow:hidden;border:1px solid var(--border);">
+    <div style="flex:1;height:32px;background:#F3EFE8;"></div>
+    <div style="flex:1;height:32px;background:#E8E0D0;"></div>
+    <div style="flex:1;height:32px;background:#D0C4A8;"></div>
+    <div style="flex:1;height:32px;background:#B8A878;"></div>
+    <div style="flex:1;height:32px;background:#8CAA6C;"></div>
+    <div style="flex:1;height:32px;background:#6B9E5A;"></div>
+    <div style="flex:1;height:32px;background:#4A8B48;"></div>
+    <div style="flex:1;height:32px;background:#3A7A3E;"></div>
+    <div style="flex:1;height:32px;background:#2D6A4F;"></div>
+    <div style="flex:1;height:32px;background:#1B4332;"></div>
+  </div>
+  <div style="display:flex;justify-content:space-between;font-family:var(--font-mono);font-size:9px;color:var(--text3);">
+    <span>Low &mdash; sandy (fallow/low production)</span>
+    <span>High &mdash; deep green (peak production)</span>
+  </div>
+
+  <div class="doc-row" style="margin-top:24px;">
+    <div class="doc-col">
+      <div class="doc-note">
+        <span class="note">US MAP:</span> MapLibre GL with light basemap (no dark tiles in light mode).
+        GeoJSON fill with 10-step quantile gradient. Hover: darken + tooltip (state + value).
+        Click: select state, persist across views, auto-scroll. Continental US + AK/HI insets.
+      </div>
+    </div>
+    <div class="doc-col">
+      <div class="doc-note">
+        <span class="note">STATE HIGHLIGHT:</span> Selected state fills with --field (#2D6A4F).
+        Auto-fit bounds with padding. Sits alongside State Info Panel in Overview.
+        Display only in single-state view (no interaction).
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ============================================================
+     08. ANIMATION & INTERACTION
+     ============================================================ -->
+<div class="doc-section">
+  <div class="doc-label">08</div>
+  <div class="doc-heading">Animation & <span>Interaction</span></div>
+  <div class="doc-desc">
+    Minimal, purposeful. Animations confirm actions and orient attention.
+    No gratuitous motion. Farmers using this on cellular connections
+    need performance over polish.
+  </div>
+
+  <div class="doc-row">
+    <div class="doc-col">
+      <div class="doc-sub" style="margin-top:0;">Entry</div>
+      <div class="doc-note">
+        <span class="do">fadeSlideUp:</span> opacity 0 &rarr; 1, translateY(12px &rarr; 0).
+        500ms ease-out. Stagger 80ms between KPI card siblings (max 4 &times; 80 = 320ms).
+        First mount only. No re-animation on data updates.<br><br>
+        <span class="do">Chart mount:</span> Recharts 800ms ease-out on first render. No animation on data change.
+      </div>
+    </div>
+    <div class="doc-col">
+      <div class="doc-sub" style="margin-top:0;">Hover &amp; Click</div>
+      <div class="doc-note">
+        <span class="do">Cards:</span> shadow-sm appears, border shifts to --border2. 250ms ease-out.<br>
+        <span class="do">Map states:</span> fill lightens 15%, cursor: pointer, tooltip shows.<br>
+        <span class="do">Interactive rows:</span> bg shifts to --field-subtle. Left border accent.<br>
+        <span class="do">Tabs:</span> instant switch. No page transition. Filter reset per VIEW_FILTER_DEFAULTS.<br><br>
+        <span class="dont">DON'T:</span> hover-only info. Everything must work on touch (tablet primary).
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ============================================================
+     09. RULES & CONSTRAINTS
+     ============================================================ -->
+<div class="doc-section">
+  <div class="doc-label">09</div>
+  <div class="doc-heading">Rules & <span>Constraints</span></div>
+  <div class="doc-desc">
+    Non-negotiable rules. When choosing between aesthetic and these rules, rules win.
+  </div>
+
+  <div class="doc-sub">Color</div>
+  <div class="doc-note">
+    <span class="do">ALWAYS:</span> Green = yield/growth/positive. Gold = revenue/market/economics. Blue = production/structural. Red = negative/anomaly. Soil = livestock/warmth.<br>
+    <span class="dont">NEVER:</span> Use green for revenue. Use gold for yields. Use color decoratively. Add a new chart color without a semantic role. Use neon/electric colors.
+  </div>
+
+  <div class="doc-sub">Typography</div>
+  <div class="doc-note">
+    <span class="do">ALWAYS:</span> Plus Jakarta Sans for prose/headings/nav. Barlow Condensed for big numbers/state codes. JetBrains Mono for data/metadata/labels/axis/badges.<br>
+    <span class="dont">NEVER:</span> Barlow Condensed for sentences. Inter (replace with Plus Jakarta). A fourth typeface.
+  </div>
+
+  <div class="doc-sub">Charts</div>
+  <div class="doc-note">
+    <span class="do">ALWAYS:</span> Recharts. chartDefaults tokens. ResponsiveContainer. Custom tooltips. Horizontal grid only. 800ms mount animation.<br>
+    <span class="dont">NEVER:</span> Pie charts. Vertical gridlines. Default Recharts palette. Animation on data updates. Chart titles inside SVG.
+  </div>
+
+  <div class="doc-sub">Layout</div>
+  <div class="doc-note">
+    <span class="do">ALWAYS:</span> All cards: surface bg, 1px border, radius-lg, 20px padding. Both themes. 44px touch targets minimum.<br>
+    <span class="dont">NEVER:</span> Gradient cards, borderless cards, outlined-only cards. Modals for data display (use inline expansion).
+  </div>
+
+  <div class="doc-sub">Data Presentation</div>
+  <div class="doc-note">
+    <span class="do">ALWAYS:</span> formatCompact for large numbers. formatDelta with +/- sign for changes. Show units (bu/ac, $/bu, acres, head). USDA source badge below charts. Confidence intervals on forecasts.<br>
+    <span class="dont">NEVER:</span> Raw unformatted numbers. Hidden data gaps (show explicitly). Mixed units without dual-axis labels.
+  </div>
+
+  <div class="doc-sub">Voice &amp; Copy</div>
+  <div class="doc-note">
+    <span class="do">ALWAYS:</span> Farmer vocabulary: bushels/acre, $/bushel, planting window, harvest outlook, sell/hold signal. Direct: "Corn yields are up 12%" not "An increase of 12% was observed."<br>
+    <span class="dont">NEVER:</span> Statistical jargon without translation. "Sigma" without context. Passive voice in data callouts. Patronizing ("as you may know...").
+  </div>
+</div>
+
+
+<!-- ============================================================
+     10. FILE REFERENCE
+     ============================================================ -->
+<div class="doc-section">
+  <div class="doc-label">10</div>
+  <div class="doc-heading">File <span>Reference</span></div>
+  <div class="doc-desc">Key implementation files. Update design.ts tokens first, then propagate.</div>
+  <table style="width:100%;border-collapse:collapse;font-size:12px;font-family:var(--font-mono);">
+    <thead>
+      <tr style="border-bottom:1px solid var(--border2);">
+        <th style="text-align:left;padding:8px;color:var(--text3);font-weight:700;">File</th>
+        <th style="text-align:left;padding:8px;color:var(--text3);font-weight:700;">Role</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="border-bottom:1px solid var(--border);"><td style="padding:8px;color:var(--field);">src/utils/design.ts</td><td style="padding:8px;color:var(--text2);">Token source of truth &mdash; palette, chartDefaults, formatters</td></tr>
+      <tr style="border-bottom:1px solid var(--border);"><td style="padding:8px;color:var(--field);">src/app/page.tsx</td><td style="padding:8px;color:var(--text2);">Main dashboard &mdash; header, ViewMode tabs, Overview, filters</td></tr>
+      <tr style="border-bottom:1px solid var(--border);"><td style="padding:8px;color:var(--field);">src/app/globals.css</td><td style="padding:8px;color:var(--text2);">Tailwind import, scrollbar, keyframe animations</td></tr>
+      <tr style="border-bottom:1px solid var(--border);"><td style="padding:8px;color:var(--field);">src/components/PredictionsDashboard.tsx</td><td style="padding:8px;color:var(--text2);">Price forecasts, fan chart, WASDE, regime alerts</td></tr>
+      <tr style="border-bottom:1px solid var(--border);"><td style="padding:8px;color:var(--field);">src/components/CropsDashboard.tsx</td><td style="padding:8px;color:var(--text2);">Commodity stories, sparklines, anomaly detection</td></tr>
+      <tr style="border-bottom:1px solid var(--border);"><td style="padding:8px;color:var(--field);">src/components/EconomicsDashboard.tsx</td><td style="padding:8px;color:var(--text2);">Revenue rankings, boom crops, census handling</td></tr>
+      <tr style="border-bottom:1px solid var(--border);"><td style="padding:8px;color:var(--field);">src/components/USMap.tsx</td><td style="padding:8px;color:var(--text2);">US choropleth with quantile coloring</td></tr>
+      <tr style="border-bottom:1px solid var(--border);"><td style="padding:8px;color:var(--field);">src/hooks/useAthenaQuery.ts</td><td style="padding:8px;color:var(--text2);">Athena SQL data fetching</td></tr>
+      <tr><td style="padding:8px;color:var(--field);">src/hooks/usePriceForecast.ts</td><td style="padding:8px;color:var(--text2);">Prediction API data fetching</td></tr>
+    </tbody>
+  </table>
+</div>
+
+
+<!-- FOOTER -->
+<div style="border-top:1px solid var(--border);margin-top:80px;padding:28px 0;text-align:center;">
+  <div style="font-family:var(--font-mono);font-size:10px;color:var(--text3);letter-spacing:0.08em;text-transform:uppercase;">
+    FieldPulse &middot; Cobbles &amp; Currents Studios &middot; Design System v1.0 &middot; April 2026
+  </div>
+</div>
+
+</div><!-- .doc-page -->
+</body>
+</html>

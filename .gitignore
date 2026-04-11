@@ -59,6 +59,14 @@ census_datasets/
 *.parquet
 !web_app/public/data/**
 UI/
+data/                          # GHCN bulk archive (~8GB)
+backend/artifacts/             # Model pickle files (on S3)
+backend/etl/data/              # Cached CSVs, parquets, raw weather data
+pipeline/output/               # Pipeline output parquets
+pipeline/_chunks/              # Temp ingestion chunks
+*.pkl
+*.pickle
+*.tar.gz
 
 # Backup files
 *.bak

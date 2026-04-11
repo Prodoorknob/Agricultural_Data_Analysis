@@ -189,11 +189,11 @@ COUNTY_STAT_CATS = [
 ]
 
 # More conservative delay for county pulls (higher sustained API call volume)
-COUNTY_REQUEST_DELAY = 2.0
+COUNTY_REQUEST_DELAY = 1.5
 
 # Parallelism: number of state-groups fetched concurrently.
-# 4 threads × 2s delay = one request every ~0.5s effective — safe for QuickStats.
-COUNTY_FETCH_WORKERS = 4
+# 8 threads × 1.5s delay ≈ 5 req/s effective — within QuickStats tolerance.
+COUNTY_FETCH_WORKERS = 8
 
 # Census of Agriculture years — CENSUS source_desc is ONLY valid for these years.
 # Requesting CENSUS for any other year will always 400. Do not add interim years.
@@ -204,22 +204,39 @@ CENSUS_AG_YEARS = {2002, 2007, 2012, 2017, 2022}
 # not transient API errors. Skipping them avoids pointless 400s.
 # Key = commodity_desc, Value = set of state_alpha codes to skip.
 COUNTY_SKIP_STATES: dict[str, set[str]] = {
-    # Alaska has no commercial corn, soybean, cotton, or wheat production
+    # AK, HI, DC: no meaningful commercial crop production at county level
     "CORN":                    {"AK", "HI", "DC"},
-    "SOYBEANS":                {"AK", "HI", "DC", "NV", "AZ", "NM", "UT", "WY", "MT", "ID"},
+    "SOYBEANS":                {"AK", "HI", "DC", "NV", "AZ", "NM", "UT", "WY", "MT", "ID",
+                                "OR", "WA", "ME", "NH", "VT", "MA", "RI", "CT"},
     "WINTER WHEAT":            {"AK", "HI", "DC"},
-    "SPRING WHEAT, (EXCL DURUM)": {"AK", "HI", "DC", "AL", "FL", "GA", "SC", "MS", "LA"},
+    "SPRING WHEAT, (EXCL DURUM)": {"AK", "HI", "DC", "AL", "FL", "GA", "SC", "MS", "LA",
+                                "TX", "AZ", "NM", "NV", "UT", "AR", "TN", "KY", "WV",
+                                "VA", "NC", "RI", "CT", "MA", "NH", "VT", "ME", "NJ",
+                                "DE", "MD", "PA"},
     "COTTON":                  {"AK", "HI", "DC", "ME", "NH", "VT", "MA", "RI", "CT",
                                 "NY", "NJ", "PA", "OH", "IN", "IL", "IA", "WI", "MI",
                                 "MN", "ND", "SD", "NE", "KS", "CO", "UT", "NV", "WY",
                                 "ID", "OR", "WA", "MT"},
+    "SORGHUM":                 {"AK", "HI", "DC", "ME", "NH", "VT", "MA", "RI", "CT",
+                                "NY", "NJ", "DE", "MD", "PA", "WV", "VA", "SC", "FL",
+                                "MI", "WI", "MN", "ND", "MT", "WY", "ID", "OR", "WA",
+                                "NV", "UT", "AZ"},
+    "BARLEY":                  {"AK", "HI", "DC", "AL", "FL", "GA", "SC", "MS", "LA",
+                                "AR", "TX", "NM", "AZ", "NV", "RI", "CT", "MA", "NJ",
+                                "DE", "WV", "IN", "IL", "IA"},
+    "OATS":                    {"AK", "HI", "DC", "FL", "AL", "MS", "LA", "NV", "AZ",
+                                "NM", "RI", "CT", "MA", "NH", "VT", "ME", "DE", "NJ"},
+    "HAY":                     {"AK", "HI", "DC"},
     "RICE":                    {"AK", "HI", "DC", "ME", "NH", "VT", "MA", "RI", "CT",
                                 "NY", "NJ", "PA", "OH", "IN", "IL", "IA", "WI", "MI",
                                 "MN", "ND", "SD", "NE", "KS", "CO", "UT", "NV", "WY",
-                                "ID", "OR", "WA", "MT", "AZ", "NM"},
+                                "ID", "OR", "WA", "MT", "AZ", "NM", "OK", "VA", "WV",
+                                "KY", "TN", "NC", "SC", "GA", "FL", "AL", "DE", "MD"},
     "SUNFLOWER":               {"AK", "HI", "DC", "ME", "NH", "VT", "MA", "RI", "CT",
                                 "NJ", "DE", "MD", "VA", "SC", "GA", "FL", "AL", "MS",
-                                "LA", "AR", "TN", "KY", "WV"},
+                                "LA", "AR", "TN", "KY", "WV", "NV", "AZ", "NM", "ID",
+                                "OR", "WA", "MT", "WY", "UT", "IN", "OH", "PA", "NY",
+                                "MI", "WI", "MN", "IA", "IL"},
 }
 
 
@@ -635,18 +652,21 @@ def _fetch_county_state_year(
     state: str,
     year: int,
     temp_dir: str,
+    resume: bool = False,
 ) -> int:
     """Fetch all county-level records for one state and year.
 
-    Iterates over COUNTY_COMMODITIES × COUNTY_STAT_CATS using a flat loop.
-    Each (state, commodity, stat_cat) request is guaranteed to return well
-    under 50K records (typically 50–500), so no sub-chunking is needed.
+    Iterates over COUNTY_COMMODITIES with ALL stat cats fetched in a single
+    API call per commodity (no statisticcat_desc filter). This is ~4x faster
+    than the per-stat-cat approach since county (state, commodity, year)
+    responses are well under 50K records.
 
     Skips:
       - CENSUS source for non-Census years (only 2002,2007,2012,2017,2022 are valid)
       - State/commodity pairs in COUNTY_SKIP_STATES (structural data gaps)
+      - Already-fetched commodities when resume=True (checks for existing chunk files)
 
-    Writes chunk files to temp_dir/{state}/COUNTY_{commodity}_{stat_cat}_{year}.parquet.
+    Writes chunk files to temp_dir/{state}/COUNTY_{commodity}_{year}.parquet.
     Returns total records fetched for this state+year.
     """
     state_chunk_dir = os.path.join(temp_dir, state)
@@ -661,47 +681,63 @@ def _fetch_county_state_year(
         if state in skip_states:
             continue
 
-        for stat_cat in COUNTY_STAT_CATS:
-            base_params = {
-                "agg_level_desc": "COUNTY",
-                "year": str(year),
-                "state_alpha": state,
-                "commodity_desc": commodity,
-                "statisticcat_desc": stat_cat,
-            }
-
-            # --- Annual SURVEY pull ---
-            time.sleep(COUNTY_REQUEST_DELAY)
-            records = api_get_data(api_key, {**base_params, "source_desc": "SURVEY"})
-
-            # --- CENSUS pull only on actual Census-of-Ag years ---
-            if is_census_year:
-                time.sleep(COUNTY_REQUEST_DELAY)
-                census_records = api_get_data(api_key, {**base_params, "source_desc": "CENSUS"})
-                records = records + census_records
-
-            if not records:
+        # Resume support: skip if chunk file already exists
+        safe_commodity = re.sub(r"[^A-Za-z0-9]+", "_", commodity).strip("_")
+        chunk_path = os.path.join(
+            state_chunk_dir,
+            f"COUNTY_{safe_commodity}_{year}.parquet",
+        )
+        if resume and os.path.exists(chunk_path):
+            try:
+                existing = pd.read_parquet(chunk_path)
+                total += len(existing)
+                del existing
+            except Exception:
+                pass  # Re-fetch if file is corrupt
+            else:
                 continue
 
-            df_chunk = pd.DataFrame(records)
-            # Lightweight clean: standardise FIPS columns
-            if "state_fips_code" in df_chunk.columns:
-                df_chunk["state_fips_code"] = df_chunk["state_fips_code"].astype(str).str.zfill(2)
-            if "county_code" in df_chunk.columns and "state_fips_code" in df_chunk.columns:
-                df_chunk["county_code"] = df_chunk["county_code"].astype(str).str.zfill(3)
-                df_chunk["fips"] = df_chunk["state_fips_code"] + df_chunk["county_code"]
-            df_chunk["value_num"] = df_chunk["Value"].apply(clean_nass_value) if "Value" in df_chunk.columns else np.nan
-            df_chunk["dataset_source"] = "nass_crops"
+        # Fetch ALL stat cats in one call (no statisticcat_desc filter).
+        # County-level (state, commodity, year) is always well under 50K records.
+        base_params = {
+            "agg_level_desc": "COUNTY",
+            "year": str(year),
+            "state_alpha": state,
+            "commodity_desc": commodity,
+        }
 
-            # Sanitize commodity name for use as filename component
-            safe_commodity = re.sub(r"[^A-Za-z0-9]+", "_", commodity).strip("_")
-            safe_stat = re.sub(r"[^A-Za-z0-9]+", "_", stat_cat).strip("_")
-            chunk_path = os.path.join(
-                state_chunk_dir,
-                f"COUNTY_{safe_commodity}_{safe_stat}_{year}.parquet",
-            )
-            df_chunk.to_parquet(chunk_path, engine="pyarrow", compression="snappy", index=False)
-            total += len(df_chunk)
+        # --- Annual SURVEY pull ---
+        time.sleep(COUNTY_REQUEST_DELAY)
+        records = api_get_data(api_key, {**base_params, "source_desc": "SURVEY"})
+
+        # --- CENSUS pull only on actual Census-of-Ag years ---
+        if is_census_year:
+            time.sleep(COUNTY_REQUEST_DELAY)
+            census_records = api_get_data(api_key, {**base_params, "source_desc": "CENSUS"})
+            records = records + census_records
+
+        if not records:
+            continue
+
+        df_chunk = pd.DataFrame(records)
+
+        # Filter to only the stat categories we care about
+        if "statisticcat_desc" in df_chunk.columns:
+            df_chunk = df_chunk[df_chunk["statisticcat_desc"].isin(COUNTY_STAT_CATS)]
+            if df_chunk.empty:
+                continue
+
+        # Lightweight clean: standardise FIPS columns
+        if "state_fips_code" in df_chunk.columns:
+            df_chunk["state_fips_code"] = df_chunk["state_fips_code"].astype(str).str.zfill(2)
+        if "county_code" in df_chunk.columns and "state_fips_code" in df_chunk.columns:
+            df_chunk["county_code"] = df_chunk["county_code"].astype(str).str.zfill(3)
+            df_chunk["fips"] = df_chunk["state_fips_code"] + df_chunk["county_code"]
+        df_chunk["value_num"] = df_chunk["Value"].apply(clean_nass_value) if "Value" in df_chunk.columns else np.nan
+        df_chunk["dataset_source"] = "nass_crops"
+
+        df_chunk.to_parquet(chunk_path, engine="pyarrow", compression="snappy", index=False)
+        total += len(df_chunk)
 
     if total > 0:
         logger.info(f"  County {state}/{year}: {total:,} records")
@@ -714,11 +750,15 @@ def fetch_county_data(
     year_end: int,
     temp_dir: str,
     states_filter: Optional[list[str]] = None,
+    resume: bool = False,
 ) -> int:
     """Fetch county-level data for all states and years using a flat parallel loop.
 
     Uses ThreadPoolExecutor to parallelize across states (COUNTY_FETCH_WORKERS threads).
     Each thread fetches one state × all years sequentially to avoid burst overload.
+
+    Optimization: fetches ALL stat_cats in a single API call per (state, commodity, year)
+    instead of 4 separate calls. This cuts total API requests by ~4x.
 
     Args:
         api_key: USDA QuickStats API key
@@ -726,6 +766,7 @@ def fetch_county_data(
         year_end: End year (inclusive)
         temp_dir: Directory to write chunk files into
         states_filter: Optional subset of state codes (default: all US_STATE_CODES)
+        resume: If True, skip (state, commodity, year) combos with existing chunk files
 
     Returns:
         Total county records fetched
@@ -736,8 +777,9 @@ def fetch_county_data(
 
     logger.info("=" * 60)
     logger.info(f"County fetch: {len(states)} states × {len(years)} years × "
-                f"{len(COUNTY_COMMODITIES)} commodities × {len(COUNTY_STAT_CATS)} stat_cats")
-    logger.info(f"Workers: {COUNTY_FETCH_WORKERS} | Delay: {COUNTY_REQUEST_DELAY}s/call")
+                f"{len(COUNTY_COMMODITIES)} commodities (all stat_cats batched per call)")
+    logger.info(f"Workers: {COUNTY_FETCH_WORKERS} | Delay: {COUNTY_REQUEST_DELAY}s/call"
+                f" | Resume: {resume}")
     logger.info("=" * 60)
 
     def _state_task(state: str) -> int:
@@ -745,7 +787,7 @@ def fetch_county_data(
         state_total = 0
         for year in years:
             try:
-                n = _fetch_county_state_year(api_key, state, year, temp_dir)
+                n = _fetch_county_state_year(api_key, state, year, temp_dir, resume=resume)
                 state_total += n
             except Exception as exc:
                 logger.error(f"  County {state}/{year} failed: {_sanitize_error(exc)}")
@@ -794,6 +836,7 @@ def run_ingestion(
     dry_run: bool = False,
     include_county: bool = False,
     county_only: bool = False,
+    resume: bool = False,
 ) -> bool:
     """Run the full ingestion pipeline.
 
@@ -806,6 +849,7 @@ def run_ingestion(
         dry_run: If True, skip S3 upload
         include_county: If True, also run county-level fetch after state-level
         county_only: If True, skip state-level fetch and run county fetch only
+        resume: If True, skip county combos with existing chunk files on disk
 
     Returns:
         True if successful, False otherwise
@@ -830,9 +874,9 @@ def run_ingestion(
     # This avoids accumulating all data in memory (which causes OOM kills
     # on small EC2 instances for full 25-year runs).
     temp_dir = os.path.join(OUTPUT_DIR, "_chunks")
-    if os.path.exists(temp_dir):
+    if os.path.exists(temp_dir) and not resume:
         shutil.rmtree(temp_dir)
-    os.makedirs(temp_dir)
+    os.makedirs(temp_dir, exist_ok=True)
 
     total_fetched = 0
 
@@ -885,6 +929,7 @@ def run_ingestion(
             year_end=year_end,
             temp_dir=temp_dir,
             states_filter=states_filter,
+            resume=resume,
         )
         total_fetched += county_count
         manifest["record_counts"]["county_fetch_total"] = (
@@ -1016,6 +1061,11 @@ def main():
         action="store_true",
         help="Skip state-level fetch; run county-level fetch only (useful for backfill runs)",
     )
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="Resume interrupted county fetch — skip (state, commodity, year) combos with existing chunk files",
+    )
     args = parser.parse_args()
 
     try:
@@ -1034,6 +1084,7 @@ def main():
         dry_run=args.dry_run,
         include_county=args.include_county,
         county_only=args.county_only,
+        resume=args.resume,
     )
 
     sys.exit(0 if success else 1)

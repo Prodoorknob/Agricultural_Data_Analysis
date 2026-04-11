@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.config import get_settings
-from backend.routers import price
+from backend.routers import acreage, price, yield_forecast
 
 settings = get_settings()
 logger = logging.getLogger("uvicorn.error")
@@ -65,14 +65,74 @@ def _load_models() -> dict:
     return models
 
 
+ACREAGE_ARTIFACTS_DIR = ARTIFACTS_DIR / "acreage"
+YIELD_ARTIFACTS_DIR = ARTIFACTS_DIR / "yield"
+YIELD_WEEKS = range(1, 21)  # 20 weeks of growing season
+
+
+def _load_acreage_models() -> dict:
+    """Load AcreageEnsemble models from local artifacts, falling back to S3."""
+    from backend.models.acreage_model import AcreageEnsemble
+
+    models: dict[str, AcreageEnsemble] = {}
+    for commodity in COMMODITIES:
+        pkl_path = ACREAGE_ARTIFACTS_DIR / commodity / "ensemble.pkl"
+
+        if not pkl_path.exists():
+            s3_key = f"models/acreage/{commodity}/ensemble.pkl"
+            _download_from_s3(s3_key, pkl_path)
+
+        if pkl_path.exists():
+            try:
+                ensemble = AcreageEnsemble.load(pkl_path)
+                models[commodity] = ensemble
+                logger.info("Loaded acreage model: %s (ver=%s)", commodity, ensemble.model_ver)
+            except Exception as exc:
+                logger.warning("Failed to load acreage model %s: %s", pkl_path, exc)
+        else:
+            logger.debug("No acreage artifact at %s", pkl_path)
+    return models
+
+
+def _load_yield_models() -> dict:
+    """Load YieldModel pickles from local artifacts, falling back to S3."""
+    from backend.models.yield_model import YieldModel
+
+    models: dict[tuple[str, int], YieldModel] = {}
+    for commodity in COMMODITIES:
+        for week in YIELD_WEEKS:
+            pkl_path = YIELD_ARTIFACTS_DIR / commodity / f"week_{week}" / "model.pkl"
+
+            if not pkl_path.exists():
+                s3_key = f"models/yield/{commodity}/week_{week}/model.pkl"
+                _download_from_s3(s3_key, pkl_path)
+
+            if pkl_path.exists():
+                try:
+                    model = YieldModel.load(pkl_path)
+                    models[(commodity, week)] = model
+                    logger.info("Loaded yield model: %s week=%d (ver=%s)", commodity, week, model.model_ver)
+                except Exception as exc:
+                    logger.warning("Failed to load yield model %s: %s", pkl_path, exc)
+            else:
+                logger.debug("No yield artifact at %s", pkl_path)
+    return models
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup: load models
     app.state.models = _load_models()
-    logger.info("Loaded %d/%d model artifacts", len(app.state.models), len(COMMODITIES) * len(HORIZONS))
+    logger.info("Loaded %d/%d price model artifacts", len(app.state.models), len(COMMODITIES) * len(HORIZONS))
+    app.state.acreage_models = _load_acreage_models()
+    logger.info("Loaded %d/%d acreage model artifacts", len(app.state.acreage_models), len(COMMODITIES))
+    app.state.yield_models = _load_yield_models()
+    logger.info("Loaded %d/%d yield model artifacts", len(app.state.yield_models), len(COMMODITIES) * len(YIELD_WEEKS))
     yield
     # Shutdown: cleanup
     app.state.models.clear()
+    app.state.acreage_models.clear()
+    app.state.yield_models.clear()
 
 
 app = FastAPI(
@@ -90,8 +150,10 @@ app.add_middleware(
 )
 
 app.include_router(price.router, prefix="/api/v1/predict/price", tags=["price"])
+app.include_router(acreage.router, prefix="/api/v1/predict/acreage", tags=["acreage"])
+app.include_router(yield_forecast.router, prefix="/api/v1/predict/yield", tags=["yield"])
 
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "module": "price-forecasting", "version": "0.1.0"}
+    return {"status": "ok", "modules": ["price-forecasting", "acreage-prediction", "yield-forecasting"], "version": "0.3.0"}

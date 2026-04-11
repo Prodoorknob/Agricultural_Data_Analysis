@@ -72,5 +72,6 @@ def setup_logging(name: str) -> logging.Logger:
 
 
 def log_ingest_summary(logger: logging.Logger, table: str, rows_upserted: int, start: datetime):
-    elapsed = (datetime.utcnow() - start).total_seconds()
+    now = datetime.now(start.tzinfo) if start.tzinfo else datetime.utcnow()
+    elapsed = (now - start).total_seconds()
     logger.info(f"Completed: {rows_upserted} rows upserted into {table} in {elapsed:.1f}s")

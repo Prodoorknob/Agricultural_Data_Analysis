@@ -171,3 +171,63 @@ cd backend && pip install -r requirements.txt && uvicorn main:app --reload --por
 
 #### Module 02 Complete
 All 9 steps implemented. See `research/commodity-price-tech-spec.md` for full spec.
+
+### Planted Acreage Prediction (Module 03)
+- **Spec:** `research/planted-acreage-tech-spec.md`
+- **Reuses:** Module 02 infrastructure (RDS, FastAPI, CME futures data)
+
+#### Completed
+- Step 1: DB Migration — `alembic/versions/002_acreage_tables.py`: 3 new tables (`acreage_forecasts`, `acreage_accuracy`, `ers_fertilizer_prices`) + `fertilizer_cost_acre` column on `ers_production_costs`. ORM models in `models/db_tables.py`.
+- Step 2: Pydantic Schemas — `models/schemas.py`: `AcreageForecastResponse`, `StatesAcreageResponse`, `AcreageAccuracyItem`, `PriceRatioResponse`.
+- Step 3: ETL — `etl/ingest_fertilizer.py`: quarterly ERS fertilizer price download (anhydrous ammonia, DAP, potash), parse from Excel, upsert to `ers_fertilizer_prices`.
+- Step 4: Feature Engineering — `features/acreage_features.py`: 15 features (price signals: corn/soy ratio, futures prices; cost: variable cost, profit margin, fertilizer; historical: prior year acres/yield, 5yr avg, yield trend, rotation ratio; structural: year, state FIPS). `build_training_features()` for batch training data generation.
+- Step 5: Model — `models/acreage_model.py`: `AcreageEnsemble` dataclass (Ridge + LightGBM point + LightGBM quantile p10/p90). Simple average meta-learner. `apply_competition_constraint()` for total cropland soft cap. `compute_national_forecast()` with correlated uncertainty propagation. `train_and_save()` with walk-forward evaluation.
+- Step 6: API — `routers/acreage.py`: 4 endpoints (`GET /`, `/states`, `/accuracy`, `/price-ratio`). Registered in `main.py` at `/api/v1/predict/acreage`. Acreage model loading via `_load_acreage_models()` in lifespan, artifacts at `artifacts/acreage/{commodity}/ensemble.pkl`.
+- Step 7: Frontend — `components/AcreagePredictionSection.tsx`: 4 sub-components (`AcreageSummaryCard`, `StateAcreageChart`, `PriceRatioDial`, `UsdaComparisonPanel`). Seasonal UI state machine (pre-forecast / forecast-live / post-USDA / final-accuracy). Integrated into `PredictionsDashboard.tsx`. `hooks/useAcreageForecast.ts` for data fetching.
+- Step 8: Inference CLI — `models/acreage_inference.py`: loads ensembles, builds features, predicts for top states + national rollup, upserts to `acreage_forecasts`.
+- Step 9: Scheduling — `cron_runner.sh` updated with `--annual-acreage` (Feb 1) and `--quarterly-fertilizer` modes.
+
+- Step 10: Training Script — `models/train_acreage.py`: downloads state-level NASS parquets from S3, merges with 1990-2000 historical data (fetched via `pipeline/fetch_nass_historical.py`), trains state-panel AcreageEnsemble (15 states x 26 years = 375 samples per commodity). Includes naive baselines (persistence + 5yr avg) with deployment gate, LOYO CV (25 folds), split conformal prediction for calibrated intervals. CLI: `python -m backend.models.train_acreage [--commodity X] [--local-only] [--skip-cv] [--fetch-historical] [--upload-s3]`.
+- Step 10a: Bug fixes — wheat December contract (July unavailable), `class_desc == 'ALL CLASSES'` filter, all-NaN column dropping, negative prediction floor, numpy float64 serialization.
+- Step 10b: LRU caching — `@lru_cache(maxsize=256)` on `_query_futures_settlement`, `_query_ers_cost`, `_query_fertilizer_price`, `get_november_price_ratio`. `clear_query_caches()` helper.
+- Step 10c: State-Panel Training Results (2026-04-10, 375 samples/commodity):
+  - Corn: Val MAPE 10.05%, Test MAPE 7.96%, Persistence baseline 6.78%, 5yr avg baseline 6.24%, **fails gate**. Coverage val=0.76, test=0.83.
+  - Soybean: Val MAPE 5.63%, Test MAPE 5.97%, Persistence baseline 6.12%, 5yr avg baseline 5.42%, **passes gate**. Coverage val=0.91, test=0.83.
+  - Wheat: Val MAPE 12.73%, Test MAPE 8.73%, Persistence baseline 5.73%, 5yr avg baseline 6.53%, **fails gate**. Coverage val=0.64, test=0.77.
+  - Artifacts: `backend/artifacts/acreage/{commodity}/ensemble.pkl` + `metrics.json` (rich metrics)
+  - S3: `s3://usda-analysis-datasets/models/acreage/`
+- Step 10d: Inference — `models/acreage_inference.py`: per-state predictions for TOP_STATES + national rollup via `compute_national_forecast()`. Upserts 16 rows per commodity (15 states + national) to `acreage_forecasts`.
+- Step 10e: Benchmarking — Compared against USDA Prospective Plantings (Mar 31, 2026: corn 95.3M, soy 84.7M, wheat 43.8M) and private firms (Reuters, Bloomberg, Farm Futures, AgMarket.Net all within 1-2% of USDA). Our model: corn 87.9M (-7.8%), soy 68.8M (-18.8%), wheat 31.3M (-28.6%). Gap driven by top-15-state sum missing long tail + market signals alone insufficient.
+- Step 10f: Tier 1 Feature Spec — `research/acreage-tier1-features-spec.md`: 4 new data sources to close gap with private firms. CRP expirations (FSA, land supply), crop insurance elections (RMA SoB, revealed preference), Drought Monitor DSCI (REST API, physical constraints), FAS export commitments (demand pipeline). 8 new features, 4 new DB tables, ~5-7 days estimated effort.
+
+#### Module 03 Status
+Training infrastructure complete. Soybean publishable; corn/wheat need Tier 1 features or residual modeling to beat persistence baseline. See `research/planted-acreage-tech-spec.md` for original spec, `research/acreage-tier1-features-spec.md` for next phase.
+
+### Crop Yield Forecasting (Module 04)
+- **Spec:** `research/crop-yield-tech-spec.md`
+- **Reuses:** Module 02/03 infrastructure (RDS, FastAPI, S3, county NASS data)
+
+#### Completed
+- Step 1: DB Migration — `alembic/versions/003_yield_tables.py`: 3 new tables (`soil_features`, `feature_weekly`, `yield_forecasts`). ORM models in `models/db_tables.py`. Pydantic schemas: `YieldForecastResponse`, `YieldMapItem`, `YieldMapResponse`, `YieldHistoryItem`.
+- Step 2: Static Data Setup — `etl/load_county_centroids.py` (Census Gazetteer -> county FIPS centroids CSV), `etl/load_ssurgo.py` (NRCS SDA API -> soil AWC + drainage class), `etl/build_station_map.py` (GHCN stations -> nearest county within 50km).
+- Step 3: ETL Scripts — 5 new scripts: `ingest_noaa.py` (GHCN-Daily TMAX/TMIN/PRCP via NOAA API), `ingest_nasa_power.py` (solar radiation + VPD, no auth, gridded), `ingest_drought.py` (USDM county-level D0-D4 drought percentages), `ingest_crop_conditions.py` (NASS weekly crop condition ratings -> CCI computation), `load_prism_normals.py` (30-year monthly precipitation normals by county).
+- Step 4: Feature Engineering — `features/yield_features.py`: 7 features (gdd_ytd, cci_cumul, precip_deficit, vpd_stress_days, drought_d3d4_pct, soil_awc, soil_drain). Strict temporal integrity (no lookahead). State-specific planting dates. `build_weekly_features()` and `build_training_matrix()` functions. `persist_features()` for DB upsert.
+- Step 5: Model Training — `models/yield_model.py`: `@dataclass YieldModel` with 3 LightGBM quantile regressors (p10/p50/p90). Confidence tiers: week <8 low, 8-15 medium, >=16 high. Baselines: county historical mean + prior year. Gate: >=10% RRMSE improvement. `models/train_yield.py`: downloads county NASS yield data from S3, trains 60 models (3 crops x 20 weeks). Walk-forward: 2000-2019 train, 2020-2022 val, 2023-2024 test. Artifacts: `artifacts/yield/{crop}/week_{week}/model.pkl` + `metrics.json`. `models/yield_inference.py`: weekly inference CLI, upserts to `yield_forecasts`.
+- Step 6: API — `routers/yield_forecast.py`: 3 endpoints at `/api/v1/predict/yield` (single county forecast, map choropleth, history). Registered in `main.py` with 60-model lifespan loading. Health endpoint updated to v0.3.0 with "yield-forecasting" module.
+- Step 7: Frontend — `hooks/useYieldForecast.ts`: parallel Promise.all fetch for forecast/map/history. `components/YieldForecastSection.tsx`: self-contained section with commodity tabs, week slider (1-20), confidence badge, county summary stats, map placeholder (Deck.gl choropleth), forecast detail card (p10/p50/p90), confidence strip (Recharts AreaChart), season accuracy chart (Recharts LineChart). Integrated into `PredictionsDashboard.tsx`.
+- Step 8: Scheduling — `cron_runner.sh --weekly-yield`: runs 4 ETL scripts -> yield inference -> restart ag-prediction. Cron: `0 10 * * 4` (Thursday 10 AM ET).
+
+#### Module 04 Status
+Infrastructure complete. All 8 steps implemented. Next steps:
+1. Run static data setup scripts (county centroids, SSURGO, station mapping) to populate reference data.
+2. Run `alembic upgrade head` to create the 3 new DB tables.
+3. Backfill historical weather data for 2000-2024 training (requires bulk GHCN download, not API).
+4. Train models: `python -m backend.models.train_yield --commodity corn --upload-s3`.
+5. Implement Deck.gl `GeoJsonLayer` county choropleth (currently placeholder in YieldForecastSection).
+6. Add county GeoJSON static asset (`web_app/public/us-counties.json` from us-atlas).
+
+### County Data Ingestion
+- **Date:** 2026-04-09
+- **Pipeline optimizations:** Batched stat_cats (4x fewer API calls), expanded skip states, 8 workers @ 1.5s delay, `--resume` flag for interrupted runs.
+- **Results:** 870,995 county records, 48 states, 2001-2025, 11 commodities x 4 stat categories.
+- **Output:** `pipeline/output/*.parquet` (18 MB). Uploaded to S3 at `survey_datasets/partitioned_states_counties/` and `survey_datasets/athena_optimized_counties/`.

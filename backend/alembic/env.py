@@ -10,11 +10,17 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 from backend.database import Base
 from backend.models.db_tables import (  # noqa: F401 — registers models with Base
+    AcreageAccuracy,
+    AcreageForecast,
     DxyDaily,
+    ErsFertilizerPrice,
     ErsProductionCost,
+    FeatureWeekly,
     FuturesDaily,
     PriceForecast,
+    SoilFeature,
     WasdeRelease,
+    YieldForecast,
 )
 
 config = context.config

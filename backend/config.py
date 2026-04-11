@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     # API keys
     NASDAQ_DL_API_KEY: str = ""
     FRED_API_KEY: str = ""
+    NOAA_API_KEY: str = ""
 
     # AWS
     S3_BUCKET: str = "usda-analysis-datasets"
