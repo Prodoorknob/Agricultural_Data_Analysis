@@ -28,6 +28,7 @@ import shap
 from lightgbm import LGBMRegressor
 from scipy.spatial.distance import mahalanobis
 from sklearn.isotonic import IsotonicRegression
+from sklearn.model_selection import TimeSeriesSplit
 from sklearn.linear_model import Ridge
 from sklearn.model_selection import TimeSeriesSplit
 from statsmodels.tsa.statespace.sarimax import SARIMAX
@@ -256,7 +257,7 @@ def check_divergence(p50: float, futures_spot: float, threshold_pct: float = 0.0
 
 @dataclass
 class EnsembleMetrics:
-    """Training/validation metrics for a fitted ensemble."""
+    """Training/validation/test metrics for a fitted ensemble."""
 
     mape_train: float = 0.0
     mape_val: float = 0.0
@@ -264,7 +265,12 @@ class EnsembleMetrics:
     futures_baseline_mape: float = 0.0
     n_train: int = 0
     n_val: int = 0
-    coverage_90: float = 0.0  # fraction of val actuals within p10-p90
+    coverage_90: float = 0.0  # val coverage (tautological after CQR)
+    # Honest out-of-sample metrics on 2023–2024 test window
+    mape_test: float = 0.0
+    rmse_test: float = 0.0
+    coverage_90_test: float = 0.0
+    n_test: int = 0
 
 
 @dataclass
@@ -298,6 +304,11 @@ class PriceEnsemble:
     train_features_matrix: np.ndarray | None = field(default=None, repr=False)
     residual_std: float = 0.0
 
+    # Conformalized Quantile Regression offset (Romano et al., 2019).
+    # Widens lgbm_q10/q90 intervals by this amount at inference so that
+    # marginal out-of-sample coverage ≥ (1 - alpha).
+    conformity_offset: float = 0.0
+
     metrics: EnsembleMetrics = field(default_factory=EnsembleMetrics)
 
     def fit(
@@ -306,6 +317,8 @@ class PriceEnsemble:
         y_train: pd.Series,
         X_val: pd.DataFrame,
         y_val: pd.Series,
+        X_test: pd.DataFrame | None = None,
+        y_test: pd.Series | None = None,
     ) -> EnsembleMetrics:
         """Fit all ensemble components.
 
@@ -413,8 +426,85 @@ class PriceEnsemble:
         # Metrics
         # ------------------------------------------------------------------
         p50_train_meta = self._meta_predict_raw(arimax_train_pred, lgbm_train_pred, y_train)
-        p10_val = self.lgbm_q10.predict(X_lgbm_val)
-        p90_val = self.lgbm_q90.predict(X_lgbm_val)
+        p10_val_raw = self.lgbm_q10.predict(X_lgbm_val)
+        p90_val_raw = self.lgbm_q90.predict(X_lgbm_val)
+
+        # ------------------------------------------------------------------
+        # 6. Conformalized Quantile Regression (CQR) — calibrate on val
+        # ------------------------------------------------------------------
+        # Val is the true out-of-training distribution (2020–2022) so CQR
+        # calibrated here adapts to the regime shifts (COVID, Ukraine) that
+        # training data did not include. Guarantees ≥90% marginal coverage
+        # on exchangeable future data drawn from val's distribution.
+        alpha = 0.10
+        n_cal = len(y_val)
+        if n_cal >= 5:
+            scores = np.maximum(
+                p10_val_raw - y_val.values,
+                y_val.values - p90_val_raw,
+            )
+            level = min(1.0, (1 - alpha) * (1 + 1.0 / n_cal))
+            q_hat = float(np.quantile(scores, level))
+            self.conformity_offset = max(0.0, q_hat)
+            logger.info(
+                "CQR conformity offset for %s h=%d: %.4f (n_cal=%d, level=%.3f)",
+                self.commodity, self.horizon,
+                self.conformity_offset, n_cal, level,
+            )
+        else:
+            self.conformity_offset = 0.0
+
+        # Apply widening to val intervals (tautological ≥90% by construction)
+        p10_val = p10_val_raw - self.conformity_offset
+        p90_val = p90_val_raw + self.conformity_offset
+
+        # ------------------------------------------------------------------
+        # 7. Honest out-of-sample test metrics (2023–2024)
+        # ------------------------------------------------------------------
+        mape_test = 0.0
+        rmse_test = 0.0
+        cov_test = 0.0
+        n_test = 0
+        if X_test is not None and y_test is not None and len(y_test) > 0:
+            X_lgbm_test = _get_lgbm_features(X_test)
+            exog_test = _get_arimax_exog(X_test)
+            # SARIMAX forecast on test (if available)
+            if self.arimax_result is not None:
+                try:
+                    arimax_test_pred = np.asarray(
+                        self.arimax_result.forecast(
+                            steps=len(y_val) + len(y_test),
+                            exog=np.vstack([exog_val.values, exog_test.values]),
+                        )
+                    )[-len(y_test):]
+                except Exception:
+                    arimax_test_pred = np.full(len(y_test), float(np.nanmean(y_train)))
+            else:
+                arimax_test_pred = np.full(len(y_test), float(np.nanmean(y_train)))
+
+            lgbm_test_pred = self.lgbm_point.predict(X_lgbm_test)
+            meta_X_test = np.column_stack([
+                np.nan_to_num(arimax_test_pred, nan=float(np.nanmean(y_train))),
+                lgbm_test_pred,
+            ])
+            p50_test = self.meta.predict(meta_X_test)
+            p10_test_raw = self.lgbm_q10.predict(X_lgbm_test)
+            p90_test_raw = self.lgbm_q90.predict(X_lgbm_test)
+            p10_test = p10_test_raw - self.conformity_offset
+            p90_test = p90_test_raw + self.conformity_offset
+            # Enforce monotonicity row-wise
+            p10_test = np.minimum(p10_test, p50_test)
+            p90_test = np.maximum(p90_test, p50_test)
+
+            mape_test = _mape(y_test.values, p50_test)
+            rmse_test = _rmse(y_test.values, p50_test)
+            cov_test = _coverage(y_test.values, p10_test, p90_test)
+            n_test = len(y_test)
+            logger.info(
+                "Test metrics for %s h=%d: MAPE=%.2f%%, RMSE=%.4f, cov90=%.1f%%, n=%d",
+                self.commodity, self.horizon,
+                mape_test, rmse_test, cov_test * 100, n_test,
+            )
 
         self.metrics = EnsembleMetrics(
             mape_train=_mape(y_train.values, p50_train_meta),
@@ -423,6 +513,10 @@ class PriceEnsemble:
             n_train=len(y_train),
             n_val=len(y_val),
             coverage_90=_coverage(y_val.values, p10_val, p90_val),
+            mape_test=mape_test,
+            rmse_test=rmse_test,
+            coverage_90_test=cov_test,
+            n_test=n_test,
         )
 
         logger.info(
@@ -474,14 +568,18 @@ class PriceEnsemble:
 
         # LightGBM predictions
         lgbm_pred = float(self.lgbm_point.predict(X_lgbm)[0])
-        p10 = float(self.lgbm_q10.predict(X_lgbm)[0])
-        p90 = float(self.lgbm_q90.predict(X_lgbm)[0])
+        p10_raw = float(self.lgbm_q10.predict(X_lgbm)[0])
+        p90_raw = float(self.lgbm_q90.predict(X_lgbm)[0])
 
         # Meta-learner p50
         meta_X = np.array([[arimax_val, lgbm_pred]])
         p50 = float(self.meta.predict(meta_X)[0])
 
-        # Enforce monotonicity
+        # CQR widening (ensures ≥90% marginal coverage)
+        p10 = p10_raw - self.conformity_offset
+        p90 = p90_raw + self.conformity_offset
+
+        # Enforce monotonicity: p50 must sit inside [p10, p90]
         p10 = min(p10, p50)
         p90 = max(p90, p50)
 

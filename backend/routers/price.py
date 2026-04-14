@@ -229,7 +229,8 @@ async def get_price_history(
         )
         actual_row = actual_result.scalar()
         if actual_row is not None:
-            actual = round(float(actual_row), 4)
+            # futures_daily.settlement is stored in cents/bu; forecasts are $/bu
+            actual = round(float(actual_row) / 100.0, 4)
             if float(fc.p50) != 0:
                 error_pct = round((actual - float(fc.p50)) / float(fc.p50) * 100, 2)
 

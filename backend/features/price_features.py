@@ -29,6 +29,9 @@ logger = setup_logging("price_features")
 VALID_COMMODITIES = ("corn", "soybean", "wheat")
 VALID_HORIZONS = (1, 2, 3, 4, 5, 6)
 
+# CME futures settlements are stored in cents/bushel; divide by this to get $/bu.
+_CENTS_TO_DOLLARS = 100.0
+
 # ---------------------------------------------------------------------------
 # Pandera validation schema
 # ---------------------------------------------------------------------------
@@ -84,13 +87,13 @@ def _get_nearest_futures(
             .order_by(FuturesDaily.trade_date.desc())
             .limit(1)
         ).first()
-    return (float(row[0]), row[1]) if row else None
+    return (float(row[0]) / _CENTS_TO_DOLLARS, row[1]) if row else None
 
 
 def _get_deferred_futures(
     session, commodity: str, as_of_date: date, months_ahead: int = 6
 ) -> Optional[float]:
-    """Return settlement for the deferred contract (~6 months out)."""
+    """Return settlement for the deferred contract (~6 months out), in $/bu."""
     target_month = as_of_date + timedelta(days=months_ahead * 30)
     target_ym = target_month.strftime("%Y-%m")
     row = session.execute(
@@ -101,7 +104,17 @@ def _get_deferred_futures(
         .order_by(FuturesDaily.contract_month.asc(), FuturesDaily.trade_date.desc())
         .limit(1)
     ).first()
-    return float(row[0]) if row else None
+    if row is None:
+        # Fallback: accept any contract beyond as_of even if < target (sparse wheat months)
+        row = session.execute(
+            select(FuturesDaily.settlement)
+            .where(FuturesDaily.commodity == commodity)
+            .where(FuturesDaily.trade_date <= as_of_date)
+            .where(FuturesDaily.contract_month > as_of_date.strftime("%Y-%m"))
+            .order_by(FuturesDaily.contract_month.desc(), FuturesDaily.trade_date.desc())
+            .limit(1)
+        ).first()
+    return float(row[0]) / _CENTS_TO_DOLLARS if row else None
 
 
 def _get_open_interest_change(
@@ -210,7 +223,7 @@ def _get_production_cost(
 def _get_historical_price(
     session, commodity: str, target_date: date
 ) -> Optional[float]:
-    """Return settlement price closest to target_date (within 7 days)."""
+    """Return settlement price closest to target_date (within 7 days), in $/bu."""
     window_start = target_date - timedelta(days=7)
     row = session.execute(
         select(FuturesDaily.settlement)
@@ -220,7 +233,7 @@ def _get_historical_price(
         .order_by(FuturesDaily.trade_date.desc())
         .limit(1)
     ).first()
-    return float(row[0]) if row else None
+    return float(row[0]) / _CENTS_TO_DOLLARS if row else None
 
 
 def _compute_seasonal_factor(

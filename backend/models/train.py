@@ -78,7 +78,9 @@ def _load_futures_df(commodity: str) -> pd.DataFrame:
 
     df = pd.DataFrame(rows, columns=["trade_date", "commodity", "settlement"])
     df["trade_date"] = pd.to_datetime(df["trade_date"])
-    df["settlement"] = df["settlement"].astype(float)
+    # CME settlements are stored in cents/bu; convert to $/bu so targets match
+    # the dollar-scale features produced by price_features.build_price_features.
+    df["settlement"] = df["settlement"].astype(float) / 100.0
     return df
 
 
@@ -139,6 +141,15 @@ def train_single(
         commodity, VAL_START, VAL_END, horizon, freq_days=30
     )
 
+    logger.info("Building test features...")
+    try:
+        X_test = build_training_features(
+            commodity, TEST_START, TEST_END, horizon, freq_days=30
+        )
+    except Exception as e:
+        logger.warning("No test features built for %s h=%d: %s", commodity, horizon, e)
+        X_test = None
+
     # 2. Load futures for target construction
     logger.info("Loading futures data for target construction...")
     futures_df = _load_futures_df(commodity)
@@ -146,6 +157,7 @@ def train_single(
     # 3. Build targets
     y_train = _build_target(X_train, futures_df, horizon)
     y_val = _build_target(X_val, futures_df, horizon)
+    y_test = _build_target(X_test, futures_df, horizon) if X_test is not None else None
 
     # Drop rows where target is NaN (future data not yet available)
     train_valid = y_train.notna()
@@ -155,6 +167,13 @@ def train_single(
     y_train = y_train.loc[train_valid].reset_index(drop=True)
     X_val = X_val.loc[val_valid].reset_index(drop=True)
     y_val = y_val.loc[val_valid].reset_index(drop=True)
+
+    if X_test is not None and y_test is not None:
+        test_valid = y_test.notna()
+        X_test = X_test.loc[test_valid].reset_index(drop=True)
+        y_test = y_test.loc[test_valid].reset_index(drop=True)
+        if len(X_test) == 0:
+            X_test, y_test = None, None
 
     if len(X_train) < 10:
         logger.error(
@@ -171,7 +190,7 @@ def train_single(
 
     # 4. Fit ensemble
     ensemble = PriceEnsemble(commodity=commodity, horizon=horizon)
-    metrics = ensemble.fit(X_train, y_train, X_val, y_val)
+    metrics = ensemble.fit(X_train, y_train, X_val, y_val, X_test, y_test)
 
     # 5. Futures baseline comparison
     baseline_mape = _futures_baseline_mape(X_val, y_val)
@@ -202,8 +221,13 @@ def train_single(
         "futures_baseline_mape": round(baseline_mape, 4),
         "beats_baseline": model_beats_baseline,
         "coverage_90": round(metrics.coverage_90, 4),
+        "conformity_offset": round(ensemble.conformity_offset, 4),
+        "mape_test": round(metrics.mape_test, 4),
+        "rmse_test": round(metrics.rmse_test, 4),
+        "coverage_90_test": round(metrics.coverage_90_test, 4),
         "n_train": metrics.n_train,
         "n_val": metrics.n_val,
+        "n_test": metrics.n_test,
     }
     metrics_path = artifact_dir / "metrics.json"
     with open(metrics_path, "w") as f:
