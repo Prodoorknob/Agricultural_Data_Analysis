@@ -66,7 +66,7 @@ export default function ProfitChart({ data, commodity, stateName }: ProfitChartP
                 fontSize: 12,
                 color: 'var(--text)',
               }}
-              formatter={(v: number) => [`$${v.toFixed(0)}/acre`, 'Profit']}
+              formatter={(v: unknown) => [`$${Number(v).toFixed(0)}/acre`, 'Profit']}
             />
             <ReferenceLine y={0} stroke="var(--text3)" strokeDasharray="3 3" />
             <Bar dataKey="profitPerAcre" radius={[2, 2, 0, 0]} barSize={12}>

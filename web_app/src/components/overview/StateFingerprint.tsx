@@ -169,7 +169,7 @@ export default function StateFingerprint({
                     fontSize: 12,
                     color: 'var(--text)',
                   }}
-                  formatter={(v: number) => [formatCompact(v), peerMetric]}
+                  formatter={(v: unknown) => [formatCompact(Number(v)), peerMetric]}
                 />
                 <Bar
                   dataKey="value"

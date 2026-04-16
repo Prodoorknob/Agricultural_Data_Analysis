@@ -87,7 +87,7 @@ export default function CountyDrillDown({
                   fontSize: 12,
                   color: 'var(--text)',
                 }}
-                formatter={(v: number) => [`${v.toLocaleString()} ${unit}`, metric]}
+                formatter={(v: unknown) => [`${Number(v).toLocaleString()} ${unit}`, metric]}
               />
               <Bar dataKey="value" fill="var(--field)" radius={[0, 4, 4, 0]} barSize={16} />
             </BarChart>

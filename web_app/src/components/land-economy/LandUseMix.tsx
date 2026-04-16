@@ -41,11 +41,11 @@ export default function LandUseMix({ data, stateName }: LandUseMixProps) {
                 tick={{ fill: 'var(--text3)', fontSize: 10, fontFamily: 'var(--font-mono)' }} />
               <YAxis axisLine={false} tickLine={false}
                 tick={{ fill: 'var(--text3)', fontSize: 10, fontFamily: 'var(--font-mono)' }}
-                tickFormatter={(v) => formatCompact(v)} />
+                tickFormatter={(v) => formatCompact(Number(v))} />
               <Tooltip contentStyle={{
                 background: 'var(--surface)', border: '1px solid var(--border)',
                 borderRadius: 'var(--radius-md)', fontSize: 12, color: 'var(--text)',
-              }} formatter={(v: number) => [formatCompact(v) + ' acres']} />
+              }} formatter={(v: unknown) => [formatCompact(Number(v)) + ' acres']} />
               <Area type="monotone" dataKey="cropland" stackId="1" fill="var(--field)" stroke="var(--field)" fillOpacity={0.7} name="Cropland" />
               <Area type="monotone" dataKey="pasture" stackId="1" fill="var(--harvest)" stroke="var(--harvest)" fillOpacity={0.5} name="Pasture" />
               <Area type="monotone" dataKey="forest" stackId="1" fill="var(--chart-hay)" stroke="var(--chart-hay)" fillOpacity={0.4} name="Forest" />

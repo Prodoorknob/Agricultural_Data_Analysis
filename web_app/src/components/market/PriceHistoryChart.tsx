@@ -89,7 +89,7 @@ export default function PriceHistoryChart({
                 axisLine={false}
                 tickLine={false}
                 tick={{ fill: 'var(--text3)', fontSize: 11, fontFamily: 'var(--font-mono)' }}
-                tickFormatter={(v) => `$${v.toFixed(2)}`}
+                tickFormatter={(v) => `$${Number(v).toFixed(2)}`}
                 domain={['auto', 'auto']}
               />
               <Tooltip
@@ -101,7 +101,7 @@ export default function PriceHistoryChart({
                   fontSize: 12,
                   color: 'var(--text)',
                 }}
-                formatter={(v: number) => [`$${v.toFixed(2)}/bu`, 'Settle']}
+                formatter={(v: unknown) => [`$${Number(v).toFixed(2)}/bu`, 'Settle']}
                 labelFormatter={(d) => new Date(d).toLocaleDateString()}
               />
               <Area

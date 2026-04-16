@@ -66,7 +66,7 @@ export default function HarvestEfficiency({ data, commodity, stateName }: Harves
                 fontSize: 12,
                 color: 'var(--text)',
               }}
-              formatter={(v: number) => [`${v.toFixed(1)}%`, 'Efficiency']}
+              formatter={(v: unknown) => [`${Number(v).toFixed(1)}%`, 'Efficiency']}
             />
             <ReferenceLine y={100} stroke="var(--harvest)" strokeDasharray="4 4" label="" />
             <Bar dataKey="efficiencyPct" fill="var(--sky)" radius={[2, 2, 0, 0]} barSize={12} />

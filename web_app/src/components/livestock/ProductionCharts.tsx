@@ -47,11 +47,11 @@ export default function ProductionCharts({ series, stateName }: ProductionCharts
                     tick={{ fill: 'var(--text3)', fontSize: 10, fontFamily: 'var(--font-mono)' }} />
                   <YAxis axisLine={false} tickLine={false}
                     tick={{ fill: 'var(--text3)', fontSize: 10, fontFamily: 'var(--font-mono)' }}
-                    tickFormatter={(v) => formatCompact(v)} />
+                    tickFormatter={(v) => formatCompact(Number(v))} />
                   <Tooltip contentStyle={{
                     background: 'var(--surface)', border: '1px solid var(--border)',
                     borderRadius: 'var(--radius-md)', fontSize: 12, color: 'var(--text)',
-                  }} formatter={(v: number) => [formatCompact(v) + ' ' + s.unit]} />
+                  }} formatter={(v: unknown) => [formatCompact(Number(v)) + ' ' + s.unit]} />
                   <Line type="monotone" dataKey="stateValue" stroke={s.color} strokeWidth={2} dot={false} name={stateName} />
                   <Line type="monotone" dataKey="nationalValue" stroke="var(--text3)" strokeWidth={1} strokeDasharray="4 3" dot={false} name="National" />
                 </LineChart>

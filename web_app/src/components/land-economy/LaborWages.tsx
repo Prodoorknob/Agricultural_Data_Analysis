@@ -82,7 +82,7 @@ export default function LaborWages({ wageTrend, wageRanking, stateName }: LaborW
                   <YAxis type="category" dataKey="state" axisLine={false} tickLine={false}
                     tick={{ fill: 'var(--text2)', fontSize: 11, fontFamily: 'var(--font-mono)' }} width={28} />
                   <Tooltip contentStyle={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', fontSize: 12, color: 'var(--text)' }}
-                    formatter={(v: number) => [`${v.toFixed(1)}%`, 'Growth']} />
+                    formatter={(v: unknown) => [`${Number(v).toFixed(1)}%`, 'Growth']} />
                   <Bar dataKey="wageGrowthPct10yr" fill="var(--field)" radius={[0, 4, 4, 0]} barSize={14} />
                 </BarChart>
               </ResponsiveContainer>

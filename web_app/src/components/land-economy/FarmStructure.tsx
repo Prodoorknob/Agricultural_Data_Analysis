@@ -51,9 +51,9 @@ export default function FarmStructure({ data, stateName }: FarmStructureProps) {
                   tick={{ fill: 'var(--text3)', fontSize: 10, fontFamily: 'var(--font-mono)' }} />
                 <YAxis axisLine={false} tickLine={false}
                   tick={{ fill: 'var(--text3)', fontSize: 10, fontFamily: 'var(--font-mono)' }}
-                  tickFormatter={(v) => formatCompact(v)} />
+                  tickFormatter={(v) => formatCompact(Number(v))} />
                 <Tooltip contentStyle={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', fontSize: 12, color: 'var(--text)' }}
-                  formatter={(v: number) => [formatCompact(v), 'Operations']} />
+                  formatter={(v: unknown) => [formatCompact(Number(v)), 'Operations']} />
                 <Line type="monotone" dataKey="operationsCount" stroke="var(--field)" strokeWidth={2} dot={false} />
               </LineChart>
             </ResponsiveContainer>
@@ -73,7 +73,7 @@ export default function FarmStructure({ data, stateName }: FarmStructureProps) {
                 <YAxis axisLine={false} tickLine={false}
                   tick={{ fill: 'var(--text3)', fontSize: 10, fontFamily: 'var(--font-mono)' }} />
                 <Tooltip contentStyle={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', fontSize: 12, color: 'var(--text)' }}
-                  formatter={(v: number) => [`${v.toFixed(0)} acres`, 'Avg Size']} />
+                  formatter={(v: unknown) => [`${Number(v).toFixed(0)} acres`, 'Avg Size']} />
                 <Line type="monotone" dataKey="avgFarmSize" stroke="var(--harvest)" strokeWidth={2} dot={false} />
               </LineChart>
             </ResponsiveContainer>

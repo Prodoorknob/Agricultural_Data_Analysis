@@ -42,13 +42,13 @@ export default function RevenueLeaderboard({ data, stateName, year }: RevenueLea
             <BarChart data={sorted} layout="vertical" margin={{ left: 80, right: 20, top: 5, bottom: 5 }}>
               <XAxis type="number" axisLine={false} tickLine={false}
                 tick={{ fill: 'var(--text3)', fontSize: 10, fontFamily: 'var(--font-mono)' }}
-                tickFormatter={(v) => formatCurrency(v)} />
+                tickFormatter={(v) => formatCurrency(Number(v))} />
               <YAxis type="category" dataKey="commodity" axisLine={false} tickLine={false}
                 tick={{ fill: 'var(--text2)', fontSize: 11, fontFamily: 'var(--font-body)' }} width={75} />
               <Tooltip contentStyle={{
                 background: 'var(--surface)', border: '1px solid var(--border)',
                 borderRadius: 'var(--radius-md)', fontSize: 12, color: 'var(--text)',
-              }} formatter={(v: number) => [formatCurrency(v), 'Sales']} />
+              }} formatter={(v: unknown) => [formatCurrency(Number(v)), 'Sales']} />
               <Bar dataKey="sales" radius={[0, 4, 4, 0]} barSize={16}>
                 {sorted.map((entry) => (
                   <Cell key={entry.commodity} fill={COMMODITY_COLORS[entry.commodity.toLowerCase()] || 'var(--field)'} />

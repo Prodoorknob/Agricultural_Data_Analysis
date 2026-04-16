@@ -45,7 +45,7 @@ export default function DxyStrip({ data }: DxyStripProps) {
                   fontSize: 11,
                   color: 'var(--text)',
                 }}
-                formatter={(v: number) => [v.toFixed(2), 'DXY']}
+                formatter={(v: unknown) => [Number(v).toFixed(2), 'DXY']}
                 labelFormatter={(d) => new Date(d).toLocaleDateString()}
               />
               <Line type="monotone" dataKey="value" stroke="var(--sky)" strokeWidth={1.5} dot={false} />

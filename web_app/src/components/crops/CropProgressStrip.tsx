@@ -78,7 +78,7 @@ export default function CropProgressStrip({
                     fontSize: 12,
                     color: 'var(--text)',
                   }}
-                  formatter={(v: number) => [`${v.toFixed(1)}%`]}
+                  formatter={(v: unknown) => [`${Number(v).toFixed(1)}%`]}
                 />
                 <Area
                   type="monotone"
