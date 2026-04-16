@@ -13,7 +13,9 @@ Next.js Frontend (React 19, Recharts, Deck.gl, MapLibre)
          |
 Python Pipeline (EC2 cron) -> USDA API -> Parquet -> S3
          |
-FastAPI Backend (EC2, port 8000) -> PostgreSQL (RDS)   [IN PROGRESS]
+FastAPI Backend (EC2, port 8000) -> PostgreSQL (RDS)   [DEPLOYED]
+         |
+Production: Vercel (frontend) + https://agri-intel.rvedire.com (API)
 ```
 
 ## Tech Stack
