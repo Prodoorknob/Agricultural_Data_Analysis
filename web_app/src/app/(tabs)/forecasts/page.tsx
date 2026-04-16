@@ -12,11 +12,12 @@ const ACREAGE_COMMODITIES = ['corn', 'soybean', 'wheat_winter'] as const;
 
 export default function ForecastsPage() {
   const { filters } = useFilters();
+  const forecastYear = new Date().getFullYear(); // Forecasts always use current year
 
   // Fetch acreage for all 3 commodities
-  const corn = useAcreageForecast('corn');
-  const soy = useAcreageForecast('soybean');
-  const wheat = useAcreageForecast('wheat_winter');
+  const corn = useAcreageForecast('corn', forecastYear);
+  const soy = useAcreageForecast('soybean', forecastYear);
+  const wheat = useAcreageForecast('wheat', forecastYear);
 
   const allLoading = corn.loading || soy.loading || wheat.loading;
   const anyError = corn.error || soy.error || wheat.error;
@@ -93,7 +94,7 @@ export default function ForecastsPage() {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             <AcreageCard {...buildCardProps(corn, 'corn')} />
             <AcreageCard {...buildCardProps(soy, 'soybean')} />
-            <AcreageCard {...buildCardProps(wheat, 'wheat_winter')} />
+            <AcreageCard {...buildCardProps(wheat, 'wheat')} />
           </div>
         </BandShell>
 
