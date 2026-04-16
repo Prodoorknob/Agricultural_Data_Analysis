@@ -212,4 +212,5 @@ if __name__ == "__main__":
         n = run_inference(crop, week, args.year)
         total += n
 
-    log_ingest_summary(logger, "yield_inference", total, _time.time() - t0)
+    elapsed = _time.time() - t0
+    logger.info("Yield inference complete: %d rows in %.1f seconds", total, elapsed)
