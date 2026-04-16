@@ -8,7 +8,7 @@ import CitationBlock from '@/components/shared/CitationBlock';
 interface AccuracyItem {
   forecast_year: number;
   commodity: string;
-  model_vs_actual_pct: number | null;
+  model_vs_actual_pct?: number | null;
 }
 
 interface YieldAccuracyWeek {
