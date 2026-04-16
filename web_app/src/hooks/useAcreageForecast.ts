@@ -13,9 +13,12 @@ export interface AcreageForecast {
   level: string;
   state_fips?: string;
   state_name?: string;
-  forecast_acres_millions: number;
-  p10_acres_millions?: number;
-  p90_acres_millions?: number;
+  // Raw acres (e.g. 92_800_000). The API used to suffix these `_millions`
+  // but the stored values were always raw — renamed in the backend router
+  // on 2026-04-16 for honesty.
+  forecast_acres: number;
+  p10_acres?: number;
+  p90_acres?: number;
   corn_soy_ratio?: number;
   corn_soy_ratio_pctile?: number;
   key_driver?: string;
@@ -27,7 +30,7 @@ export interface AcreageForecast {
 export interface StateAcreageItem {
   state_fips: string;
   state: string;
-  forecast_acres_millions: number;
+  forecast_acres: number;  // raw acres
   vs_prior_pct?: number;
 }
 

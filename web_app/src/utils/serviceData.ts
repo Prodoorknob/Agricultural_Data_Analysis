@@ -39,13 +39,20 @@ export interface CropData {
  * Parse parquet ArrayBuffer and return data objects
  */
 async function parseParquetBuffer(arrayBuffer: ArrayBuffer): Promise<any[]> {
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
+        let settled = false;
+        const done = (result: any[]) => {
+            if (settled) return;
+            settled = true;
+            resolve(result);
+        };
+
         try {
             const metadata = parquetMetadata(arrayBuffer);
 
             if (!metadata || !metadata.row_groups || metadata.row_groups.length === 0) {
                 console.warn('No row groups found in parquet file');
-                resolve([]);
+                done([]);
                 return;
             }
 
@@ -63,12 +70,21 @@ async function parseParquetBuffer(arrayBuffer: ArrayBuffer): Promise<any[]> {
                         });
                         return obj;
                     });
-                    resolve(result);
-                }
+                    done(result);
+                },
             });
+
+            // Defensive timeout — malformed files could leave parquetRead hanging
+            // without ever calling onComplete. 30s is well past the honest p99.
+            setTimeout(() => {
+                if (!settled) {
+                    console.error('parquetRead timed out after 30s');
+                    done([]);
+                }
+            }, 30_000);
         } catch (e) {
-            console.error("Error reading parquet metadata/data", e);
-            resolve([]);
+            console.error('Error reading parquet metadata/data', e);
+            done([]);
         }
     });
 }
@@ -78,24 +94,25 @@ async function parseParquetBuffer(arrayBuffer: ArrayBuffer): Promise<any[]> {
  * 1. Try S3 bucket (primary)
  * 2. Try local API proxy (fallback)
  * 3. Return empty array on all failures
- * 
+ *
  * @param filename Relative path to the parquet file (e.g., 'IN.parquet')
- * @returns Array of data objects
+ * @param signal Optional AbortSignal — callers pass one tied to component
+ *   lifecycle so rapid state switches don't race older fetches on top of
+ *   fresher state updates.
  */
-async function fetchParquet(filename: string): Promise<any[]> {
-    // Normalize filename: extract just the state code from path like 'partitioned_states/IN.parquet'
+async function fetchParquet(filename: string, signal?: AbortSignal): Promise<any[]> {
     const justFilename = filename.includes('/') ? filename.split('/').pop() || filename : filename;
-    
-    // Strategy 1: Try S3 bucket first (primary source)
+
     console.log(`[S3] Attempting to fetch ${justFilename} from S3...`);
     try {
         const s3Url = `${S3_BUCKET_URL}/${justFilename}`;
-        const s3Response = await fetch(s3Url, { 
+        const s3Response = await fetch(s3Url, {
             method: 'GET',
             mode: 'cors',
-            credentials: 'omit'
+            credentials: 'omit',
+            signal,
         });
-        
+
         if (s3Response.ok) {
             console.log(`[S3] ✓ Successfully fetched ${justFilename} from S3`);
             const arrayBuffer = await s3Response.arrayBuffer();
@@ -104,15 +121,15 @@ async function fetchParquet(filename: string): Promise<any[]> {
             console.warn(`[S3] File not found or access denied (${s3Response.status}): ${justFilename}`);
         }
     } catch (s3Error) {
+        if ((s3Error as { name?: string })?.name === 'AbortError') throw s3Error;
         console.warn(`[S3] Failed to fetch from S3:`, s3Error instanceof Error ? s3Error.message : s3Error);
     }
 
-    // Strategy 2: Fall back to local API proxy
     console.log(`[Local API] Attempting to fetch ${filename} from local API...`);
     try {
         const apiUrl = `/api/data?file=${encodeURIComponent(filename)}&t=${Date.now()}`;
-        const apiResponse = await fetch(apiUrl);
-        
+        const apiResponse = await fetch(apiUrl, { signal });
+
         if (apiResponse.ok) {
             console.log(`[Local API] ✓ Successfully fetched ${filename} from local API`);
             const arrayBuffer = await apiResponse.arrayBuffer();
@@ -121,49 +138,49 @@ async function fetchParquet(filename: string): Promise<any[]> {
             console.warn(`[Local API] File not found or access denied (${apiResponse.status}): ${filename}`);
         }
     } catch (apiError) {
+        if ((apiError as { name?: string })?.name === 'AbortError') throw apiError;
         console.warn(`[Local API] Failed to fetch from local API:`, apiError instanceof Error ? apiError.message : apiError);
     }
 
-    // All strategies failed
     console.error(`[Fetch] Failed to retrieve ${filename} from all sources (S3, Local API)`);
     return [];
 }
 
 /**
- * Fetch all data for a specific state.
+ * Fetch all data for a specific state. Pass an AbortSignal from the caller's
+ * useEffect cleanup so rapid state switches don't resolve stale fetches on
+ * top of fresh ones.
  */
-export async function fetchStateData(stateAlpha: string) {
+export async function fetchStateData(stateAlpha: string, signal?: AbortSignal) {
     const stateName = getStateName(stateAlpha);
     if (!stateName) {
         console.error(`Unknown state alpha: ${stateAlpha}`);
         return [];
     }
 
-    // Filename format: partitioned_states/IN.parquet (New Structure)
-    // The API route maps this to final_data/IN.parquet
     const filename = `partitioned_states/${stateAlpha}.parquet`;
-    return fetchParquet(filename);
+    return fetchParquet(filename, signal);
 }
 
 /**
  * Fetch national summary data (if needed for comparison)
  */
-export async function fetchNationalCrops() {
-    return fetchParquet('partitioned_states/NATIONAL.parquet');
+export async function fetchNationalCrops(signal?: AbortSignal) {
+    return fetchParquet('partitioned_states/NATIONAL.parquet', signal);
 }
 
 /**
  * Fetch National Land Use Summary
  */
-export async function fetchLandUseData() {
-    return fetchParquet('partitioned_states/NATIONAL.parquet');
+export async function fetchLandUseData(signal?: AbortSignal) {
+    return fetchParquet('partitioned_states/NATIONAL.parquet', signal);
 }
 
 /**
  * Fetch National Labor Wage Data
  */
-export async function fetchLaborData() {
-    return fetchParquet('partitioned_states/NATIONAL.parquet');
+export async function fetchLaborData(signal?: AbortSignal) {
+    return fetchParquet('partitioned_states/NATIONAL.parquet', signal);
 }
 
 // ─── Athena-Backed Fetch Functions ────────────────────────────────

@@ -206,11 +206,12 @@ def train_commodity(
     output_dir: Path,
     run_cv: bool = True,
     persist_accuracy: bool = False,
-) -> pd.DataFrame:
+) -> tuple[pd.DataFrame, dict]:
     """Train and save model for one commodity using state-panel data.
 
-    Returns the walk-forward predictions DataFrame (val + test rows).
-    If persist_accuracy is True, upserts them to the acreage_accuracy table.
+    Returns (predictions_df, metrics) — predictions_df has val+test rows for
+    acreage_accuracy persistence; metrics carries beats_baseline for the
+    caller's gate check on S3 upload.
     """
     logger.info(f"=== Training {commodity} acreage model (state-panel) ===")
 
@@ -271,7 +272,7 @@ def train_commodity(
         except Exception as exc:
             logger.error(f"  Failed to persist acreage accuracy: {exc}")
 
-    return predictions_df
+    return predictions_df, metrics
 
 
 def persist_acreage_accuracy(predictions_df: pd.DataFrame, model_ver: str) -> int:
@@ -361,6 +362,11 @@ def main():
         action="store_true",
         help="Upsert walk-forward val+test predictions to acreage_accuracy table",
     )
+    parser.add_argument(
+        "--allow-failed-gate",
+        action="store_true",
+        help="Upload gate-failed commodities to S3 anyway (default: exclude from upload)",
+    )
     args = parser.parse_args()
 
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
@@ -395,17 +401,37 @@ def main():
     else:
         commodities = [args.commodity]
 
+    gate_status: dict[str, bool] = {}
     for commodity in commodities:
-        train_commodity(
+        _, metrics = train_commodity(
             commodity,
             nass_data,
             ARTIFACT_DIR,
             run_cv=not args.skip_cv,
             persist_accuracy=args.persist_accuracy,
         )
+        gate_status[commodity] = bool(metrics.get("beats_baseline", False))
 
-    # Step 4: Optional S3 upload
+    # Step 4: Optional S3 upload — gate-failed commodities are excluded unless overridden
     if args.upload_s3:
+        failed = [c for c, passed in gate_status.items() if not passed]
+        if failed and not args.allow_failed_gate:
+            logger.warning(
+                "S3 upload: excluding gate-failed commodities: %s "
+                "(override with --allow-failed-gate)",
+                ", ".join(failed),
+            )
+            exclude_args: list[str] = []
+            for c in failed:
+                exclude_args += ["--exclude", f"{c}/*"]
+        else:
+            if failed:
+                logger.warning(
+                    "S3 upload: uploading gate-failed commodities anyway due to --allow-failed-gate: %s",
+                    ", ".join(failed),
+                )
+            exclude_args = []
+
         logger.info("Uploading artifacts to S3 ...")
         subprocess.run(
             [
@@ -413,12 +439,16 @@ def main():
                 str(ARTIFACT_DIR),
                 f"s3://{S3_BUCKET}/models/acreage/",
                 "--region", "us-east-2",
+                *exclude_args,
             ],
             check=True,
         )
         logger.info("Uploaded to S3")
 
-    logger.info("All done.")
+    logger.info(
+        "All done. Gate summary: %s",
+        ", ".join(f"{c}={'PASS' if p else 'FAIL'}" for c, p in gate_status.items()),
+    )
 
 
 if __name__ == "__main__":

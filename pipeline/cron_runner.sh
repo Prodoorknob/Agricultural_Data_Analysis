@@ -3,7 +3,10 @@
 #
 # This script is designed to be run via cron on an EC2 instance.
 #
-# Cron entries:
+# IMPORTANT: USDA publishes on Central Time. Set the crontab's TZ so the
+# times below fire in the right timezone regardless of the OS default:
+#
+#   TZ=America/Chicago
 #   0 6 15 * *  /home/ec2-user/Agricultural_Data_Analysis/pipeline/cron_runner.sh              # Monthly NASS
 #   0 12 * * 1-5 /home/ec2-user/Agricultural_Data_Analysis/pipeline/cron_runner.sh --daily      # Daily market data
 #   0 14 12 * * /home/ec2-user/Agricultural_Data_Analysis/pipeline/cron_runner.sh --monthly-wasde  # Monthly WASDE
@@ -11,10 +14,15 @@
 #   0 12 1 2 *  /home/ec2-user/Agricultural_Data_Analysis/pipeline/cron_runner.sh --annual-acreage  # Annual acreage forecast
 #   0 12 1 1,4,7,10 * /home/ec2-user/Agricultural_Data_Analysis/pipeline/cron_runner.sh --quarterly-fertilizer  # Quarterly fertilizer prices
 #   0 10 * * 4  /home/ec2-user/Agricultural_Data_Analysis/pipeline/cron_runner.sh --weekly-yield   # Weekly yield pipeline (Thursday 10 AM)
-#   0 10 * * 4  /home/ec2-user/Agricultural_Data_Analysis/pipeline/cron_runner.sh --weekly-drought  # Weekly DSCI drought (Thursday 10 AM)
+#   0 11 * * 4  /home/ec2-user/Agricultural_Data_Analysis/pipeline/cron_runner.sh --weekly-drought  # Weekly DSCI drought (Thursday 11 AM — offset from yield)
 #   0 10 15 3 * /home/ec2-user/Agricultural_Data_Analysis/pipeline/cron_runner.sh --annual-rma     # Annual RMA insured acres (March 15)
 #   0 10 1 4 *  /home/ec2-user/Agricultural_Data_Analysis/pipeline/cron_runner.sh --annual-crp     # Annual CRP enrollment (April 1)
 #   0 14 * * 4  /home/ec2-user/Agricultural_Data_Analysis/pipeline/cron_runner.sh --weekly-exports  # Weekly FAS export sales (Thursday 2 PM)
+#
+# Concurrency: each invocation acquires a per-mode flock on /tmp. Two runs
+# with the same mode will queue; different modes run independently. This
+# prevents the yield/drought 10 AM collision (they now write features to the
+# same DB tables) and any accidental double-cron entries from racing.
 #
 # Modes:
 #   (default)              NASS QuickStats ingestion pipeline
@@ -37,6 +45,20 @@
 #   5. Send SNS notification on success or failure
 
 set -euo pipefail
+
+# ---------------------------------------------------------------------------
+# Per-mode lock: prevent overlapping runs of the same mode. Different modes
+# can still run concurrently. Must come before heavy work — use flock's
+# re-exec trick (https://man7.org/linux/man-pages/man1/flock.1.html).
+# ---------------------------------------------------------------------------
+_LOCK_MODE="${1:-nass}"
+_LOCK_FILE="/tmp/ag-pipeline-${_LOCK_MODE#--}.lock"
+if [[ "${AG_PIPELINE_LOCKED:-0}" != "1" ]]; then
+    exec env AG_PIPELINE_LOCKED=1 flock --nonblock "${_LOCK_FILE}" "$0" "$@" || {
+        echo "[$(date -Is)] Another instance of cron_runner ${_LOCK_MODE} is already running; exiting." >&2
+        exit 0
+    }
+fi
 
 # ---------------------------------------------------------------------------
 # Configuration - Edit these for your EC2 setup

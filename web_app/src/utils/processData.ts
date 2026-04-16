@@ -233,23 +233,7 @@ export function getLandUseTrends(data: any[]) {
     // Step 2: Only keep rows for crops with BOTH metrics
     const paired = relevant.filter(d => bothCrops.has(d.commodity_desc));
 
-    // Step 3: Detect multi-harvest crops (harvested/planted ratio > 1.5 in majority of years)
-    const multiHarvestCrops: string[] = [];
-    bothCrops.forEach(crop => {
-        const cropRows = paired.filter(d => d.commodity_desc === crop);
-        const years = [...new Set(cropRows.map(d => d.year))];
-        let multiCount = 0;
-        years.forEach(y => {
-            const p = d3.sum(cropRows.filter(r => r.year === y && r.statisticcat_desc === 'AREA PLANTED'), r => cleanValue(r.value_num || r.Value));
-            const h = d3.sum(cropRows.filter(r => r.year === y && r.statisticcat_desc === 'AREA HARVESTED'), r => cleanValue(r.value_num || r.Value));
-            if (p > 0 && h / p > 1.5) multiCount++;
-        });
-        if (years.length > 0 && multiCount / years.length > 0.5) {
-            multiHarvestCrops.push(crop);
-        }
-    });
-
-    // Step 4: Aggregate by year
+    // Step 3: Aggregate by year
     const yearGroups = d3.group(paired, d => d.year);
     const trends: any[] = [];
 
@@ -259,14 +243,7 @@ export function getLandUseTrends(data: any[]) {
         if (planted > 0 || harvested > 0) trends.push({ year, planted, harvested });
     });
 
-    const sorted = trends.sort((a, b) => a.year - b.year);
-
-    // Attach metadata for UI consumption
-    (sorted as any).multiHarvestCrops = multiHarvestCrops;
-    (sorted as any).pairedCropCount = bothCrops.size;
-    (sorted as any).excludedCropCount = harvestedCrops.size - bothCrops.size;
-
-    return sorted;
+    return trends.sort((a, b) => a.year - b.year);
 }
 
 export function getLandUseComposition(data: any[]) {
@@ -340,10 +317,7 @@ export function getLaborTrends(data: any[], selectedState: string = 'INDIANA') {
         trends.push(row);
     });
 
-    // Attach comparison states as metadata for the UI to read
-    const sorted = trends.sort((a, b) => a.year - b.year);
-    (sorted as any).comparisonStates = comparisonStates;
-    return sorted;
+    return trends.sort((a, b) => a.year - b.year);
 }
 
 export function getOperationsTrend(data: any[]) {

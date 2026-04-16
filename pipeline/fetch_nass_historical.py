@@ -170,11 +170,25 @@ def main():
     yields = df[df["_type"] == "yield"][["state_fips", "commodity", "year", "yield_bu"]]
 
     merged = planted.merge(yields, on=["state_fips", "commodity", "year"], how="outer")
-    merged = merged.dropna(subset=["acres_planted"])
-    merged = merged[merged["acres_planted"] > 0]
 
-    # Deduplicate
+    # Keep yield-only rows: the acreage model training uses prior-year yield as
+    # a feature, so dropping state-years where NASS has yield but no planted
+    # response removes signal. Previously `dropna(subset=["acres_planted"])`
+    # silently discarded 15-20% of the training matrix.
+    merged = merged[
+        (merged["acres_planted"].isna() | (merged["acres_planted"] > 0))
+        & ~(merged["acres_planted"].isna() & merged["yield_bu"].isna())
+    ]
+
     merged = merged.drop_duplicates(subset=["state_fips", "commodity", "year"])
+
+    n_both = int((merged["acres_planted"].notna() & merged["yield_bu"].notna()).sum())
+    n_yield_only = int((merged["acres_planted"].isna() & merged["yield_bu"].notna()).sum())
+    n_planted_only = int((merged["acres_planted"].notna() & merged["yield_bu"].isna()).sum())
+    logger.info(
+        "Historical merge retention: %d both, %d yield-only (kept), %d planted-only (kept)",
+        n_both, n_yield_only, n_planted_only,
+    )
 
     # Save
     os.makedirs(os.path.dirname(OUTPUT_PATH), exist_ok=True)

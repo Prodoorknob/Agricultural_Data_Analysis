@@ -430,33 +430,68 @@ class PriceEnsemble:
         p90_val_raw = self.lgbm_q90.predict(X_lgbm_val)
 
         # ------------------------------------------------------------------
-        # 6. Conformalized Quantile Regression (CQR) — calibrate on val
+        # 6. Conformalized Quantile Regression (CQR) — split val for honest coverage
         # ------------------------------------------------------------------
-        # Val is the true out-of-training distribution (2020–2022) so CQR
-        # calibrated here adapts to the regime shifts (COVID, Ukraine) that
-        # training data did not include. Guarantees ≥90% marginal coverage
-        # on exchangeable future data drawn from val's distribution.
+        # Previously the conformity offset was fit on the same val set used to
+        # report coverage_90, making the val coverage tautological. We now split
+        # val into cal / val_meas halves: cal fits the offset, val_meas gives
+        # an honest marginal coverage reading that matches what the test set
+        # will show (modulo regime drift). This is not a true fix for regime
+        # non-exchangeability (val=2020-2022, test=2023-2024 are different
+        # macro regimes) — the test-set coverage is still the deployment metric
+        # — but it removes the leakage and eliminates the inflated val number.
         alpha = 0.10
-        n_cal = len(y_val)
-        if n_cal >= 5:
+        n_val_total = len(y_val)
+        if n_val_total >= 10:
+            cal_size = max(n_val_total // 2, 5)
+            cal_idx = np.arange(cal_size)
+            meas_idx = np.arange(cal_size, n_val_total)
+
+            scores_cal = np.maximum(
+                p10_val_raw[cal_idx] - y_val.values[cal_idx],
+                y_val.values[cal_idx] - p90_val_raw[cal_idx],
+            )
+            level = min(1.0, (1 - alpha) * (1 + 1.0 / len(cal_idx)))
+            q_hat = float(np.quantile(scores_cal, level))
+            self.conformity_offset = max(0.0, q_hat)
+            logger.info(
+                "CQR conformity offset for %s h=%d: %.4f "
+                "(cal n=%d, meas n=%d, level=%.3f)",
+                self.commodity, self.horizon,
+                self.conformity_offset, len(cal_idx), len(meas_idx), level,
+            )
+
+            # Reported val coverage is measured on the held-out half only
+            p10_val_raw_meas = p10_val_raw[meas_idx] - self.conformity_offset
+            p90_val_raw_meas = p90_val_raw[meas_idx] + self.conformity_offset
+            y_val_meas = y_val.values[meas_idx]
+            coverage_val_honest = _coverage(y_val_meas, p10_val_raw_meas, p90_val_raw_meas)
+            # For downstream metrics that need widened val intervals across all rows
+            p10_val = p10_val_raw - self.conformity_offset
+            p90_val = p90_val_raw + self.conformity_offset
+        elif n_val_total >= 5:
+            # Too small for a split; fall back to non-split calibration but
+            # the coverage number is still tautological — log a warning.
             scores = np.maximum(
                 p10_val_raw - y_val.values,
                 y_val.values - p90_val_raw,
             )
-            level = min(1.0, (1 - alpha) * (1 + 1.0 / n_cal))
+            level = min(1.0, (1 - alpha) * (1 + 1.0 / n_val_total))
             q_hat = float(np.quantile(scores, level))
             self.conformity_offset = max(0.0, q_hat)
-            logger.info(
-                "CQR conformity offset for %s h=%d: %.4f (n_cal=%d, level=%.3f)",
-                self.commodity, self.horizon,
-                self.conformity_offset, n_cal, level,
+            p10_val = p10_val_raw - self.conformity_offset
+            p90_val = p90_val_raw + self.conformity_offset
+            coverage_val_honest = _coverage(y_val.values, p10_val, p90_val)
+            logger.warning(
+                "Val set too small (n=%d) for split conformal; val coverage is "
+                "tautological. Use test-set coverage as the deployment metric.",
+                n_val_total,
             )
         else:
             self.conformity_offset = 0.0
-
-        # Apply widening to val intervals (tautological ≥90% by construction)
-        p10_val = p10_val_raw - self.conformity_offset
-        p90_val = p90_val_raw + self.conformity_offset
+            p10_val = p10_val_raw
+            p90_val = p90_val_raw
+            coverage_val_honest = _coverage(y_val.values, p10_val, p90_val)
 
         # ------------------------------------------------------------------
         # 7. Honest out-of-sample test metrics (2023–2024)
@@ -512,7 +547,7 @@ class PriceEnsemble:
             rmse_val=_rmse(y_val.values, p50_val),
             n_train=len(y_train),
             n_val=len(y_val),
-            coverage_90=_coverage(y_val.values, p10_val, p90_val),
+            coverage_90=coverage_val_honest,
             mape_test=mape_test,
             rmse_test=rmse_test,
             coverage_90_test=cov_test,
@@ -608,15 +643,19 @@ class PriceEnsemble:
         )
 
     def save(self, path: Path) -> None:
-        """Persist ensemble to disk as a pickle file."""
+        """Persist ensemble to disk as a pickle file + HMAC-SHA256 sidecar."""
+        from backend.models._signing import sign_artifact
         path.parent.mkdir(parents=True, exist_ok=True)
         with open(path, "wb") as f:
             pickle.dump(self, f, protocol=pickle.HIGHEST_PROTOCOL)
+        sign_artifact(path)
         logger.info("Saved model to %s", path)
 
     @staticmethod
     def load(path: Path) -> PriceEnsemble:
-        """Load a persisted ensemble from disk."""
+        """Load a persisted ensemble; verifies HMAC when key is configured."""
+        from backend.models._signing import ensure_verified_or_fail
+        ensure_verified_or_fail(path)
         with open(path, "rb") as f:
             model = pickle.load(f)
         logger.info("Loaded model from %s", path)

@@ -3,7 +3,7 @@
  * Follows the parallel Promise.all pattern from useAcreageForecast.ts.
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 
 const API_BASE =
   process.env.NEXT_PUBLIC_PREDICTION_API_URL?.replace(/\/price$/, '/yield') ||
@@ -49,14 +49,37 @@ export interface YieldHistoryItem {
   error_pct: number | null;
 }
 
+export interface YieldAccuracyWeekItem {
+  crop: string;
+  week: number;
+  avg_pct_error: number | null;
+  avg_coverage: number | null;
+  baseline_rrmse: number | null;
+  n_counties: number;
+}
+
+export interface YieldModelMetadata {
+  crop: string;
+  model_ver: string | null;
+  n_weeks: number;
+  n_weeks_pass_gate: number;
+  gate_status: 'pass' | 'partial' | 'fail';
+  avg_val_rrmse: number | null;
+  avg_test_rrmse: number | null;
+  avg_baseline_rrmse: number | null;
+  has_weather_features: boolean;
+  gate_threshold_pct: number | null;
+}
+
 // ---- Fetch Helper ----
 
-async function fetchJson<T>(url: string): Promise<T | null> {
+async function fetchJson<T>(url: string, signal?: AbortSignal): Promise<T | null> {
   try {
-    const resp = await fetch(url);
+    const resp = await fetch(url, { signal });
     if (!resp.ok) return null;
     return (await resp.json()) as T;
-  } catch {
+  } catch (err) {
+    if ((err as { name?: string })?.name === 'AbortError') throw err;
     return null;
   }
 }
@@ -73,50 +96,71 @@ export function useYieldForecast(
   const [mapData, setMapData] = useState<YieldMapItem[]>([]);
   const [mapWeek, setMapWeek] = useState<number | null>(null);
   const [history, setHistory] = useState<YieldHistoryItem[]>([]);
+  const [metadata, setMetadata] = useState<YieldModelMetadata | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchAll = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+  const fetchAll = useCallback(
+    async (signal?: AbortSignal) => {
+      setLoading(true);
+      setError(null);
 
-    try {
-      const cropYear = year || new Date().getFullYear();
-      const weekParam = week ? `&week=${week}` : '';
+      try {
+        const cropYear = year || new Date().getFullYear();
+        const weekParam = week ? `&week=${week}` : '';
 
-      // Fetch in parallel
-      const [forecastData, mapResponse, historyData] = await Promise.all([
-        fips
-          ? fetchJson<YieldForecast>(
-              `${API_BASE}/?fips=${fips}&crop=${crop}&year=${cropYear}`,
-            )
-          : Promise.resolve(null),
-        fetchJson<YieldMapResponse>(
-          `${API_BASE}/map?crop=${crop}&year=${cropYear}${weekParam}`,
-        ),
-        fips
-          ? fetchJson<YieldHistoryItem[]>(
-              `${API_BASE}/history?fips=${fips}&crop=${crop}&start_year=2015`,
-            )
-          : Promise.resolve(null),
-      ]);
+        const [forecastData, mapResponse, historyData, metadataData] = await Promise.all([
+          fips
+            ? fetchJson<YieldForecast>(
+                `${API_BASE}/?fips=${fips}&crop=${crop}&year=${cropYear}`,
+                signal,
+              )
+            : Promise.resolve(null),
+          fetchJson<YieldMapResponse>(
+            `${API_BASE}/map?crop=${crop}&year=${cropYear}${weekParam}`,
+            signal,
+          ),
+          fips
+            ? fetchJson<YieldHistoryItem[]>(
+                `${API_BASE}/history?fips=${fips}&crop=${crop}&start_year=2015`,
+                signal,
+              )
+            : Promise.resolve(null),
+          fetchJson<YieldModelMetadata>(
+            `${API_BASE}/metadata?crop=${crop}`,
+            signal,
+          ),
+        ]);
 
-      setForecast(forecastData);
-      setMapData(mapResponse?.counties || []);
-      setMapWeek(mapResponse?.week || null);
-      setHistory(historyData || []);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch yield data');
-    } finally {
-      setLoading(false);
-    }
-  }, [fips, crop, year, week]);
+        if (signal?.aborted) return;
+
+        setForecast(forecastData);
+        setMapData(mapResponse?.counties || []);
+        setMapWeek(mapResponse?.week || null);
+        setHistory(historyData || []);
+        setMetadata(metadataData);
+      } catch (err) {
+        if ((err as { name?: string })?.name === 'AbortError') return;
+        setError(err instanceof Error ? err.message : 'Failed to fetch yield data');
+      } finally {
+        if (!signal?.aborted) setLoading(false);
+      }
+    },
+    [fips, crop, year, week],
+  );
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchAll(controller.signal);
+    return () => controller.abort();
+  }, [fetchAll]);
 
   return {
     forecast,
     mapData,
     mapWeek,
     history,
+    metadata,
     loading,
     error,
     fetchAll,

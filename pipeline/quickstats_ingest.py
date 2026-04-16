@@ -1021,11 +1021,11 @@ def run_ingestion(
     logger.info(f"Wrote {state_total} state parquet files")
     logger.info(f"Wrote Athena-optimized partitions to {athena_dir}")
 
-    manifest["last_success"] = datetime.now(timezone.utc).isoformat()
+    manifest["last_ingest_complete"] = datetime.now(timezone.utc).isoformat()
     save_manifest(manifest)
 
     logger.info("\n" + "=" * 60)
-    logger.info("INGESTION COMPLETE")
+    logger.info("INGESTION COMPLETE (local parquet ready; awaiting S3 upload)")
     logger.info("=" * 60)
 
     return True

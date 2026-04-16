@@ -1,13 +1,17 @@
 """FastAPI router for crop yield prediction endpoints.
 
 Base path: /api/v1/predict/yield
-Three endpoints:
+Endpoints:
   GET /           — Single county forecast
   GET /map        — All counties for choropleth
   GET /history    — Historical forecast vs actual
+  GET /accuracy   — Per-week walk-forward accuracy (§5.3.D)
+  GET /metadata   — Per-crop model metadata + deployment gate status
 """
 
+import json
 from datetime import date
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import Numeric, select, func, case
@@ -21,9 +25,12 @@ from backend.models.schemas import (
     YieldHistoryItem,
     YieldMapItem,
     YieldMapResponse,
+    YieldModelMetadataResponse,
 )
 
 router = APIRouter()
+
+ARTIFACTS_DIR = Path(__file__).parent.parent / "artifacts" / "yield"
 
 
 def _get_yield_model(request: Request, crop: str, week: int):
@@ -274,3 +281,27 @@ async def get_yield_accuracy(
         )
         for row in rows
     ]
+
+
+@router.get("/metadata", response_model=YieldModelMetadataResponse)
+async def get_yield_metadata(
+    crop: str = Query(..., pattern="^(corn|soybean|wheat)$"),
+):
+    """Return the per-crop training summary so the UI can render an honest
+    performance banner alongside the forecast.
+
+    Read from artifacts/yield/{crop}/summary.json (written by train_yield.py).
+    404 if the crop has never been trained.
+    """
+    summary_path = ARTIFACTS_DIR / crop / "summary.json"
+    if not summary_path.exists():
+        raise HTTPException(
+            status_code=404,
+            detail=f"No training summary for {crop}. Run train_yield.py first.",
+        )
+    try:
+        with open(summary_path) as f:
+            data = json.load(f)
+    except (OSError, json.JSONDecodeError) as exc:
+        raise HTTPException(status_code=500, detail=f"Could not read summary: {exc}")
+    return YieldModelMetadataResponse(**data)

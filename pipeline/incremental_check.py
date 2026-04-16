@@ -76,7 +76,7 @@ def check_counts(api_key: str, manifest: dict) -> tuple[bool, dict]:
                     count = int(data.get("count", 0))
                     current_counts[key] = count
 
-                    prev_count = manifest.get("record_counts", {}).get(key, 0)
+                    prev_count = manifest.get("uploaded_record_counts", manifest.get("record_counts", {})).get(key, 0)
                     if count > prev_count:
                         logger.info(
                             f"  NEW DATA: {key}: {prev_count:,} -> {count:,} (+{count - prev_count:,})"
@@ -111,7 +111,7 @@ def check_counts(api_key: str, manifest: dict) -> tuple[bool, dict]:
             resp.raise_for_status()
             count = int(resp.json().get("count", 0))
             current_counts[key] = count
-            prev_count = manifest.get("record_counts", {}).get(key, 0)
+            prev_count = manifest.get("uploaded_record_counts", manifest.get("record_counts", {})).get(key, 0)
             if count > prev_count:
                 logger.info(f"  NEW COUNTY DATA: {key}: {prev_count:,} -> {count:,}")
                 has_new_data = True

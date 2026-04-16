@@ -122,11 +122,17 @@ def _futures_baseline_mape(
 
 
 def train_single(
-    commodity: str, horizon: int, local_only: bool = False
+    commodity: str, horizon: int, local_only: bool = False,
+    allow_failed_gate: bool = False,
 ) -> dict:
     """Train one PriceEnsemble for (commodity, horizon).
 
     Returns a summary dict with metrics and artifact path.
+
+    Gate: if val MAPE > futures_baseline + BASELINE_GATE_PP, the artifact is
+    written locally (for post-mortem analysis) but NOT uploaded to S3, and the
+    returned dict has status='gate_failed'. Pass allow_failed_gate=True to
+    override (e.g., deliberate benchmark runs).
     """
     logger.info("=== Training %s horizon=%d ===", commodity, horizon)
 
@@ -197,20 +203,20 @@ def train_single(
     metrics.futures_baseline_mape = baseline_mape
 
     # Deployment gate check
-    model_beats_baseline = metrics.mape_val <= baseline_mape + BASELINE_GATE_PP
-    if not model_beats_baseline:
+    gate_passed = metrics.mape_val <= baseline_mape + BASELINE_GATE_PP
+    if not gate_passed:
         logger.warning(
             "BASELINE GATE FAILED: %s h=%d model MAPE=%.2f%% > futures MAPE=%.2f%% + %.1fpp. "
-            "Model will operate in signal-only mode.",
+            "Artifact will be written locally for analysis but NOT uploaded to S3 "
+            "(pass --allow-failed-gate to override).",
             commodity, horizon, metrics.mape_val, baseline_mape, BASELINE_GATE_PP,
         )
 
-    # 6. Save artifact locally
+    # 6. Save artifact locally (always — we want the post-mortem even on failure)
     artifact_dir = ARTIFACTS_DIR / commodity / f"horizon_{horizon}"
     artifact_path = artifact_dir / "ensemble.pkl"
     ensemble.save(artifact_path)
 
-    # Save metrics JSON alongside
     metrics_dict = {
         "commodity": commodity,
         "horizon": horizon,
@@ -219,7 +225,8 @@ def train_single(
         "mape_val": round(metrics.mape_val, 4),
         "rmse_val": round(metrics.rmse_val, 4),
         "futures_baseline_mape": round(baseline_mape, 4),
-        "beats_baseline": model_beats_baseline,
+        "gate_passed": gate_passed,
+        "beats_baseline": gate_passed,  # kept for backward compat
         "coverage_90": round(metrics.coverage_90, 4),
         "conformity_offset": round(ensemble.conformity_offset, 4),
         "mape_test": round(metrics.mape_test, 4),
@@ -233,16 +240,26 @@ def train_single(
     with open(metrics_path, "w") as f:
         json.dump(metrics_dict, f, indent=2)
 
-    # 7. Upload to S3
-    if not local_only:
+    # 7. Upload to S3 only if the gate passed (or override)
+    upload_blocked_by_gate = (not gate_passed) and (not allow_failed_gate)
+    if upload_blocked_by_gate:
+        logger.warning(
+            "S3 upload BLOCKED for %s h=%d — gate failed. Artifact retained at %s",
+            commodity, horizon, artifact_path,
+        )
+        status = "gate_failed"
+    elif local_only:
+        status = "trained"
+    else:
         _upload_to_s3(artifact_path, commodity, horizon)
         _upload_to_s3(metrics_path, commodity, horizon)
+        status = "trained"
 
     logger.info(
-        "Completed %s h=%d — MAPE_val=%.2f%%, baseline=%.2f%%, beats=%s",
-        commodity, horizon, metrics.mape_val, baseline_mape, model_beats_baseline,
+        "Completed %s h=%d — MAPE_val=%.2f%%, baseline=%.2f%%, gate_passed=%s, status=%s",
+        commodity, horizon, metrics.mape_val, baseline_mape, gate_passed, status,
     )
-    return {**metrics_dict, "status": "trained", "artifact_path": str(artifact_path)}
+    return {**metrics_dict, "status": status, "artifact_path": str(artifact_path)}
 
 
 # ---------------------------------------------------------------------------
@@ -251,12 +268,19 @@ def train_single(
 
 
 def _upload_to_s3(local_path: Path, commodity: str, horizon: int) -> None:
-    """Upload a single artifact file to S3."""
+    """Upload a single artifact file to S3, plus its .sig sidecar if present."""
     try:
         import boto3
 
         s3 = boto3.client("s3", region_name="us-east-2")
         s3_key = f"{S3_PREFIX}/{commodity}/horizon_{horizon}/{local_path.name}"
+
+        sig_path = local_path.with_suffix(local_path.suffix + ".sig")
+        if sig_path.exists():
+            try:
+                s3.upload_file(str(sig_path), S3_BUCKET, s3_key + ".sig")
+            except Exception as sig_exc:
+                logger.warning("Signature upload failed for %s: %s", sig_path, sig_exc)
         s3.upload_file(str(local_path), S3_BUCKET, s3_key)
         logger.info("Uploaded %s -> s3://%s/%s", local_path.name, S3_BUCKET, s3_key)
     except Exception as e:
@@ -272,6 +296,7 @@ def train_all(
     commodities: list[str] | None = None,
     horizons: list[int] | None = None,
     local_only: bool = False,
+    allow_failed_gate: bool = False,
 ) -> list[dict]:
     """Train all requested (commodity, horizon) combinations.
 
@@ -287,7 +312,11 @@ def train_all(
             n = i * len(horizons) + j + 1
             logger.info("--- [%d/%d] %s horizon=%d ---", n, total, commodity, horizon)
             try:
-                result = train_single(commodity, horizon, local_only=local_only)
+                result = train_single(
+                    commodity, horizon,
+                    local_only=local_only,
+                    allow_failed_gate=allow_failed_gate,
+                )
                 results.append(result)
             except Exception as e:
                 logger.error(
@@ -303,11 +332,12 @@ def train_all(
 
     # Summary
     trained = sum(1 for r in results if r.get("status") == "trained")
+    gate_failed = sum(1 for r in results if r.get("status") == "gate_failed")
     failed = sum(1 for r in results if r.get("status") == "error")
     skipped = sum(1 for r in results if r.get("status") == "skipped")
     logger.info(
-        "Training complete: %d trained, %d skipped, %d failed out of %d total",
-        trained, skipped, failed, total,
+        "Training complete: %d trained, %d gate-failed (not uploaded), %d skipped, %d errored out of %d total",
+        trained, gate_failed, skipped, failed, total,
     )
 
     # Save overall summary
@@ -325,6 +355,11 @@ def main():
     parser.add_argument("--commodity", type=str, choices=COMMODITIES, help="Train single commodity")
     parser.add_argument("--horizon", type=int, choices=HORIZONS, help="Train single horizon")
     parser.add_argument("--local-only", action="store_true", help="Skip S3 upload")
+    parser.add_argument(
+        "--allow-failed-gate",
+        action="store_true",
+        help="Upload artifacts to S3 even if the baseline gate fails (default: block upload)",
+    )
     args = parser.parse_args()
 
     commodities = [args.commodity] if args.commodity else None
@@ -334,6 +369,7 @@ def main():
         commodities=commodities,
         horizons=horizons,
         local_only=args.local_only,
+        allow_failed_gate=args.allow_failed_gate,
     )
 
     # Exit with error code if any failures

@@ -54,9 +54,12 @@ class AcreageForecastResponse(BaseModel):
     level: str  # 'national' | 'state'
     state_fips: str | None = None
     state_name: str | None = None
-    forecast_acres_millions: float
-    p10_acres_millions: float | None = None
-    p90_acres_millions: float | None = None
+    # Raw acres (e.g. 92_800_000 for 92.8M acres). The `_millions` suffix on
+    # prior versions was misleading — the DB stored raw acres and the suffix
+    # never matched the numeric scale.
+    forecast_acres: float
+    p10_acres: float | None = None
+    p90_acres: float | None = None
     corn_soy_ratio: float | None = None
     corn_soy_ratio_pctile: int | None = None
     key_driver: str | None = None
@@ -68,7 +71,7 @@ class AcreageForecastResponse(BaseModel):
 class StateAcreageItem(BaseModel):
     state_fips: str
     state: str
-    forecast_acres_millions: float
+    forecast_acres: float  # raw acres, see AcreageForecastResponse
     vs_prior_pct: float | None = None
 
 
@@ -202,3 +205,23 @@ class YieldAccuracyWeekItem(BaseModel):
     avg_coverage: float | None = None  # fraction of forecasts within p10–p90
     baseline_rrmse: float | None = None  # county 5yr mean baseline
     n_counties: int = 0
+
+
+class YieldModelMetadataResponse(BaseModel):
+    """Per-crop model metadata for the frontend performance banner.
+
+    The yield model surfaces in the dashboard even when its deployment gate
+    fails (class-project use case). This response gives the UI enough data to
+    annotate it honestly ("experimental" / "production") rather than letting
+    readers treat gate-failed forecasts as production-quality.
+    """
+    crop: str
+    model_ver: str | None = None
+    n_weeks: int = 0
+    n_weeks_pass_gate: int = 0
+    gate_status: str  # "pass" | "partial" | "fail"
+    avg_val_rrmse: float | None = None
+    avg_test_rrmse: float | None = None
+    avg_baseline_rrmse: float | None = None
+    has_weather_features: bool = False
+    gate_threshold_pct: float | None = None

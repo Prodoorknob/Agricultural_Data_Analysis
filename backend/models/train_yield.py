@@ -604,6 +604,54 @@ def upload_to_s3():
         logger.warning("S3 upload failed: %s", exc)
 
 
+def _write_crop_summaries(all_metrics: list[dict]) -> None:
+    """Aggregate per-week metrics into one summary.json per crop.
+
+    The yield forecast is surfaced in the dashboard even when the deployment
+    gate fails (this is a class project; performance is annotated in-UI
+    rather than gated at the model layer). The summary gives the frontend
+    enough structured data to render an honest "Experimental" or "Production"
+    badge instead of silently publishing suspect numbers.
+    """
+    by_crop: dict[str, list[dict]] = {}
+    for m in all_metrics:
+        by_crop.setdefault(m["crop"], []).append(m)
+
+    for crop, ms in by_crop.items():
+        weeks_with_gate = [bool(m.get("beats_baseline")) for m in ms]
+        val_rrmses = [m["val_rrmse"] for m in ms if m.get("val_rrmse") is not None]
+        test_rrmses = [m["test_rrmse"] for m in ms if m.get("test_rrmse") is not None]
+        baselines = [
+            m["baselines"].get("county_mean_rrmse")
+            for m in ms if m.get("baselines") and m["baselines"].get("county_mean_rrmse") is not None
+        ]
+
+        n_pass = sum(1 for g in weeks_with_gate if g)
+        gate_status = "pass" if n_pass == len(ms) else ("partial" if n_pass > 0 else "fail")
+
+        summary = {
+            "crop": crop,
+            "model_ver": ms[0].get("model_ver") if ms else None,
+            "n_weeks": len(ms),
+            "n_weeks_pass_gate": n_pass,
+            "gate_status": gate_status,
+            "avg_val_rrmse": round(float(np.mean(val_rrmses)), 2) if val_rrmses else None,
+            "avg_test_rrmse": round(float(np.mean(test_rrmses)), 2) if test_rrmses else None,
+            "avg_baseline_rrmse": round(float(np.mean(baselines)), 2) if baselines else None,
+            "has_weather_features": any(m.get("has_weather_features") for m in ms),
+            "gate_threshold_pct": BASELINE_GATE_PCT,
+        }
+
+        summary_path = ARTIFACTS_DIR / crop / "summary.json"
+        summary_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(summary_path, "w") as f:
+            json.dump(summary, f, indent=2)
+        logger.info(
+            "  Wrote %s: gate=%s (%d/%d weeks pass)",
+            summary_path, gate_status, n_pass, len(ms),
+        )
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train crop yield prediction models")
     parser.add_argument("--commodity", default="all", help="corn|soybean|wheat|all")
@@ -674,6 +722,10 @@ if __name__ == "__main__":
             m["baselines"].get("county_mean_rrmse", 0),
             status, wx_tag, m["n_features"],
         )
+
+    # Per-crop aggregate summary (consumed by GET /api/v1/predict/yield/metadata
+    # so the frontend can annotate models that fail the deployment gate).
+    _write_crop_summaries(all_metrics)
 
     if args.upload_s3:
         upload_to_s3()

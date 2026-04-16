@@ -1,3 +1,4 @@
+import asyncio
 from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -31,11 +32,17 @@ def _get_ensemble(request: Request, commodity: str, horizon_months: int):
     return ensemble
 
 
-def _build_features(commodity: str, horizon_months: int):
-    """Build feature row for inference. Runs synchronously (DB queries)."""
+def _build_features_sync(commodity: str, horizon_months: int):
+    """Build feature row for inference. Synchronous (psycopg2 DB queries)."""
     from backend.features.price_features import build_price_features
 
     return build_price_features(commodity, date.today(), horizon_months)
+
+
+async def _build_features(commodity: str, horizon_months: int):
+    """Async wrapper — offloads the sync DB work to a threadpool so the
+    uvicorn event loop stays responsive during feature construction."""
+    return await asyncio.to_thread(_build_features_sync, commodity, horizon_months)
 
 
 def _horizon_month_str(horizon_months: int) -> str:
@@ -56,7 +63,7 @@ async def get_price_forecast(
     ensemble = _get_ensemble(request, commodity, horizon_months)
 
     try:
-        features = _build_features(commodity, horizon_months)
+        features = await _build_features(commodity, horizon_months)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Feature build failed: {exc}")
 
@@ -120,7 +127,7 @@ async def get_price_probability(
     ensemble = _get_ensemble(request, commodity, horizon_months)
 
     try:
-        features = _build_features(commodity, horizon_months)
+        features = await _build_features(commodity, horizon_months)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Feature build failed: {exc}")
 

@@ -187,14 +187,18 @@ class YieldModel:
         return "Unknown"
 
     def save(self, path: Path) -> None:
-        """Serialize model to pickle."""
+        """Serialize model to pickle + HMAC-SHA256 sidecar."""
+        from backend.models._signing import sign_artifact
         path.parent.mkdir(parents=True, exist_ok=True)
         with open(path, "wb") as f:
             pickle.dump(self, f, protocol=pickle.HIGHEST_PROTOCOL)
+        sign_artifact(path)
 
     @staticmethod
     def load(path: Path) -> "YieldModel":
-        """Deserialize model from pickle."""
+        """Deserialize model from pickle; verifies HMAC when key is configured."""
+        from backend.models._signing import ensure_verified_or_fail
+        ensure_verified_or_fail(path)
         with open(path, "rb") as f:
             return pickle.load(f)
 

@@ -129,9 +129,28 @@ def _query_nass_acreage(state_fips: str, commodity: str, year: int) -> float | N
     return None
 
 
+# Allowlists for dynamic column names below. SQLAlchemy parametrized queries
+# cannot bind column/table identifiers, only values, so we interpolate from a
+# fixed vocabulary and raise on anything off-list — prevents any future caller
+# from passing attacker-controlled strings through an f-string.
+_ERS_COST_FIELDS = frozenset({
+    "variable_cost_per_bu",
+    "total_cost_per_bu",
+    "fertilizer_cost_acre",  # added in migration 002 per CLAUDE.md
+})
+
+_FERTILIZER_PRODUCTS = frozenset({
+    "anhydrous_ammonia_ton",
+    "dap_ton",
+    "potash_ton",
+})
+
+
 @lru_cache(maxsize=256)
 def _query_ers_cost(commodity: str, year: int, field: str) -> float | None:
     """Get ERS production cost for a commodity/year."""
+    if field not in _ERS_COST_FIELDS:
+        raise ValueError(f"Unknown ers_production_costs field: {field!r}")
     engine = get_sync_engine()
     sql = text(f"SELECT {field} FROM ers_production_costs WHERE commodity = :c AND year = :y")
     with engine.connect() as conn:
@@ -142,6 +161,8 @@ def _query_ers_cost(commodity: str, year: int, field: str) -> float | None:
 @lru_cache(maxsize=256)
 def _query_fertilizer_price(as_of_date: date, product: str) -> float | None:
     """Get the most recent fertilizer price on or before as_of_date."""
+    if product not in _FERTILIZER_PRODUCTS:
+        raise ValueError(f"Unknown ers_fertilizer_prices column: {product!r}")
     engine = get_sync_engine()
     year = as_of_date.year
     quarter = (as_of_date.month - 1) // 3 + 1

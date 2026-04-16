@@ -128,9 +128,9 @@ async def get_acreage_forecast(
         level=level,
         state_fips=target_fips if level == "state" else None,
         state_name=FIPS_TO_STATE.get(target_fips) if level == "state" else None,
-        forecast_acres_millions=float(row.forecast_acres),
-        p10_acres_millions=float(row.p10_acres) if row.p10_acres else None,
-        p90_acres_millions=float(row.p90_acres) if row.p90_acres else None,
+        forecast_acres=float(row.forecast_acres),
+        p10_acres=float(row.p10_acres) if row.p10_acres else None,
+        p90_acres=float(row.p90_acres) if row.p90_acres else None,
         corn_soy_ratio=float(row.corn_soy_ratio) if row.corn_soy_ratio else None,
         corn_soy_ratio_pctile=ratio_pctile,
         key_driver=row.key_driver,
@@ -146,7 +146,13 @@ async def get_states_forecast(
     year: Optional[int] = Query(default=None),
     db: AsyncSession = Depends(get_db),
 ):
-    """Get all state-level forecasts for a commodity/year."""
+    """Get all state-level forecasts for a commodity/year.
+
+    The unique constraint on acreage_forecasts is (year, state_fips,
+    commodity, model_ver) — re-running inference with a bumped model_ver
+    appends rather than replaces, so a state can legitimately have multiple
+    rows. Dedupe here to the latest created_at per state.
+    """
     from backend.models.db_tables import AcreageForecast
 
     if year is None:
@@ -159,15 +165,25 @@ async def get_states_forecast(
             AcreageForecast.commodity == commodity,
             AcreageForecast.state_fips != "00",  # exclude national
         )
-        .order_by(AcreageForecast.forecast_acres.desc())
+        .order_by(AcreageForecast.state_fips, AcreageForecast.created_at.desc())
     )
     result = await db.execute(stmt)
-    rows = result.scalars().all()
+    all_rows = result.scalars().all()
 
-    if not rows:
+    if not all_rows:
         raise HTTPException(404, f"No state forecasts for {commodity} {year}")
 
-    # Get prior year for comparison
+    # Keep only the most recent forecast per state_fips
+    seen: set[str] = set()
+    rows = []
+    for r in all_rows:
+        if r.state_fips in seen:
+            continue
+        seen.add(r.state_fips)
+        rows.append(r)
+    rows.sort(key=lambda r: float(r.forecast_acres), reverse=True)
+
+    # Get prior year (dedupe the same way)
     stmt_prior = (
         select(AcreageForecast)
         .where(
@@ -175,9 +191,13 @@ async def get_states_forecast(
             AcreageForecast.commodity == commodity,
             AcreageForecast.state_fips != "00",
         )
+        .order_by(AcreageForecast.state_fips, AcreageForecast.created_at.desc())
     )
     prior_result = await db.execute(stmt_prior)
-    prior_map = {r.state_fips: float(r.forecast_acres) for r in prior_result.scalars().all()}
+    prior_map: dict[str, float] = {}
+    for r in prior_result.scalars().all():
+        if r.state_fips not in prior_map:
+            prior_map[r.state_fips] = float(r.forecast_acres)
 
     states = []
     for row in rows:
@@ -189,7 +209,7 @@ async def get_states_forecast(
         states.append(StateAcreageItem(
             state_fips=fips,
             state=FIPS_TO_STATE.get(fips, f"FIPS {fips}"),
-            forecast_acres_millions=acres,
+            forecast_acres=acres,
             vs_prior_pct=vs_prior,
         ))
 

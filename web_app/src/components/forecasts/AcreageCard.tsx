@@ -68,7 +68,7 @@ export default function AcreageCard({
                 color: 'var(--text)',
               }}
             >
-              {formatCompact(forecastAcres * 1e6)}
+              {formatCompact(forecastAcres)}
             </span>
             <span className="text-[14px]" style={{ color: 'var(--text3)', fontFamily: 'var(--font-mono)' }}>
               acres
@@ -93,7 +93,7 @@ export default function AcreageCard({
                 />
               </div>
               <p className="text-[10px] mt-1" style={{ color: 'var(--text3)', fontFamily: 'var(--font-mono)' }}>
-                80% interval: {formatCompact(p10 * 1e6)}–{formatCompact(p90 * 1e6)}
+                80% interval: {formatCompact(p10)}–{formatCompact(p90)}
               </p>
             </div>
           )}
@@ -112,7 +112,7 @@ export default function AcreageCard({
               style={{ background: 'var(--surface2)' }}
             >
               <p className="text-[12px]" style={{ color: 'var(--text2)' }}>
-                USDA Prospective Plantings (Mar 31): <strong>{formatCompact(usdaProspective * 1e6)}</strong>.
+                USDA Prospective Plantings (Mar 31): <strong>{formatCompact(usdaProspective)}</strong>.
                 {usdaDeltaPct !== null && (
                   <> Our forecast is <strong style={{ color: usdaDeltaPct >= 0 ? 'var(--positive)' : 'var(--negative)' }}>
                     {usdaDeltaPct >= 0 ? '+' : ''}{usdaDeltaPct.toFixed(1)}%
@@ -125,11 +125,11 @@ export default function AcreageCard({
           {/* Top 5 states */}
           {topStates.length > 0 && (
             <div className="mt-3 flex flex-col gap-1">
-              {topStates.slice(0, 5).map((s) => (
-                <div key={s.state} className="flex items-center justify-between text-[12px]">
+              {topStates.slice(0, 5).map((s, i) => (
+                <div key={`${s.state}-${i}`} className="flex items-center justify-between text-[12px]">
                   <span style={{ color: 'var(--text2)' }}>{s.state}</span>
                   <span style={{ color: 'var(--text)', fontFamily: 'var(--font-mono)' }}>
-                    {formatCompact(s.forecastAcres * 1e6)}
+                    {formatCompact(s.forecastAcres)}
                   </span>
                 </div>
               ))}

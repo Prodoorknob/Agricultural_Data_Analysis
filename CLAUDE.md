@@ -359,3 +359,53 @@ python -m backend.models.train_yield --persist-accuracy --skip-cv --local-only
 # 5. Verify
 psql $DATABASE_URL -c "SELECT COUNT(*) FROM acreage_accuracy; SELECT COUNT(*) FROM yield_accuracy;"
 ```
+
+### End-to-End Review + Hardening (2026-04-16)
+
+Full-project audit produced 20 findings; all non-deferred items fixed in one pass. Plus two display bugs surfaced during verification, plus a yield retrospective feature for the class-project demo. No retraining or schema migrations required — all changes are code-only and backward-compatible at the DB layer.
+
+**Pipeline / Ops**
+- `pipeline/upload_to_s3.py`: multipart verification now uses `ChecksumAlgorithm=SHA256` + ContentLength match; per-file failures aggregated, function returns False if any upload failed. Previously MD5+ETag comparison was silently skipped on any file >8MB.
+- `pipeline/quickstats_ingest.py` + `upload_to_s3.py` + `incremental_check.py`: `record_counts` is now promoted to `uploaded_record_counts` only after a clean S3 upload. Previously the `last_success` stamp landed before upload, so a failed upload permanently suppressed re-ingestion.
+- `pipeline/cron_runner.sh`: per-mode `flock` re-exec guard (non-blocking); `TZ=America/Chicago` added to the docstring (users must set on the crontab itself). Thursday 10 AM yield+drought collision moved to 11 AM for drought.
+- `pipeline/validate_data.py`: content checks now run across top-10 states by row count, not one arbitrary `next(...)` state.
+- `pipeline/fetch_nass_historical.py`: yield-only rows retained (were being `dropna(subset=['acres_planted'])`-silently dropped, losing 15-20% of training matrix).
+
+**ML / Backend**
+- Training gates now enforced. `backend/models/train.py` (price) and `backend/models/train_acreage.py` (acreage) block S3 upload on gate fail. Override: `--allow-failed-gate`. Artifacts still written locally for post-mortem.
+- Yield gate policy is **surface with annotation** — class-project requirement. Artifact uploads regardless; `backend/models/train_yield.py` writes per-crop `artifacts/yield/{crop}/summary.json` via `_write_crop_summaries()`; new endpoint `GET /api/v1/predict/yield/metadata?crop=X` returns `gate_status` (pass / partial / fail), avg test RRMSE, baseline, and model version.
+- `backend/models/yield_inference.py`: feature construction now includes weather columns when the model was trained with them. Previously inference built only 5 NASS features and silently zero-filled weather, producing degraded predictions. Adds `load_weather_data()` + `compute_weather_features()` invocation at the top of the batch. Skips the (crop, week) entirely if weather is required and missing.
+- CQR calibration methodology fixed in `backend/models/price_model.py`. Val set now split 50/50 into calibration and measurement halves; reported `coverage_90` is from the held-out half. Previously the same val set fit the conformity offset *and* was used to report coverage — tautologically ≥90%.
+- Acreage national-rollup z-score bug fixed in `backend/models/acreage_model.py::compute_national_forecast`: stored interval is 80% (z=1.2816), not 90% (z=1.645). State sigma recovery was off by ~22%.
+- Pickle artifact signing added. `backend/models/_signing.py` provides HMAC-SHA256 sidecar `.sig` files written on `save()` and verified on `load()` when `MODEL_SIGNING_KEY` is set. Set `MODEL_REQUIRE_SIGNED=1` to refuse unverified loads. `backend/main.py::_download_from_s3` now fetches the matching `.sig` alongside the pickle. `train.py::_upload_to_s3` uploads the sig too.
+- Async event-loop fix in `backend/routers/price.py`: `_build_features` wrapped with `asyncio.to_thread`. Previously every `GET /` blocked uvicorn on synchronous psycopg2 DB reads.
+- SQL injection surface reduced in `backend/features/acreage_features.py`: `_query_ers_cost(field=...)` and `_query_fertilizer_price(product=...)` gated by frozenset allowlists (raise on unknown column name).
+
+**Frontend (`web_app/`)**
+- **Acreage unit rename (breaking schema change).** `backend/models/schemas.py` + `backend/routers/acreage.py`: `forecast_acres_millions` / `p10_acres_millions` / `p90_acres_millions` → `forecast_acres` / `p10_acres` / `p90_acres`. The stored value was always raw acres; the `_millions` suffix was misleading. Frontend updated in parallel — dropped four `* 1e6` multiplications in `AcreageCard.tsx`. Net: "92857.2B acres" now reads "92.8M acres". Requires backend redeploy to take effect in prod.
+- **Duplicate state rows fixed.** `backend/routers/acreage.py::get_states_forecast` dedupes on `(state_fips, created_at DESC)` and keeps the first row per state. Root cause: the `acreage_forecasts` unique constraint includes `model_ver`, so retraining appended rows rather than replacing. Same dedup applied to the prior-year YoY lookup.
+- **Yield Season Review component.** `web_app/src/components/forecasts/YieldSeasonReview.tsx` (new) + toggle wired into `forecasts/page.tsx` via `YieldSection`. Off-season default is "Last Season Review"; May–Oct default is "Current Season" (empty until week 1). The Review panel has crop tabs (corn / soybean / wheat), KPI strip (Test MAPE, gate status pill, best week, feature set), and a per-week RRMSE line chart (model vs county 5-yr baseline). Uses `/api/v1/predict/yield/accuracy` + `/api/v1/predict/yield/metadata`.
+- **P0 frontend bugs fixed.** `useYieldForecast` now fires via `useEffect` (was inert); wheat commodity key reconciled (frontend sends `wheat`, backend loads the generic wheat artifact); `AcreageCard` React key dedupe; acreage accuracy data piped into cards (USDA prospective + delta + test MAPE / baseline).
+- **Housekeeping.** `processData.ts` metadata-on-array anti-pattern removed (dead code, no consumers). `serviceData.ts::fetchParquet` accepts `AbortSignal`; `parseParquetBuffer` has a 30s defensive timeout to prevent promise hangs on malformed files.
+
+**Deferred** (by operator decision)
+- `.env` rotation: user flagged that committed .env values are placeholder-style and not worth rotating right now. Address before any public demo.
+
+**New CLI flags, endpoints, env vars**
+```
+Training CLI (S3 upload blocked on gate fail by default):
+  python -m backend.models.train --allow-failed-gate
+  python -m backend.models.train_acreage --allow-failed-gate
+  # Yield training always uploads; gate status surfaced via API instead.
+
+New endpoint:
+  GET /api/v1/predict/yield/metadata?crop={corn|soybean|wheat}
+  → YieldModelMetadataResponse { gate_status, avg_test_rrmse, avg_baseline_rrmse, n_weeks_pass_gate, ... }
+
+Renamed response fields (BREAKING):
+  forecast_acres_millions → forecast_acres   (acreage_forecasts endpoint family)
+
+Optional env vars:
+  MODEL_SIGNING_KEY=<hmac-secret>            # enables pickle signing
+  MODEL_REQUIRE_SIGNED=1                     # refuse unverified loads at startup
+```

@@ -19,6 +19,8 @@ Environment Variables:
 
 import os
 import sys
+import json
+import base64
 import hashlib
 import logging
 import argparse
@@ -26,6 +28,8 @@ from datetime import datetime, timezone
 
 import boto3
 from botocore.exceptions import ClientError
+
+MANIFEST_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "manifest.json")
 
 logging.basicConfig(
     level=logging.INFO,
@@ -58,6 +62,15 @@ def file_md5(filepath: str) -> str:
     return md5.hexdigest()
 
 
+def file_sha256_b64(filepath: str) -> str:
+    """Compute base64-encoded SHA256 of a local file (matches S3 ChecksumSHA256 for single-part uploads)."""
+    h = hashlib.sha256()
+    with open(filepath, "rb") as f:
+        for chunk in iter(lambda: f.read(65536), b""):
+            h.update(chunk)
+    return base64.b64encode(h.digest()).decode()
+
+
 def s3_object_exists(s3_client, bucket: str, key: str) -> bool:
     """Check if an S3 object exists."""
     try:
@@ -86,28 +99,50 @@ def backup_existing(s3_client, bucket: str, key: str, backup_prefix: str):
 def upload_file(
     s3_client, local_path: str, bucket: str, s3_key: str, dry_run: bool = False
 ) -> bool:
-    """Upload a local file to S3 with MD5 verification."""
+    """Upload a local file to S3 with SHA256 integrity verification.
+
+    Uses ChecksumAlgorithm=SHA256 so boto3's managed transfer verifies each
+    part's checksum at upload time. S3 rejects the CompleteMultipartUpload
+    (or single-part PUT) if any part's checksum mismatches. Also performs a
+    redundant ContentLength check against the local file size.
+    """
     if dry_run:
         logger.info(f"  [DRY RUN] Would upload: {local_path} -> s3://{bucket}/{s3_key}")
         return True
 
-    local_md5 = file_md5(local_path)
-    logger.info(f"  Uploading: {os.path.basename(local_path)} -> s3://{bucket}/{s3_key}")
+    local_size = os.path.getsize(local_path)
+    logger.info(
+        f"  Uploading: {os.path.basename(local_path)} ({local_size:,} bytes) -> s3://{bucket}/{s3_key}"
+    )
 
-    s3_client.upload_file(local_path, bucket, s3_key)
+    s3_client.upload_file(
+        local_path,
+        bucket,
+        s3_key,
+        ExtraArgs={"ChecksumAlgorithm": "SHA256"},
+    )
 
-    # Verify upload
-    response = s3_client.head_object(Bucket=bucket, Key=s3_key)
-    s3_etag = response["ETag"].strip('"')
-
-    # Note: ETag for non-multipart uploads equals MD5
-    if s3_etag == local_md5:
-        logger.info(f"    MD5 verified: {local_md5}")
-    else:
-        logger.warning(
-            f"    MD5 mismatch (local={local_md5}, s3={s3_etag}). "
-            "This may be expected for multipart uploads."
+    response = s3_client.head_object(Bucket=bucket, Key=s3_key, ChecksumMode="ENABLED")
+    s3_size = response["ContentLength"]
+    if s3_size != local_size:
+        raise RuntimeError(
+            f"Upload verification failed for s3://{bucket}/{s3_key}: "
+            f"size mismatch (local={local_size}, s3={s3_size})"
         )
+
+    s3_checksum = response.get("ChecksumSHA256")
+    if s3_checksum and "-" not in s3_checksum:
+        local_sha = file_sha256_b64(local_path)
+        if s3_checksum != local_sha:
+            raise RuntimeError(
+                f"Upload verification failed for s3://{bucket}/{s3_key}: "
+                f"SHA256 mismatch (local={local_sha}, s3={s3_checksum})"
+            )
+        logger.info(f"    Verified: {s3_size:,} bytes, SHA256={s3_checksum}")
+    elif s3_checksum:
+        logger.info(f"    Verified: {s3_size:,} bytes, multipart-SHA256={s3_checksum}")
+    else:
+        logger.info(f"    Verified: {s3_size:,} bytes (no checksum returned)")
 
     return True
 
@@ -120,11 +155,27 @@ def upload_all(
 ):
     """Upload all parquet files from source directory to S3.
 
-    Uploads to both browser-fetch and Athena-optimized paths.
+    Uploads to both browser-fetch and Athena-optimized paths. Per-file failures
+    are caught and logged; the function returns False if any upload failed so
+    the caller (cron_runner.sh) can suppress downstream steps that depend on a
+    clean S3 state (notably the `last_success` stamp in quickstats_ingest).
     """
     s3_client = get_s3_client(region)
 
-    # 1. Upload browser-fetch layout: partitioned_states/{STATE}.parquet
+    succeeded = 0
+    failed: list[tuple[str, str]] = []
+
+    def _try_upload(local_path: str, s3_key: str) -> None:
+        nonlocal succeeded
+        try:
+            if do_backup:
+                backup_existing(s3_client, S3_BUCKET, s3_key, S3_BACKUP_PREFIX)
+            upload_file(s3_client, local_path, S3_BUCKET, s3_key, dry_run)
+            succeeded += 1
+        except (ClientError, RuntimeError, OSError) as e:
+            logger.error(f"  FAILED: {local_path} -> s3://{S3_BUCKET}/{s3_key}: {e}")
+            failed.append((s3_key, str(e)))
+
     logger.info("=" * 60)
     logger.info("Uploading browser-fetch layout (partitioned_states/)")
     logger.info("=" * 60)
@@ -139,13 +190,8 @@ def upload_all(
     for filename in sorted(parquet_files):
         local_path = os.path.join(source_dir, filename)
         s3_key = f"{S3_BROWSER_PREFIX}/{filename}"
+        _try_upload(local_path, s3_key)
 
-        if do_backup:
-            backup_existing(s3_client, S3_BUCKET, s3_key, S3_BACKUP_PREFIX)
-
-        upload_file(s3_client, local_path, S3_BUCKET, s3_key, dry_run)
-
-    # 2. Upload Athena-optimized layout: athena_optimized/state_alpha={STATE}/data.parquet
     athena_source = os.path.join(source_dir, "athena_optimized")
     if os.path.exists(athena_source):
         logger.info("")
@@ -163,19 +209,49 @@ def upload_all(
                 continue
 
             s3_key = f"{S3_ATHENA_PREFIX}/{partition_dir}/data.parquet"
-
-            if do_backup:
-                backup_existing(s3_client, S3_BUCKET, s3_key, S3_BACKUP_PREFIX)
-
-            upload_file(s3_client, data_file, S3_BUCKET, s3_key, dry_run)
+            _try_upload(data_file, s3_key)
     else:
         logger.info("No Athena-optimized directory found, skipping Athena upload")
 
     logger.info("")
     logger.info("=" * 60)
-    logger.info("UPLOAD COMPLETE")
+    logger.info(f"UPLOAD SUMMARY: {succeeded} succeeded, {len(failed)} failed")
+    if failed:
+        for key, err in failed:
+            logger.error(f"  FAILED: {key} — {err}")
     logger.info("=" * 60)
-    return True
+
+    all_good = len(failed) == 0
+    if all_good and not dry_run:
+        _promote_manifest_after_upload()
+
+    return all_good
+
+
+def _promote_manifest_after_upload() -> None:
+    """Mark the current ingestion as durably published.
+
+    After a clean S3 upload, copy the local `record_counts` (written by
+    quickstats_ingest during the ingest phase) into `uploaded_record_counts`
+    and stamp `last_success` + `last_upload_success`. `incremental_check.py`
+    compares against `uploaded_record_counts`, so if the upload step crashes
+    the next cron run re-ingests instead of silently declaring "no new data".
+    """
+    if not os.path.exists(MANIFEST_PATH):
+        logger.warning("No manifest.json present; skipping upload stamp.")
+        return
+    try:
+        with open(MANIFEST_PATH) as f:
+            manifest = json.load(f)
+        now = datetime.now(timezone.utc).isoformat()
+        manifest["uploaded_record_counts"] = dict(manifest.get("record_counts", {}))
+        manifest["last_upload_success"] = now
+        manifest["last_success"] = now
+        with open(MANIFEST_PATH, "w") as f:
+            json.dump(manifest, f, indent=4, default=str)
+        logger.info(f"Manifest stamped: last_upload_success={now}")
+    except (OSError, json.JSONDecodeError) as e:
+        logger.warning(f"Could not update manifest after upload: {e}")
 
 
 def main():

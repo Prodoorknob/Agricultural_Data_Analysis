@@ -289,15 +289,19 @@ class AcreageEnsemble:
         return [name for name, _ in pairs[:n]]
 
     def save(self, path: Path):
-        """Serialize ensemble to disk."""
+        """Serialize ensemble to disk + HMAC-SHA256 sidecar."""
+        from backend.models._signing import sign_artifact
         path.parent.mkdir(parents=True, exist_ok=True)
         with open(path, "wb") as f:
             pickle.dump(self, f, protocol=pickle.HIGHEST_PROTOCOL)
+        sign_artifact(path)
         logger.info(f"Saved AcreageEnsemble to {path}")
 
     @staticmethod
     def load(path: Path) -> "AcreageEnsemble":
-        """Load ensemble from disk."""
+        """Load ensemble from disk; verifies HMAC when key is configured."""
+        from backend.models._signing import ensure_verified_or_fail
+        ensure_verified_or_fail(path)
         with open(path, "rb") as f:
             return pickle.load(f)
 
@@ -438,10 +442,20 @@ def apply_competition_constraint(
 
 
 def compute_national_forecast(state_df: pd.DataFrame) -> dict:
-    """Sum state-level predictions to national total with correlated uncertainty."""
+    """Sum state-level predictions to national total with correlated uncertainty.
+
+    The per-state p10/p90 stored on each prediction is an 80% symmetric
+    conformal interval (see calibrate_conformal, level=0.80), so σ is
+    recovered with the 80% z-score 1.2816 — not 1.645 (which is 90%).
+    Using 1.645 here was understating state sigma by ~22% and producing
+    a too-narrow national rollup.
+    """
+    # Two-sided 80% normal quantile: Φ⁻¹(0.90) ≈ 1.2816
+    Z_80 = 1.2816
+
     national_p50 = state_df["p50"].sum()
 
-    state_sigmas = (state_df["p90"] - state_df["p10"]) / (2 * 1.645)
+    state_sigmas = (state_df["p90"] - state_df["p10"]) / (2 * Z_80)
     state_variances = state_sigmas ** 2
 
     rho = 0.5
@@ -456,8 +470,8 @@ def compute_national_forecast(state_df: pd.DataFrame) -> dict:
 
     return {
         "p50": national_p50,
-        "p10": national_p50 - 1.645 * national_sigma,
-        "p90": national_p50 + 1.645 * national_sigma,
+        "p10": national_p50 - Z_80 * national_sigma,
+        "p90": national_p50 + Z_80 * national_sigma,
     }
 
 

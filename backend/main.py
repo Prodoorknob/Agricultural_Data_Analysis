@@ -17,7 +17,12 @@ HORIZONS = range(1, 7)
 
 
 def _download_from_s3(s3_key: str, local_path: Path) -> bool:
-    """Download a model artifact from S3 to local disk. Returns True on success."""
+    """Download a model artifact from S3 to local disk. Returns True on success.
+
+    Also attempts to download the matching .sig sidecar (for HMAC verification
+    at load time). A missing sig is not fatal — it only matters if
+    MODEL_REQUIRE_SIGNED=1 is set, in which case load() will refuse to unpickle.
+    """
     import boto3
     from botocore.exceptions import ClientError
 
@@ -26,6 +31,17 @@ def _download_from_s3(s3_key: str, local_path: Path) -> bool:
         local_path.parent.mkdir(parents=True, exist_ok=True)
         s3.download_file(settings.S3_BUCKET, s3_key, str(local_path))
         logger.info("Downloaded s3://%s/%s -> %s", settings.S3_BUCKET, s3_key, local_path)
+
+        # Best-effort fetch of the signature sidecar
+        sig_key = s3_key + ".sig"
+        sig_path = local_path.with_suffix(local_path.suffix + ".sig")
+        try:
+            s3.download_file(settings.S3_BUCKET, sig_key, str(sig_path))
+            logger.debug("Downloaded signature %s", sig_key)
+        except ClientError as sig_exc:
+            if sig_exc.response["Error"]["Code"] not in ("404", "NoSuchKey"):
+                logger.warning("Signature download failed for %s: %s", sig_key, sig_exc)
+
         return True
     except ClientError as exc:
         error_code = exc.response["Error"]["Code"]

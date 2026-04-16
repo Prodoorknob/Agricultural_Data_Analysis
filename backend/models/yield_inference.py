@@ -79,18 +79,28 @@ def run_inference(
     week: int,
     crop_year: int,
     nass_yields: pd.DataFrame | None = None,
+    weather_df: pd.DataFrame | None = None,
+    prism_normals: dict | None = None,
 ) -> int:
-    """Run yield inference for a given crop/week, upsert results to DB."""
+    """Run yield inference for a given crop/week, upsert results to DB.
+
+    Builds the full feature set the model was trained on (NASS history +
+    weather if the model expects it). If the model's feature_cols include
+    weather columns and weather data is missing, inference is skipped for
+    that (crop, week) rather than silently zero-filling — a degraded
+    prediction is worse than no prediction for a published forecast.
+    """
     model = load_model(crop, week)
     if model is None:
         logger.warning("No model for %s week %d. Skipping.", crop, week)
         return 0
 
-    logger.info("Running inference for %s week %d year %d (model ver: %s)",
-                crop, week, crop_year, model.model_ver)
+    logger.info("Running inference for %s week %d year %d (model ver: %s, features: %s)",
+                crop, week, crop_year, model.model_ver, model.feature_cols)
 
-    # Build features for all counties
-    # For now, use the same NASS-derived features used in training
+    weather_cols = {"gdd_ytd", "precip_season_in", "precip_deficit_in", "tmax_avg", "hot_days"}
+    needs_weather = any(c in weather_cols for c in model.feature_cols)
+
     if nass_yields is None:
         from backend.models.train_yield import load_nass_county_yields
         commodity_nass = {"corn": "CORN", "soybean": "SOYBEANS", "wheat": "WHEAT"}[crop]
@@ -100,34 +110,79 @@ def run_inference(
         logger.warning("No NASS data available for inference")
         return 0
 
-    # Get unique counties that have data
-    county_fips = nass_yields["fips"].unique()
+    county_fips = nass_yields["fips"].unique().tolist()
+
+    wx_lookup = None
+    if needs_weather:
+        from backend.models.train_yield import (
+            load_weather_data,
+            load_prism_normals as _load_prism_normals,
+            compute_weather_features,
+        )
+        if weather_df is None:
+            weather_df = load_weather_data()
+        if prism_normals is None:
+            prism_normals = _load_prism_normals()
+
+        if weather_df is None or weather_df.empty:
+            logger.error(
+                "Model %s week %d requires weather features but no weather data is available. "
+                "Skipping inference rather than emitting degraded predictions.",
+                crop, week,
+            )
+            return 0
+
+        wx_features = compute_weather_features(
+            weather_df, prism_normals or {}, crop, county_fips, range(crop_year, crop_year + 1), week,
+        )
+        if wx_features.empty:
+            logger.error(
+                "No weather features computed for %s week %d year %d — skipping inference.",
+                crop, week, crop_year,
+            )
+            return 0
+        wx_lookup = wx_features.set_index(["fips", "year"])
+        logger.info("  Weather features computed for %d (fips, year) pairs", len(wx_features))
+
     confidence = YieldModel.confidence_tier(week)
 
     forecasts = []
+    skipped_no_hist = 0
+    skipped_no_weather = 0
     for fips in county_fips:
         county_hist = nass_yields[
             (nass_yields["fips"] == fips) & (nass_yields["year"] < crop_year)
         ]["yield_bu"]
 
         if len(county_hist) < 3:
+            skipped_no_hist += 1
             continue
 
-        # Build feature row matching training features
-        feature_row = pd.DataFrame([{
+        feat = {
             "county_mean_yield": county_hist.mean(),
             "county_yield_trend": _compute_trend(county_hist),
             "prior_year_yield": county_hist.iloc[-1],
             "county_yield_std": county_hist.std(),
             "year": crop_year,
-        }])
+        }
 
-        # Only use features the model was trained on
-        available = [c for c in model.feature_cols if c in feature_row.columns]
-        if not available:
+        if needs_weather and wx_lookup is not None:
+            if (fips, crop_year) not in wx_lookup.index:
+                skipped_no_weather += 1
+                continue
+            wx_row = wx_lookup.loc[(fips, crop_year)]
+            feat["gdd_ytd"] = wx_row["gdd_ytd"]
+            feat["precip_season_in"] = wx_row["precip_season_in"]
+            feat["precip_deficit_in"] = wx_row["precip_deficit_in"]
+            feat["tmax_avg"] = wx_row["tmax_avg"]
+            feat["hot_days"] = wx_row["hot_days"]
+
+        missing = [c for c in model.feature_cols if c not in feat]
+        if missing:
+            logger.debug("FIPS %s missing features %s — skipping", fips, missing)
             continue
 
-        feature_row = feature_row[available]
+        feature_row = pd.DataFrame([feat])[model.feature_cols]
 
         try:
             pred = model.predict(feature_row)
@@ -146,6 +201,12 @@ def run_inference(
             "confidence": confidence,
             "model_ver": model.model_ver,
         })
+
+    if skipped_no_hist or skipped_no_weather:
+        logger.info(
+            "  Skipped: %d counties (insufficient history), %d counties (missing weather)",
+            skipped_no_hist, skipped_no_weather,
+        )
 
     # Upsert to DB
     if not forecasts:
@@ -203,13 +264,28 @@ if __name__ == "__main__":
 
     crops = COMMODITIES if args.crop == "all" else [args.crop]
 
+    # Load weather data once and share across (crop, week) inferences.
+    # If unavailable, run_inference() will skip weather-dependent models cleanly.
+    shared_weather = None
+    shared_normals = None
+    try:
+        from backend.models.train_yield import load_weather_data, load_prism_normals
+        shared_weather = load_weather_data()
+        shared_normals = load_prism_normals()
+    except Exception as exc:
+        logger.warning("Could not preload weather data (will retry per-crop): %s", exc)
+
     for crop in crops:
         week = args.week or current_week_of_season(crop)
         if week <= 0:
             logger.info("Growing season not started for %s. Skipping.", crop)
             continue
 
-        n = run_inference(crop, week, args.year)
+        n = run_inference(
+            crop, week, args.year,
+            weather_df=shared_weather,
+            prism_normals=shared_normals,
+        )
         total += n
 
     elapsed = _time.time() - t0

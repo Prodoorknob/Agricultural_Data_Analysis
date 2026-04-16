@@ -14,8 +14,8 @@ interface AccuracyItem {
 interface YieldAccuracyWeek {
   crop: string;
   week: number;
-  avg_pct_error: number;
-  baseline_rrmse: number;
+  avg_pct_error: number | null;
+  baseline_rrmse: number | null;
 }
 
 interface AccuracyPanelProps {

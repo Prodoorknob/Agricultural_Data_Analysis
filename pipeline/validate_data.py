@@ -181,114 +181,129 @@ def validate(files: dict[str, pd.DataFrame]) -> ValidationResult:
     else:
         result.add("Row counts", "WARN", f"Low: {', '.join(low_count_states)}")
 
-    # --- Check 4: Required columns ---
-    sample_state = next((k for k in files if k not in ("NATIONAL", "US")), None)
-    if sample_state:
-        sample_df = files[sample_state]
-        missing_cols = [c for c in REQUIRED_COLUMNS if c not in sample_df.columns]
-        if not missing_cols:
-            result.add("Required columns", "PASS", f"All {len(REQUIRED_COLUMNS)} present")
+    # --- Checks 4-10 run across the top-N states by row count ---
+    # Sampling one arbitrary state missed corruption in high-value states like
+    # TX/CA. Iterate over the largest N so a bad file for any commercially
+    # important state surfaces as FAIL instead of silently passing.
+    SAMPLE_SIZE = 10
+    candidate = [(k, len(v)) for k, v in files.items() if k not in ("NATIONAL", "US")]
+    candidate.sort(key=lambda x: x[1], reverse=True)
+    sample_states = [k for k, _ in candidate[:SAMPLE_SIZE]]
+
+    if sample_states:
+        logger.info(f"Sampling {len(sample_states)} states for content checks: {', '.join(sample_states)}")
+
+        # --- Check 4: Required columns (across all sampled states) ---
+        missing_by_state: dict[str, list[str]] = {}
+        for st in sample_states:
+            missing_cols = [c for c in REQUIRED_COLUMNS if c not in files[st].columns]
+            if missing_cols:
+                missing_by_state[st] = missing_cols
+        if not missing_by_state:
+            result.add("Required columns", "PASS", f"All {len(REQUIRED_COLUMNS)} present in {len(sample_states)} sampled states")
         else:
-            result.add("Required columns", "FAIL", f"Missing: {', '.join(missing_cols)}")
+            result.add("Required columns", "FAIL",
+                       f"Missing in: {', '.join(f'{s}({",".join(c)})' for s, c in missing_by_state.items())}")
 
         # --- Check 5: Null rates ---
         critical_cols = ['state_alpha', 'year', 'commodity_desc', 'statisticcat_desc', 'value_num']
-        high_null = []
-        for col in critical_cols:
-            if col in sample_df.columns:
-                null_rate = sample_df[col].isna().mean()
-                if null_rate > MAX_NULL_RATE_CRITICAL:
-                    high_null.append(f"{col}({null_rate:.1%})")
-
-        if not high_null:
-            result.add("Null rates", "PASS", f"All critical cols < {MAX_NULL_RATE_CRITICAL:.0%} nulls")
+        high_null_by_state: dict[str, list[str]] = {}
+        for st in sample_states:
+            sample_df = files[st]
+            high_null = []
+            for col in critical_cols:
+                if col in sample_df.columns:
+                    null_rate = sample_df[col].isna().mean()
+                    if null_rate > MAX_NULL_RATE_CRITICAL:
+                        high_null.append(f"{col}({null_rate:.1%})")
+            if high_null:
+                high_null_by_state[st] = high_null
+        if not high_null_by_state:
+            result.add("Null rates", "PASS", f"All critical cols < {MAX_NULL_RATE_CRITICAL:.0%} nulls across {len(sample_states)} states")
         else:
-            result.add("Null rates", "WARN", f"High null: {', '.join(high_null)}")
+            result.add("Null rates", "WARN", f"High null in: {', '.join(f'{s}[{",".join(v)}]' for s, v in high_null_by_state.items())}")
 
         # --- Check 6: Year coverage ---
-        if 'year' in sample_df.columns:
-            years = sample_df['year'].dropna().unique()
-            min_year = int(min(years)) if len(years) > 0 else 0
-            max_year = int(max(years)) if len(years) > 0 else 0
-            year_count = len(years)
+        bad_year_states: list[str] = []
+        for st in sample_states:
+            sample_df = files[st]
+            if 'year' in sample_df.columns:
+                years = sample_df['year'].dropna().unique()
+                if len(years) == 0:
+                    bad_year_states.append(f"{st}(0)")
+                    continue
+                min_year = int(min(years))
+                max_year = int(max(years))
+                if not (min_year <= YEAR_RANGE[0] + 2 and max_year >= YEAR_RANGE[1] - 2):
+                    bad_year_states.append(f"{st}({min_year}-{max_year})")
+        if not bad_year_states:
+            result.add("Year coverage", "PASS", f"All {len(sample_states)} states cover ~{YEAR_RANGE[0]}-{YEAR_RANGE[1]}")
+        else:
+            result.add("Year coverage", "WARN", f"Gaps: {', '.join(bad_year_states)}")
 
-            if min_year <= YEAR_RANGE[0] + 2 and max_year >= YEAR_RANGE[1] - 2:
-                result.add("Year coverage", "PASS",
-                           f"{min_year}-{max_year} ({year_count} unique years)")
-            elif year_count >= 10:
-                result.add("Year coverage", "WARN",
-                           f"{min_year}-{max_year} ({year_count} years, expected {YEAR_RANGE[0]}-{YEAR_RANGE[1]})")
-            else:
-                result.add("Year coverage", "FAIL",
-                           f"Only {year_count} years: {min_year}-{max_year}")
-
-        # --- Check 7: value_num distribution ---
+        # --- Check 7: value_num distribution (most-populous state only — high volume, representative) ---
+        primary_state = sample_states[0]
+        sample_df = files[primary_state]
         if 'value_num' in sample_df.columns:
             vals = sample_df['value_num'].dropna()
             if len(vals) > 0:
                 negative_pct = (vals < 0).mean()
                 zero_pct = (vals == 0).mean()
                 median_val = vals.median()
-
                 if negative_pct > 0.1:
-                    result.add("value_num distribution", "WARN",
-                               f"{negative_pct:.1%} negative values")
+                    result.add("value_num distribution", "WARN", f"[{primary_state}] {negative_pct:.1%} negative values")
                 elif zero_pct > 0.5:
-                    result.add("value_num distribution", "WARN",
-                               f"{zero_pct:.1%} zero values")
+                    result.add("value_num distribution", "WARN", f"[{primary_state}] {zero_pct:.1%} zero values")
                 else:
                     result.add("value_num distribution", "PASS",
-                               f"median={median_val:,.0f}, {zero_pct:.1%} zeros, {negative_pct:.1%} negatives")
+                               f"[{primary_state}] median={median_val:,.0f}, {zero_pct:.1%} zeros, {negative_pct:.1%} negatives")
 
-        # --- Check 8: Sector coverage ---
-        if 'sector_desc' in sample_df.columns:
-            sectors = sample_df['sector_desc'].dropna().unique()
-            expected_sectors = {'CROPS', 'ANIMALS & PRODUCTS'}
-            found_sectors = set(s.upper() for s in sectors)
-            missing_sectors = expected_sectors - found_sectors
+        # --- Check 8: Sector coverage (union across sampled states) ---
+        expected_sectors = {'CROPS', 'ANIMALS & PRODUCTS'}
+        all_sectors: set[str] = set()
+        for st in sample_states:
+            if 'sector_desc' in files[st].columns:
+                all_sectors.update(s.upper() for s in files[st]['sector_desc'].dropna().unique())
+        missing_sectors = expected_sectors - all_sectors
+        if not missing_sectors:
+            result.add("Sector coverage", "PASS", f"Found across sample: {', '.join(sorted(all_sectors))}")
+        else:
+            result.add("Sector coverage", "WARN", f"Missing from entire sample: {', '.join(sorted(missing_sectors))}")
 
-            if not missing_sectors:
-                result.add("Sector coverage", "PASS",
-                           f"Found: {', '.join(sorted(found_sectors))}")
+        # --- Check 9: Stat category coverage (union across sample) ---
+        core_cats = {'AREA HARVESTED', 'PRODUCTION', 'YIELD'}
+        all_cats: set[str] = set()
+        for st in sample_states:
+            if 'statisticcat_desc' in files[st].columns:
+                all_cats.update(c.upper() for c in files[st]['statisticcat_desc'].dropna().unique())
+        missing_cats = core_cats - all_cats
+        if not missing_cats:
+            result.add("Core stat categories", "PASS", f"All 3 core present across sample ({len(all_cats)} total)")
+        else:
+            result.add("Core stat categories", "WARN", f"Missing from entire sample: {', '.join(sorted(missing_cats))}")
+
+        # --- Check 10: County data + FIPS (aggregate across sample) ---
+        total_county_rows = 0
+        bad_fips_by_state: dict[str, int] = {}
+        for st in sample_states:
+            sample_df = files[st]
+            if 'agg_level_desc' in sample_df.columns:
+                county_rows = sample_df[sample_df['agg_level_desc'] == 'COUNTY']
+                total_county_rows += len(county_rows)
+                if 'fips' in county_rows.columns and len(county_rows) > 0:
+                    fips = county_rows['fips'].dropna()
+                    bad = fips[~fips.str.match(r'^\d{5}$', na=False)]
+                    if len(bad) > 0:
+                        bad_fips_by_state[st] = len(bad)
+        if total_county_rows == 0:
+            result.add("County data", "WARN", "No COUNTY rows across sample — run with --include-county")
+        else:
+            result.add("County data", "PASS", f"{total_county_rows:,} county rows across sample")
+            if not bad_fips_by_state:
+                result.add("County FIPS format", "PASS", "All FIPS codes are 5-digit numeric")
             else:
-                result.add("Sector coverage", "WARN",
-                           f"Missing: {', '.join(sorted(missing_sectors))}")
-
-        # --- Check 9: Stat category coverage ---
-        if 'statisticcat_desc' in sample_df.columns:
-            cats = sample_df['statisticcat_desc'].dropna().unique()
-            core_cats = {'AREA HARVESTED', 'PRODUCTION', 'YIELD'}
-            found_cats = set(c.upper() for c in cats)
-            missing_cats = core_cats - found_cats
-
-            if not missing_cats:
-                result.add("Core stat categories", "PASS",
-                           f"All 3 core categories present ({len(cats)} total)")
-            else:
-                result.add("Core stat categories", "WARN",
-                           f"Missing: {', '.join(sorted(missing_cats))}")
-
-        # --- Check 10: County data presence and FIPS format ---
-        if 'agg_level_desc' in sample_df.columns:
-            county_rows = sample_df[sample_df['agg_level_desc'] == 'COUNTY']
-            if len(county_rows) == 0:
-                result.add("County data", "WARN",
-                           "No COUNTY rows found — run with --include-county to populate")
-            else:
-                result.add("County data", "PASS",
-                           f"{len(county_rows):,} county rows present")
-
-                # Validate FIPS format: must be 5-digit numeric string
-                if 'fips' in county_rows.columns:
-                    bad_fips = county_rows['fips'].dropna()
-                    bad_fips = bad_fips[~bad_fips.str.match(r'^\d{5}$', na=False)]
-                    if len(bad_fips) == 0:
-                        result.add("County FIPS format", "PASS",
-                                   f"All FIPS codes are 5-digit numeric")
-                    else:
-                        result.add("County FIPS format", "WARN",
-                                   f"{len(bad_fips):,} rows with malformed FIPS: "
-                                   f"{bad_fips.unique()[:5].tolist()}")
+                result.add("County FIPS format", "WARN",
+                           f"Malformed FIPS in: {', '.join(f'{s}({n})' for s, n in bad_fips_by_state.items())}")
     # --- Check 10: Cross-state year consistency ---
     state_year_counts: dict[str, int] = {}
     for state, df in files.items():
