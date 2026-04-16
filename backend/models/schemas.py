@@ -82,7 +82,7 @@ class AcreageAccuracyItem(BaseModel):
     forecast_year: int
     commodity: str
     level: str
-    model_forecast: float
+    model_forecast: float | None = None
     usda_prospective: float | None = None
     usda_june_actual: float | None = None
     model_vs_usda_pct: float | None = None

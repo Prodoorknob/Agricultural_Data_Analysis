@@ -10,7 +10,7 @@ Three endpoints:
 from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from sqlalchemy import Numeric, select, func
+from sqlalchemy import Numeric, select, func, case
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.database import get_db
@@ -237,7 +237,7 @@ async def get_yield_accuracy(
             YieldAccuracy.week,
             func.avg(func.abs(YieldAccuracy.pct_error)).label("avg_pct_error"),
             func.avg(
-                func.cast(YieldAccuracy.in_interval, Numeric)
+                case((YieldAccuracy.in_interval == True, 1), else_=0)
             ).label("avg_coverage"),
             func.avg(
                 func.abs(

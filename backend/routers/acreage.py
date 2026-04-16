@@ -220,11 +220,11 @@ async def get_accuracy(
             forecast_year=r.forecast_year,
             commodity=r.commodity,
             level="national" if r.state_fips == "00" else "state",
-            model_forecast=float(r.model_forecast),
-            usda_prospective=float(r.usda_prospective) if r.usda_prospective else None,
-            usda_june_actual=float(r.usda_june_actual) if r.usda_june_actual else None,
-            model_vs_usda_pct=float(r.model_vs_usda_pct) if r.model_vs_usda_pct else None,
-            model_vs_actual_pct=float(r.model_vs_actual_pct) if r.model_vs_actual_pct else None,
+            model_forecast=float(r.model_forecast) if r.model_forecast is not None else None,
+            usda_prospective=float(r.usda_prospective) if r.usda_prospective is not None else None,
+            usda_june_actual=float(r.usda_june_actual) if r.usda_june_actual is not None else None,
+            model_vs_usda_pct=float(r.model_vs_usda_pct) if r.model_vs_usda_pct is not None else None,
+            model_vs_actual_pct=float(r.model_vs_actual_pct) if r.model_vs_actual_pct is not None else None,
         )
         for r in rows
     ]
