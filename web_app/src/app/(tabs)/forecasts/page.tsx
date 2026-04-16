@@ -52,7 +52,7 @@ export default function ForecastsPage() {
       keyDriver: nat?.key_driver ?? null,
       usdaProspective: null as number | null,
       usdaDeltaPct: null as number | null,
-      topStates: (states?.states || []).slice(0, 5).map((s: any) => ({
+      topStates: (states || []).slice(0, 5).map((s: any) => ({
         state: s.state || s.state_fips,
         forecastAcres: s.forecast_acres_millions || 0,
         deltaPct: s.vs_prior_pct ?? null,
