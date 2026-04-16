@@ -140,3 +140,65 @@ class YieldHistoryItem(BaseModel):
     p50_forecast: float
     actual_yield: float | None = None
     error_pct: float | None = None
+
+
+# ---------------------------------------------------------------------------
+# Market data endpoints (§5.2)
+# ---------------------------------------------------------------------------
+
+
+class FuturesPoint(BaseModel):
+    date: str  # ISO date
+    settle: float  # $/bu
+    volume: int | None = None
+
+
+class FuturesTimeSeriesResponse(BaseModel):
+    commodity: str
+    contract_type: str  # 'nearby' or specific month
+    points: list[FuturesPoint]
+
+
+class ForwardCurvePoint(BaseModel):
+    contract_month: str  # e.g. "2026-07"
+    settle: float
+
+
+class ForwardCurveResponse(BaseModel):
+    commodity: str
+    as_of_date: str
+    points: list[ForwardCurvePoint]
+
+
+class DxyPoint(BaseModel):
+    date: str
+    value: float
+
+
+class DxyTimeSeriesResponse(BaseModel):
+    points: list[DxyPoint]
+
+
+class ProductionCostResponse(BaseModel):
+    commodity: str
+    year: int
+    variable_cost_per_bu: float | None = None
+    total_cost_per_bu: float | None = None
+    current_futures_price: float | None = None  # latest nearby settle, $/bu
+    margin_per_bu: float | None = None  # futures - total_cost
+
+
+class FertilizerPriceResponse(BaseModel):
+    quarter: str
+    anhydrous_ammonia_ton: float | None = None
+    dap_ton: float | None = None
+    potash_ton: float | None = None
+
+
+class YieldAccuracyWeekItem(BaseModel):
+    crop: str
+    week: int
+    avg_pct_error: float | None = None
+    avg_coverage: float | None = None  # fraction of forecasts within p10–p90
+    baseline_rrmse: float | None = None  # county 5yr mean baseline
+    n_counties: int = 0

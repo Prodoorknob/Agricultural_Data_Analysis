@@ -33,11 +33,21 @@ DRIVER_LABELS = {
     "soy_futures_nov": "November soybean futures price",
     "wheat_futures_jul": "December wheat futures price",
     "variable_cost_bu": "Variable production cost",
+    "prior_3yr_avg_acres": "3-year average planted acreage",
     "prior_5yr_avg_acres": "5-year average planted acreage",
     "prior_year_yield": "Prior year crop yield",
     "rotation_ratio": "Corn-soybean rotation ratio",
     "forecast_year": "Long-term acreage trend",
     "state_fips_code": "State-specific factor",
+    # Tier 1 features
+    "dsci_nov": "November drought severity",
+    "dsci_fall_avg": "Fall drought intensity",
+    "insured_acres_prior": "Prior year insured acreage",
+    "insured_acres_yoy_change": "Insurance enrollment trend",
+    "crp_expiring_acres": "CRP contract expirations",
+    "crp_pct_cropland": "Conservation reserve share",
+    "export_outstanding_pct": "Export commitments level",
+    "export_pace_vs_5yr": "Export pace vs historical",
 }
 
 # Baseline gate: model must beat best baseline by at most this margin (pp)
@@ -68,7 +78,13 @@ def _coverage(y_true: np.ndarray, lo: np.ndarray, hi: np.ndarray) -> float:
 
 @dataclass
 class AcreageEnsemble:
-    """Ridge + LightGBM ensemble for planted acreage prediction."""
+    """Ridge + LightGBM ensemble for planted acreage prediction.
+
+    When use_residual=True, the model predicts the delta (acres - prior_year_acres)
+    instead of absolute acres. At prediction time, prior_year_acres is added back.
+    This lets the model focus on year-over-year changes and start from the
+    persistence baseline rather than competing with it.
+    """
 
     commodity: str
     model_ver: str = ""
@@ -80,6 +96,10 @@ class AcreageEnsemble:
     q_low: object = None  # quantile α=0.10
     q_high: object = None  # quantile α=0.90
 
+    # Residual modeling — if True, target = acres - baseline_col
+    use_residual: bool = False
+    prior_year_col: str = "prior_year_acres"  # used as residual baseline
+
     # Conformal calibration
     conformal_q80: float | None = None  # absolute residual quantile for 80% coverage
     median_train_acres: float | None = None  # for scaling intervals by state size
@@ -87,6 +107,15 @@ class AcreageEnsemble:
     # Metrics
     train_mape: float | None = None
     val_mape: float | None = None
+
+    def _to_delta(self, X: pd.DataFrame, y: pd.Series) -> tuple[pd.Series, pd.Series]:
+        """Convert absolute target to delta from prior year. Returns (y_delta, base)."""
+        base = X[self.prior_year_col].fillna(y.median())
+        return y - base, base
+
+    def _from_delta(self, delta: np.ndarray, base: np.ndarray) -> np.ndarray:
+        """Convert delta predictions back to absolute acres."""
+        return delta + base
 
     def fit(self, X: pd.DataFrame, y: pd.Series):
         """Train all 4 sub-models."""
@@ -104,6 +133,16 @@ class AcreageEnsemble:
         # Handle NaN: fill with column medians
         X_filled = X.fillna(X.median())
 
+        # Residual target: predict delta from prior year
+        if self.use_residual and self.prior_year_col in X_filled.columns:
+            y_fit, _ = self._to_delta(X_filled, y)
+            logger.info(f"  Residual mode: target mean delta = {y_fit.mean():,.0f} acres")
+        else:
+            y_fit = y
+            if self.use_residual:
+                logger.warning(f"  {self.prior_year_col} not in features, falling back to absolute")
+                self.use_residual = False
+
         # Store median training acres for conformal scaling
         self.median_train_acres = float(y.median())
 
@@ -112,7 +151,7 @@ class AcreageEnsemble:
             ("scaler", StandardScaler()),
             ("model", Ridge(alpha=10.0)),
         ])
-        self.ridge.fit(X_filled, y)
+        self.ridge.fit(X_filled, y_fit)
 
         # LightGBM point estimate
         self.lgbm = lgb.LGBMRegressor(
@@ -126,50 +165,73 @@ class AcreageEnsemble:
             reg_lambda=1.0,
             verbose=-1,
         )
-        self.lgbm.fit(X_filled, y)
+        self.lgbm.fit(X_filled, y_fit)
 
         # LightGBM quantiles (kept as fallback, but conformal preferred)
         self.q_low = lgb.LGBMRegressor(
             objective="quantile", alpha=0.10,
             n_estimators=300, max_depth=3, min_child_samples=10, verbose=-1,
         )
-        self.q_low.fit(X_filled, y)
+        self.q_low.fit(X_filled, y_fit)
 
         self.q_high = lgb.LGBMRegressor(
             objective="quantile", alpha=0.90,
             n_estimators=300, max_depth=3, min_child_samples=10, verbose=-1,
         )
-        self.q_high.fit(X_filled, y)
+        self.q_high.fit(X_filled, y_fit)
 
-        logger.info(f"Trained AcreageEnsemble for {self.commodity} on {len(X)} samples")
+        logger.info(f"Trained AcreageEnsemble for {self.commodity} on {len(X)} samples"
+                     f" (residual={self.use_residual})")
 
-    def predict(self, X: pd.DataFrame) -> dict:
-        """Predict planted acreage with uncertainty bounds."""
-        # Ensure we only use the features the model was trained on
-        X = X[[c for c in self.feature_cols if c in X.columns]]
-        X_filled = X.fillna(X.median() if len(X) > 1 else 0)
-
+    def _raw_predict(self, X_filled: pd.DataFrame) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Core prediction in model-native space (delta if residual, absolute otherwise)."""
         ridge_pred = self.ridge.predict(X_filled)
         lgbm_pred = self.lgbm.predict(X_filled)
+        p50_raw = (ridge_pred + lgbm_pred) / 2
 
-        p50 = (ridge_pred + lgbm_pred) / 2  # simple average ensemble
-
-        # Use conformal intervals if calibrated, else fallback to quantile
-        if self.conformal_q80 is not None and self.median_train_acres:
-            # Scale interval width by predicted magnitude
-            scale = max(p50[0], 1) / self.median_train_acres
-            q = self.conformal_q80 * scale
-            p10 = p50 - q
-            p90 = p50 + q
+        if self.conformal_q80 is not None:
+            if self.use_residual:
+                # In residual mode, conformal q80 is already in delta-acre units
+                # No scaling needed — the interval width is constant
+                q = np.full_like(p50_raw, self.conformal_q80)
+            elif self.median_train_acres:
+                # In absolute mode, scale interval by predicted magnitude
+                scale = np.maximum(np.abs(p50_raw), 1) / max(self.median_train_acres, 1)
+                q = self.conformal_q80 * scale
+            else:
+                q = np.full_like(p50_raw, self.conformal_q80)
+            p10_raw = p50_raw - q
+            p90_raw = p50_raw + q
         else:
-            p10 = self.q_low.predict(X_filled)
-            p90 = self.q_high.predict(X_filled)
+            p10_raw = self.q_low.predict(X_filled)
+            p90_raw = self.q_high.predict(X_filled)
+
+        return p10_raw, p50_raw, p90_raw
+
+    def _reconstruct(self, p10_raw, p50_raw, p90_raw, X_filled):
+        """Convert from model space back to absolute acres."""
+        if self.use_residual and self.prior_year_col in X_filled.columns:
+            base = X_filled[self.prior_year_col].fillna(self.median_train_acres or 0).values
+            p50 = self._from_delta(p50_raw, base)
+            p10 = self._from_delta(p10_raw, base)
+            p90 = self._from_delta(p90_raw, base)
+        else:
+            p50, p10, p90 = p50_raw, p10_raw, p90_raw
 
         # Enforce ordering and non-negativity
         p50 = np.maximum(p50, 0)
         p10 = np.minimum(p10, p50)
         p10 = np.maximum(p10, 0)
         p90 = np.maximum(p90, p50)
+        return p10, p50, p90
+
+    def predict(self, X: pd.DataFrame) -> dict:
+        """Predict planted acreage with uncertainty bounds."""
+        X = X[[c for c in self.feature_cols if c in X.columns]]
+        X_filled = X.fillna(X.median() if len(X) > 1 else 0)
+
+        p10_raw, p50_raw, p90_raw = self._raw_predict(X_filled)
+        p10, p50, p90 = self._reconstruct(p10_raw, p50_raw, p90_raw, X_filled)
 
         return {
             "p10": float(p10[0]),
@@ -182,34 +244,27 @@ class AcreageEnsemble:
         X = X[[c for c in self.feature_cols if c in X.columns]]
         X_filled = X.fillna(X.median()).fillna(0)
 
-        ridge_pred = self.ridge.predict(X_filled)
-        lgbm_pred = self.lgbm.predict(X_filled)
-        p50 = (ridge_pred + lgbm_pred) / 2
-
-        if self.conformal_q80 is not None and self.median_train_acres:
-            scale = np.maximum(p50, 1) / self.median_train_acres
-            q = self.conformal_q80 * scale
-            p10 = p50 - q
-            p90 = p50 + q
-        else:
-            p10 = self.q_low.predict(X_filled)
-            p90 = self.q_high.predict(X_filled)
-
-        p50 = np.maximum(p50, 0)
-        p10 = np.minimum(p10, p50)
-        p10 = np.maximum(p10, 0)
-        p90 = np.maximum(p90, p50)
-        return p10, p50, p90
+        p10_raw, p50_raw, p90_raw = self._raw_predict(X_filled)
+        return self._reconstruct(p10_raw, p50_raw, p90_raw, X_filled)
 
     def calibrate_conformal(self, X_val: pd.DataFrame, y_val: pd.Series):
         """Calibrate prediction intervals using split conformal prediction.
 
-        Computes absolute residuals on validation set and stores the
-        80th percentile as conformal_q80 for ~80% coverage intervals.
+        Computes absolute residuals on validation set in model-native space
+        (deltas if residual mode) and stores the 80th percentile.
         """
-        _, p50_val, _ = self.predict_batch(X_val)
-        residuals = np.abs(y_val.values - p50_val)
-        # Conformal quantile with finite-sample correction
+        X_use = X_val[[c for c in self.feature_cols if c in X_val.columns]]
+        X_filled = X_use.fillna(X_use.median()).fillna(0)
+
+        _, p50_raw, _ = self._raw_predict(X_filled)
+
+        # Residuals in native space
+        if self.use_residual and self.prior_year_col in X_filled.columns:
+            y_native, _ = self._to_delta(X_filled, y_val)
+            residuals = np.abs(y_native.values - p50_raw)
+        else:
+            residuals = np.abs(y_val.values - p50_raw)
+
         n = len(residuals)
         level = 0.80 * (1 + 1 / n) if n > 0 else 0.80
         self.conformal_q80 = float(np.quantile(residuals, min(level, 1.0)))
@@ -261,8 +316,10 @@ def compute_baselines(
 
     Returns dict with persistence_mape and fiveyear_avg_mape.
     """
+    # wheat_winter/wheat_spring map to NASS "wheat"
+    nass_commodity = commodity.split("_")[0] if "_" in commodity else commodity
     subset = nass_data[
-        (nass_data["commodity"] == commodity)
+        (nass_data["commodity"] == nass_commodity)
         & (nass_data["state_fips"].isin(states))
     ].copy()
 
@@ -415,13 +472,21 @@ def train_and_save(
     states: list[str] | None = None,
     train_years: range = range(1995, 2021),
     val_years: range = range(2021, 2024),
+    use_residual: bool = False,
+    residual_col: str = "prior_year_acres",
     test_years: list[int] | None = None,
     run_cv: bool = True,
-) -> tuple[AcreageEnsemble, dict]:
+) -> tuple[AcreageEnsemble, dict, pd.DataFrame]:
     """Train an AcreageEnsemble with full evaluation pipeline.
 
     Returns:
-        (ensemble, metrics_dict)
+        (ensemble, metrics_dict, predictions_df)
+
+    predictions_df has one row per (val + test) prediction with columns:
+        forecast_year, state_fips, commodity, model_p50, model_p10, model_p90,
+        actual, split ('val' | 'test')
+    This is used by train_acreage.py's --persist-accuracy flag to populate the
+    acreage_accuracy table.
     """
     from backend.features.acreage_features import (
         build_training_features, FEATURE_COLS, TOP_STATES, clear_query_caches,
@@ -457,7 +522,10 @@ def train_and_save(
     y_train = train["acres_planted"]
 
     # ---- Train ----
-    ensemble = AcreageEnsemble(commodity=commodity, model_ver=model_ver)
+    ensemble = AcreageEnsemble(
+        commodity=commodity, model_ver=model_ver,
+        use_residual=use_residual, prior_year_col=residual_col,
+    )
     ensemble.fit(X_train, y_train)
 
     # ---- Metrics ----
@@ -469,6 +537,9 @@ def train_and_save(
         "n_test": len(test),
         "n_states": len(states),
     }
+
+    # Per-row walk-forward predictions for acreage_accuracy persistence (§7.4 WI-1)
+    prediction_rows: list[dict] = []
 
     # Train MAPE
     _, p50_train, _ = ensemble.predict_batch(X_train)
@@ -488,6 +559,19 @@ def train_and_save(
         ensemble.val_mape = metrics["val_mape"]
         logger.info(f"  Val MAPE: {metrics['val_mape']}%  Coverage: {metrics['coverage_80_val']}")
 
+        # Capture per-row val predictions
+        for i, (idx, row) in enumerate(val.iterrows()):
+            prediction_rows.append({
+                "forecast_year": int(row["_year"]),
+                "state_fips": str(row["_state_fips"]),
+                "commodity": commodity,
+                "model_p50": float(p50_val[i]),
+                "model_p10": float(p10_val[i]),
+                "model_p90": float(p90_val[i]),
+                "actual": float(y_val.iloc[i]),
+                "split": "val",
+            })
+
     # Test evaluation
     if not test.empty:
         X_test = test[avail_cols]
@@ -497,6 +581,19 @@ def train_and_save(
         metrics["test_rmse"] = round(_rmse(y_test.values, p50_test), 0)
         metrics["coverage_80_test"] = round(_coverage(y_test.values, p10_test, p90_test), 2)
         logger.info(f"  Test MAPE: {metrics['test_mape']}%  Coverage: {metrics['coverage_80_test']}")
+
+        # Capture per-row test predictions
+        for i, (idx, row) in enumerate(test.iterrows()):
+            prediction_rows.append({
+                "forecast_year": int(row["_year"]),
+                "state_fips": str(row["_state_fips"]),
+                "commodity": commodity,
+                "model_p50": float(p50_test[i]),
+                "model_p10": float(p10_test[i]),
+                "model_p90": float(p90_test[i]),
+                "actual": float(y_test.iloc[i]),
+                "split": "test",
+            })
 
     # ---- Baselines ----
     eval_years_all = list(val_years) + list(test_years)
@@ -548,4 +645,5 @@ def train_and_save(
     with open(artifact_dir / "metrics.json", "w") as f:
         json.dump(metrics, f, indent=2)
 
-    return ensemble, metrics
+    predictions_df = pd.DataFrame(prediction_rows)
+    return ensemble, metrics, predictions_df

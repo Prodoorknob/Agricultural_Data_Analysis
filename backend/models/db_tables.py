@@ -111,7 +111,7 @@ class AcreageForecast(Base):
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     forecast_year: Mapped[int] = mapped_column(Integer, nullable=False)
     state_fips: Mapped[str] = mapped_column(String(2), nullable=False)
-    commodity: Mapped[str] = mapped_column(String(10), nullable=False)
+    commodity: Mapped[str] = mapped_column(String(20), nullable=False)
     forecast_acres: Mapped[float] = mapped_column(Numeric(10, 1), nullable=False)
     p10_acres: Mapped[float | None] = mapped_column(Numeric(10, 1), nullable=True)
     p90_acres: Mapped[float | None] = mapped_column(Numeric(10, 1), nullable=True)
@@ -135,8 +135,8 @@ class AcreageAccuracy(Base):
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     forecast_year: Mapped[int] = mapped_column(Integer, nullable=False)
     state_fips: Mapped[str] = mapped_column(String(2), nullable=False)
-    commodity: Mapped[str] = mapped_column(String(10), nullable=False)
-    model_forecast: Mapped[float] = mapped_column(Numeric(10, 1), nullable=False)
+    commodity: Mapped[str] = mapped_column(String(20), nullable=False)
+    model_forecast: Mapped[float | None] = mapped_column(Numeric(10, 1), nullable=True)
     usda_prospective: Mapped[float | None] = mapped_column(Numeric(10, 1), nullable=True)
     usda_june_actual: Mapped[float | None] = mapped_column(Numeric(10, 1), nullable=True)
     model_vs_usda_pct: Mapped[float | None] = mapped_column(Numeric(6, 2), nullable=True)
@@ -162,6 +162,77 @@ class ErsFertilizerPrice(Base):
 
     __table_args__ = (
         UniqueConstraint("quarter", name="uq_fertilizer_prices"),
+    )
+
+
+# --- Module 03 Tier 1: Additional acreage data sources ---
+
+
+class DroughtIndex(Base):
+    __tablename__ = "drought_index"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    state_fips: Mapped[str] = mapped_column(String(2), nullable=False)
+    year: Mapped[int] = mapped_column(Integer, nullable=False)
+    dsci_nov: Mapped[float | None] = mapped_column(Numeric(6, 1), nullable=True)
+    dsci_fall_avg: Mapped[float | None] = mapped_column(Numeric(6, 1), nullable=True)
+    dsci_winter_avg: Mapped[float | None] = mapped_column(Numeric(6, 1), nullable=True)
+    drought_weeks_d2plus: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("state_fips", "year", name="uq_drought_index"),
+    )
+
+
+class RmaInsuredAcres(Base):
+    __tablename__ = "rma_insured_acres"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    state_fips: Mapped[str] = mapped_column(String(2), nullable=False)
+    commodity: Mapped[str] = mapped_column(String(10), nullable=False)
+    crop_year: Mapped[int] = mapped_column(Integer, nullable=False)
+    net_reported_acres: Mapped[float | None] = mapped_column(Numeric(12, 1), nullable=True)
+    policies_earning: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    liability_amount: Mapped[float | None] = mapped_column(Numeric(14, 2), nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "state_fips", "commodity", "crop_year", name="uq_rma_insured"
+        ),
+    )
+
+
+class CrpEnrollment(Base):
+    __tablename__ = "crp_enrollment"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    state_fips: Mapped[str] = mapped_column(String(2), nullable=False)
+    year: Mapped[int] = mapped_column(Integer, nullable=False)
+    enrolled_acres: Mapped[float | None] = mapped_column(Numeric(12, 1), nullable=True)
+    expiring_acres: Mapped[float | None] = mapped_column(Numeric(12, 1), nullable=True)
+    new_enrollment_acres: Mapped[float | None] = mapped_column(Numeric(12, 1), nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("state_fips", "year", name="uq_crp_enrollment"),
+    )
+
+
+class ExportCommitment(Base):
+    __tablename__ = "export_commitments"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    commodity: Mapped[str] = mapped_column(String(10), nullable=False)
+    marketing_year: Mapped[str] = mapped_column(String(20), nullable=False)
+    as_of_date: Mapped[date] = mapped_column(Date, nullable=False)
+    outstanding_sales_mt: Mapped[float | None] = mapped_column(Numeric(12, 1), nullable=True)
+    accumulated_exports_mt: Mapped[float | None] = mapped_column(Numeric(12, 1), nullable=True)
+    net_sales_mt: Mapped[float | None] = mapped_column(Numeric(12, 1), nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "commodity", "marketing_year", "as_of_date",
+            name="uq_export_commits",
+        ),
     )
 
 
@@ -219,5 +290,39 @@ class YieldForecast(Base):
         UniqueConstraint(
             "fips", "crop", "crop_year", "week", "model_ver",
             name="uq_yield_forecasts",
+        ),
+    )
+
+
+class YieldAccuracy(Base):
+    """Walk-forward test predictions from train_yield.py.
+
+    One row per (forecast_year, fips, crop, week, model_ver).
+    Powers the Forecasts tab accuracy panel (§5.3.D).
+    """
+
+    __tablename__ = "yield_accuracy"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    forecast_year: Mapped[int] = mapped_column(Integer, nullable=False)
+    fips: Mapped[str] = mapped_column(String(5), nullable=False)
+    crop: Mapped[str] = mapped_column(String(10), nullable=False)
+    week: Mapped[int] = mapped_column(Integer, nullable=False)
+    model_p50: Mapped[float] = mapped_column(Numeric(6, 1), nullable=False)
+    model_p10: Mapped[float | None] = mapped_column(Numeric(6, 1), nullable=True)
+    model_p90: Mapped[float | None] = mapped_column(Numeric(6, 1), nullable=True)
+    actual_yield: Mapped[float | None] = mapped_column(Numeric(6, 1), nullable=True)
+    county_5yr_mean: Mapped[float | None] = mapped_column(Numeric(6, 1), nullable=True)
+    abs_error: Mapped[float | None] = mapped_column(Numeric(6, 2), nullable=True)
+    pct_error: Mapped[float | None] = mapped_column(Numeric(6, 2), nullable=True)
+    in_interval: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    split: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    model_ver: Mapped[str] = mapped_column(String(20), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "forecast_year", "fips", "crop", "week", "model_ver",
+            name="uq_yield_accuracy",
         ),
     )

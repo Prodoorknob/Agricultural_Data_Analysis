@@ -1,154 +1,280 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;900&display=swap');
+/* ============================================================
+   FIELDPULSE DESIGN TOKENS + TAILWIND 4
+   Source of truth: design-system-v1.html
+   Light-first. Dark via [data-theme='dark'].
+   ============================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Barlow+Condensed:wght@600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap');
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
+/* ─────────────────────────────────────────────────────────
+   Tailwind @theme — tokens accessible as Tailwind utilities
+   ───────────────────────────────────────────────────────── */
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-inter);
+  --color-bg: #FAF8F4;
+  --color-surface: #FFFFFF;
+  --color-surface2: #F3EFE8;
+  --color-border: rgba(0, 0, 0, 0.08);
+  --color-border2: rgba(0, 0, 0, 0.14);
+  --color-text: #1B1B18;
+  --color-text2: #5C564E;
+  --color-text3: #9C9488;
+  --color-muted: #D1CBBF;
+  --color-field: #2D6A4F;
+  --color-field-light: #40916C;
+  --color-field-dark: #1B4332;
+  --color-field-subtle: rgba(45, 106, 79, 0.07);
+  --color-field-tint: #E8F5EE;
+  --color-harvest: #B8860B;
+  --color-harvest-light: #D4A017;
+  --color-harvest-dark: #8B6914;
+  --color-harvest-subtle: rgba(184, 134, 11, 0.07);
+  --color-harvest-tint: #FDF6E3;
+  --color-soil: #A0522D;
+  --color-soil-light: #C17644;
+  --color-soil-subtle: rgba(160, 82, 45, 0.07);
+  --color-soil-tint: #FDF0E8;
+  --color-sky: #2B6CB0;
+  --color-sky-light: #3B82C4;
+  --color-sky-subtle: rgba(43, 108, 176, 0.07);
+  --color-sky-tint: #EBF2FB;
+  --color-positive: #2D6A4F;
+  --color-negative: #B42318;
+  --color-warning: #B8860B;
+  --color-info: #2B6CB0;
+  --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-stat: 'Barlow Condensed', 'Plus Jakarta Sans', sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0f1117;
-    --foreground: #ededed;
+/* ─────────────────────────────────────────────────────────
+   TOKENS — CSS custom properties (light default)
+   Outside @layer so they always apply
+   ───────────────────────────────────────────────────────── */
+:root {
+    /* Backgrounds */
+    --bg:        #FAF8F4;
+    --surface:   #FFFFFF;
+    --surface2:  #F3EFE8;
+
+    /* Borders */
+    --border:    rgba(0, 0, 0, 0.08);
+    --border2:   rgba(0, 0, 0, 0.14);
+
+    /* Text */
+    --text:      #1B1B18;
+    --text2:     #5C564E;
+    --text3:     #9C9488;
+    --muted:     #D1CBBF;
+
+    /* Field Green */
+    --field:         #2D6A4F;
+    --field-light:   #40916C;
+    --field-dark:    #1B4332;
+    --field-subtle:  rgba(45, 106, 79, 0.07);
+    --field-tint:    #E8F5EE;
+
+    /* Harvest Gold */
+    --harvest:       #B8860B;
+    --harvest-light: #D4A017;
+    --harvest-dark:  #8B6914;
+    --harvest-subtle: rgba(184, 134, 11, 0.07);
+    --harvest-tint:  #FDF6E3;
+
+    /* Soil */
+    --soil:          #A0522D;
+    --soil-light:    #C17644;
+    --soil-subtle:   rgba(160, 82, 45, 0.07);
+    --soil-tint:     #FDF0E8;
+
+    /* Sky */
+    --sky:           #2B6CB0;
+    --sky-light:     #3B82C4;
+    --sky-subtle:    rgba(43, 108, 176, 0.07);
+    --sky-tint:      #EBF2FB;
+
+    /* Semantic */
+    --positive:  #2D6A4F;
+    --negative:  #B42318;
+    --warning:   #B8860B;
+    --info:      #2B6CB0;
+
+    /* Chart palette */
+    --chart-corn:     #D4A017;
+    --chart-soy:      #40916C;
+    --chart-wheat:    #C17644;
+    --chart-cotton:   #7B68A0;
+    --chart-hay:      #6B8E5A;
+    --chart-cattle:   #8B4513;
+    --chart-hogs:     #B85C5C;
+    --chart-dairy:    #4A90A0;
+
+    /* Map gradient */
+    --map-1: #F3EFE8;  --map-2: #E8E0D0;  --map-3: #D0C4A8;
+    --map-4: #B8A878;  --map-5: #8CAA6C;  --map-6: #6B9E5A;
+    --map-7: #4A8B48;  --map-8: #3A7A3E;  --map-9: #2D6A4F;
+    --map-10: #1B4332;
+
+    /* Shadows */
+    --shadow-sm:  0 1px 3px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.03);
+    --shadow-md:  0 4px 16px rgba(0, 0, 0, 0.06);
+    --shadow-lg:  0 8px 32px rgba(0, 0, 0, 0.08);
+    --shadow-focus: 0 0 0 3px rgba(45, 106, 79, 0.18);
+
+    /* Typography */
+    --font-body: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --font-stat: 'Barlow Condensed', 'Plus Jakarta Sans', sans-serif;
+    --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+
+    /* Spacing */
+    --space-1: 4px;   --space-2: 8px;   --space-3: 12px;
+    --space-4: 16px;  --space-5: 24px;  --space-6: 32px;
+    --space-7: 48px;  --space-8: 64px;  --space-9: 96px;
+
+    /* Radii */
+    --radius-sm:  4px;
+    --radius-md:  8px;
+    --radius-lg:  12px;
+    --radius-xl:  16px;
+    --radius-full: 999px;
+
+    /* Transitions */
+    --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+    --duration-fast:   150ms;
+    --duration-normal: 250ms;
+    --duration-slow:   400ms;
   }
-}
+
+  /* DARK MODE */
+  [data-theme='dark'] {
+    --bg:        #111B16;
+    --surface:   #1A2820;
+    --surface2:  #20322A;
+
+    --border:    rgba(255, 255, 255, 0.08);
+    --border2:   rgba(255, 255, 255, 0.14);
+
+    --text:      #F0EDE8;
+    --text2:     #A8A090;
+    --text3:     #706858;
+    --muted:     #3A3428;
+
+    --field:         #52B788;
+    --field-light:   #6ECF9A;
+    --field-dark:    #40916C;
+    --field-subtle:  rgba(82, 183, 136, 0.1);
+    --field-tint:    rgba(82, 183, 136, 0.08);
+
+    --harvest:       #D4A017;
+    --harvest-light: #E8B82A;
+    --harvest-dark:  #B8860B;
+    --harvest-subtle: rgba(212, 160, 23, 0.1);
+    --harvest-tint:  rgba(212, 160, 23, 0.06);
+
+    --soil:          #C17644;
+    --soil-light:    #D4904E;
+    --soil-subtle:   rgba(193, 118, 68, 0.1);
+    --soil-tint:     rgba(193, 118, 68, 0.06);
+
+    --sky:           #5B9BD5;
+    --sky-light:     #7BB3E0;
+    --sky-subtle:    rgba(91, 155, 213, 0.1);
+    --sky-tint:      rgba(91, 155, 213, 0.06);
+
+    --positive:  #52B788;
+    --negative:  #E05A4A;
+    --warning:   #D4A017;
+    --info:      #5B9BD5;
+
+    --shadow-sm:  0 1px 3px rgba(0,0,0,0.2);
+    --shadow-md:  0 4px 16px rgba(0,0,0,0.25);
+    --shadow-lg:  0 8px 32px rgba(0,0,0,0.3);
+    --shadow-focus: 0 0 0 3px rgba(82, 183, 136, 0.25);
+
+    --map-1: #1A2820;  --map-2: #20322A;  --map-3: #2A4535;
+    --map-4: #356040;  --map-5: #40784C;  --map-6: #4A8B48;
+    --map-7: #52A054;  --map-8: #52B760;  --map-9: #52B788;
+    --map-10: #74D4A0;
+  }
+
+/* Base styles */
+*, *::before, *::after { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: var(--font-inter), 'Inter', system-ui, -apple-system, sans-serif;
-  scroll-behavior: smooth;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-/* Material Symbols Styling */
-.material-symbols-outlined {
-  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
-  user-select: none;
-}
+/* ─── Scrollbar ───────────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--muted); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text3); }
 
-/* Custom Scrollbar */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-::-webkit-scrollbar-thumb {
-  background: #374151;
-  border-radius: 4px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: #4b5563;
-}
-
-/* ─── Dark Mode Crops Dashboard ───────────────────────────────── */
-.crops-story {
-  animation: fadeIn 400ms ease-out;
-}
-
-.story-section {
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
-}
-
-.story-section:hover {
-  border-color: #3d4256 !important;
-  box-shadow: 0 0 0 1px rgba(96, 165, 250, 0.05), 0 8px 32px rgba(0, 0, 0, 0.15);
-}
-
-/* ─── Staggered Card Animation ────────────────────────────────── */
+/* ─── Animations ──────────────────────────────────────────── */
 @keyframes fadeSlideUp {
-  from {
-    opacity: 0;
-    transform: translateY(16px);
-  }
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
 
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes shimmer {
+  0%   { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
 }
 
 .card-animate {
-  animation: fadeSlideUp 500ms ease-out both;
+  animation: fadeSlideUp 500ms var(--ease-out) both;
 }
 
-/* ─── General Fade ────────────────────────────────────────────── */
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-  }
-
-  to {
-    opacity: 1;
-  }
-}
-
-/* ─── Card Hover (for non-dark-mode sections) ─────────────────── */
 .card-hover {
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  transition: transform var(--duration-fast) var(--ease-out),
+              box-shadow var(--duration-fast) var(--ease-out);
 }
-
 .card-hover:hover {
   transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+  box-shadow: var(--shadow-md);
 }
 
-/* ─── Custom scrollbar for dark mode ──────────────────────────── */
-.crops-story::-webkit-scrollbar {
-  width: 6px;
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--surface2) 25%,
+    var(--muted) 50%,
+    var(--surface2) 75%
+  );
+  background-size: 800px 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+  border-radius: var(--radius-sm);
 }
 
-.crops-story::-webkit-scrollbar-track {
-  background: #141720;
-}
-
-.crops-story::-webkit-scrollbar-thumb {
-  background: #2a2e3d;
-  border-radius: 3px;
-}
-
-.crops-story::-webkit-scrollbar-thumb:hover {
-  background: #3d4256;
-}
-
-/* ─── Recharts overrides for dark mode ────────────────────────── */
-.crops-story .recharts-legend-item-text {
-  color: #9ca3af !important;
-  font-size: 12px !important;
-}
-
-.crops-story .recharts-cartesian-axis-tick-value {
-  fill: #6b7280 !important;
-}
-
-/* ─── Recharts ResponsiveContainer guard ─────────────────────── */
-/* Prevents crash from negative dimensions on resize/hide */
+/* ─── Recharts guards ─────────────────────────────────────── */
 .recharts-wrapper {
   min-height: 50px;
   min-width: 50px;
 }
 
-/* ─── Focus indicators for keyboard navigation ──────────────── */
+/* ─── Accessibility ───────────────────────────────────────── */
 button:focus-visible,
 select:focus-visible,
 input:focus-visible,
 a:focus-visible {
-  outline: 2px solid #60a5fa;
-  outline-offset: 2px;
-  border-radius: 4px;
+  outline: none;
+  box-shadow: var(--shadow-focus);
+  border-radius: var(--radius-sm);
 }
 
-/* ─── Touch target minimum sizing ────────────────────────────── */
+/* ─── Touch targets ───────────────────────────────────────── */
 @media (pointer: coarse) {
   button,
   select,

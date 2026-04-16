@@ -286,8 +286,16 @@ def train_single_model(
     weather_df: pd.DataFrame,
     prism_normals: dict,
     skip_cv: bool = False,
+    capture_predictions: bool = False,
 ) -> dict:
-    """Train a single YieldModel for (crop, week) with weather features."""
+    """Train a single YieldModel for (crop, week) with weather features.
+
+    If capture_predictions is True, returned dict includes a 'predictions'
+    key holding a list of per-row val+test predictions. Each item:
+        {forecast_year, fips, model_p50, model_p10, model_p90,
+         actual_yield, county_5yr_mean, split}
+    Used by the --persist-accuracy flag to populate yield_accuracy (§7.4 WI-3).
+    """
     logger.info("=== Training %s week %d ===", crop, week)
 
     # Get list of counties with yield data
@@ -401,11 +409,63 @@ def train_single_model(
     # Calibrate conformal intervals
     model.calibrate_conformal(X_val, y_val)
 
+    # Capture per-row walk-forward predictions for yield_accuracy persistence (§7.4 WI-3)
+    prediction_rows: list[dict] = []
+    if capture_predictions:
+        val_df = df.loc[val_mask]
+        val_p10, val_p50, val_p90 = model.predict_batch(X_val)
+        for i, (_, meta) in enumerate(val_df.iterrows()):
+            actual = float(meta["_yield"])
+            p50 = float(val_p50[i])
+            p10 = float(val_p10[i])
+            p90 = float(val_p90[i])
+            pct_err = round((p50 - actual) / actual * 100, 2) if actual > 0 else None
+            prediction_rows.append({
+                "forecast_year": int(meta["_year"]),
+                "fips": str(meta["_fips"]),
+                "crop": crop,
+                "week": week,
+                "model_p50": p50,
+                "model_p10": p10,
+                "model_p90": p90,
+                "actual_yield": actual,
+                "county_5yr_mean": round(float(meta.get("county_mean_yield", 0)), 1) if pd.notna(meta.get("county_mean_yield")) else None,
+                "abs_error": round(abs(p50 - actual), 2),
+                "pct_error": pct_err,
+                "in_interval": bool(p10 <= actual <= p90),
+                "split": "val",
+            })
+
     # Test set
     test_rrmse = None
     if len(X_test) > 0:
         test_preds = model.q50.predict(X_test[model.feature_cols].fillna(0))
         test_rrmse = compute_rrmse(y_test.values, test_preds)
+
+        if capture_predictions:
+            test_df = df.loc[test_mask]
+            test_p10, test_p50, test_p90 = model.predict_batch(X_test)
+            for i, (_, meta) in enumerate(test_df.iterrows()):
+                actual = float(meta["_yield"])
+                p50 = float(test_p50[i])
+                p10 = float(test_p10[i])
+                p90 = float(test_p90[i])
+                pct_err = round((p50 - actual) / actual * 100, 2) if actual > 0 else None
+                prediction_rows.append({
+                    "forecast_year": int(meta["_year"]),
+                    "fips": str(meta["_fips"]),
+                    "crop": crop,
+                    "week": week,
+                    "model_p50": p50,
+                    "model_p10": p10,
+                    "model_p90": p90,
+                    "actual_yield": actual,
+                    "county_5yr_mean": round(float(meta.get("county_mean_yield", 0)), 1) if pd.notna(meta.get("county_mean_yield")) else None,
+                    "abs_error": round(abs(p50 - actual), 2),
+                    "pct_error": pct_err,
+                    "in_interval": bool(p10 <= actual <= p90),
+                    "split": "test",
+                })
 
     # Baselines
     baselines = compute_baselines(
@@ -454,7 +514,67 @@ def train_single_model(
     with open(artifact_dir / "metrics.json", "w") as f:
         json.dump(metrics, f, indent=2, default=str)
 
+    if capture_predictions:
+        metrics["predictions"] = prediction_rows
+
     return metrics
+
+
+def persist_yield_accuracy(predictions: list[dict], model_ver: str) -> int:
+    """Upsert walk-forward yield predictions into yield_accuracy table (§7.4 WI-3).
+
+    Args:
+        predictions: list of per-row prediction dicts from train_single_model
+                     (captured when capture_predictions=True).
+        model_ver: model version string for the unique constraint.
+
+    Returns number of rows upserted.
+    """
+    from sqlalchemy.dialects.postgresql import insert
+    from backend.etl.common import get_sync_session
+    from backend.models.db_tables import YieldAccuracy
+
+    if not predictions:
+        return 0
+
+    rows = []
+    for p in predictions:
+        rows.append({
+            **p,
+            "model_ver": model_ver,
+        })
+
+    session = get_sync_session()
+    try:
+        # Upsert in chunks to keep single statements reasonable
+        CHUNK = 5000
+        total = 0
+        for i in range(0, len(rows), CHUNK):
+            chunk = rows[i:i + CHUNK]
+            stmt = insert(YieldAccuracy.__table__).values(chunk)
+            stmt = stmt.on_conflict_do_update(
+                constraint="uq_yield_accuracy",
+                set_={
+                    "model_p50": stmt.excluded.model_p50,
+                    "model_p10": stmt.excluded.model_p10,
+                    "model_p90": stmt.excluded.model_p90,
+                    "actual_yield": stmt.excluded.actual_yield,
+                    "county_5yr_mean": stmt.excluded.county_5yr_mean,
+                    "abs_error": stmt.excluded.abs_error,
+                    "pct_error": stmt.excluded.pct_error,
+                    "in_interval": stmt.excluded.in_interval,
+                    "split": stmt.excluded.split,
+                },
+            )
+            result = session.execute(stmt)
+            total += result.rowcount
+        session.commit()
+        return total
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
 
 
 def _compute_trend(series: pd.Series) -> float:
@@ -491,6 +611,11 @@ if __name__ == "__main__":
     parser.add_argument("--local-only", action="store_true", help="Skip S3 download")
     parser.add_argument("--skip-cv", action="store_true", help="Skip cross-validation")
     parser.add_argument("--upload-s3", action="store_true", help="Upload artifacts to S3")
+    parser.add_argument(
+        "--persist-accuracy",
+        action="store_true",
+        help="Upsert walk-forward val+test predictions to yield_accuracy table",
+    )
     args = parser.parse_args()
 
     t0 = _time.time()
@@ -519,9 +644,23 @@ if __name__ == "__main__":
         for week in weeks:
             metrics = train_single_model(
                 crop_key, week, nass_yields, weather_df, prism_normals, args.skip_cv,
+                capture_predictions=args.persist_accuracy,
             )
             if metrics:
                 all_metrics.append(metrics)
+
+                # Persist walk-forward predictions per (crop, week) to yield_accuracy
+                if args.persist_accuracy and metrics.get("predictions"):
+                    try:
+                        n = persist_yield_accuracy(
+                            metrics["predictions"],
+                            model_ver=metrics["model_ver"],
+                        )
+                        logger.info("  Persisted %d rows to yield_accuracy", n)
+                    except Exception as exc:
+                        logger.error("  Failed to persist yield accuracy: %s", exc)
+                    # Strip predictions from in-memory metrics to keep memory bounded
+                    metrics.pop("predictions", None)
 
     # Summary
     logger.info("=== Training Summary ===")

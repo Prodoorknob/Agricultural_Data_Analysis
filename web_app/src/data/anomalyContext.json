@@ -1,0 +1,56 @@
+{
+  "corn_2012": {
+    "commodity": "CORN",
+    "year": 2012,
+    "yieldDeltaPct": -27,
+    "dsciPeak": 410,
+    "dsciPeakMonth": "July",
+    "wasdeSurprise": "USDA cut stocks-to-use 3.2pp in August",
+    "narrative": "Worst Midwest drought since 1988. National yield fell to 123 bu/acre."
+  },
+  "corn_2019": {
+    "commodity": "CORN",
+    "year": 2019,
+    "yieldDeltaPct": -5,
+    "dsciPeak": null,
+    "dsciPeakMonth": null,
+    "wasdeSurprise": null,
+    "narrative": "Historic planting delays from spring flooding. 20M acres went unplanted."
+  },
+  "soybeans_2012": {
+    "commodity": "SOYBEANS",
+    "year": 2012,
+    "yieldDeltaPct": -20,
+    "dsciPeak": 410,
+    "dsciPeakMonth": "July",
+    "wasdeSurprise": "USDA slashed soy production estimate 12% in August",
+    "narrative": "Midwest drought hit soybeans during pod fill. National yield fell to 40 bu/acre."
+  },
+  "wheat_2002": {
+    "commodity": "WHEAT",
+    "year": 2002,
+    "yieldDeltaPct": -12,
+    "dsciPeak": 350,
+    "dsciPeakMonth": "August",
+    "wasdeSurprise": null,
+    "narrative": "Widespread drought across the Great Plains winter wheat belt."
+  },
+  "corn_2005": {
+    "commodity": "CORN",
+    "year": 2005,
+    "yieldDeltaPct": -8,
+    "dsciPeak": 280,
+    "dsciPeakMonth": "August",
+    "wasdeSurprise": null,
+    "narrative": "Midwest drought stress during pollination reduced yields below trend."
+  },
+  "soybeans_2003": {
+    "commodity": "SOYBEANS",
+    "year": 2003,
+    "yieldDeltaPct": -15,
+    "dsciPeak": 320,
+    "dsciPeakMonth": "August",
+    "wasdeSurprise": null,
+    "narrative": "Hot, dry August across the Midwest during pod fill."
+  }
+}

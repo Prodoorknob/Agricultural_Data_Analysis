@@ -1,25 +1,42 @@
 import os
 import sys
 from logging.config import fileConfig
+from pathlib import Path
 
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
 # Add project root to path so we can import backend modules
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
+
+# Load .env file if present (so DATABASE_URL is available without shell export)
+ENV_FILE = PROJECT_ROOT / ".env"
+if ENV_FILE.exists():
+    for line in ENV_FILE.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        os.environ.setdefault(key.strip(), value.strip())
 
 from backend.database import Base
 from backend.models.db_tables import (  # noqa: F401 — registers models with Base
     AcreageAccuracy,
     AcreageForecast,
+    CrpEnrollment,
+    DroughtIndex,
     DxyDaily,
     ErsFertilizerPrice,
     ErsProductionCost,
+    ExportCommitment,
     FeatureWeekly,
     FuturesDaily,
     PriceForecast,
+    RmaInsuredAcres,
     SoilFeature,
     WasdeRelease,
+    YieldAccuracy,
     YieldForecast,
 )
 

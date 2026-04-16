@@ -10,12 +10,13 @@ Three endpoints:
 from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from sqlalchemy import select, func
+from sqlalchemy import Numeric, select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.database import get_db
-from backend.models.db_tables import YieldForecast
+from backend.models.db_tables import YieldAccuracy, YieldForecast
 from backend.models.schemas import (
+    YieldAccuracyWeekItem,
     YieldForecastResponse,
     YieldHistoryItem,
     YieldMapItem,
@@ -218,3 +219,58 @@ async def get_yield_history(
         ))
 
     return history
+
+
+@router.get("/accuracy", response_model=list[YieldAccuracyWeekItem])
+async def get_yield_accuracy(
+    crop: str = Query(..., pattern="^(corn|soybean|wheat)$"),
+    split: str = Query("test", pattern="^(val|test)$", description="Walk-forward split"),
+    db: AsyncSession = Depends(get_db),
+):
+    """Aggregated yield accuracy by week for the accuracy panel (§5.3.D).
+
+    Returns average pct_error, coverage (fraction in interval), and baseline RRMSE
+    per week across all counties and forecast years for the given crop.
+    """
+    stmt = (
+        select(
+            YieldAccuracy.week,
+            func.avg(func.abs(YieldAccuracy.pct_error)).label("avg_pct_error"),
+            func.avg(
+                func.cast(YieldAccuracy.in_interval, Numeric)
+            ).label("avg_coverage"),
+            func.avg(
+                func.abs(
+                    (YieldAccuracy.actual_yield - YieldAccuracy.county_5yr_mean)
+                    / func.nullif(YieldAccuracy.actual_yield, 0)
+                    * 100
+                )
+            ).label("baseline_rrmse"),
+            func.count().label("n_counties"),
+        )
+        .where(
+            YieldAccuracy.crop == crop,
+            YieldAccuracy.split == split,
+            YieldAccuracy.actual_yield.isnot(None),
+            YieldAccuracy.pct_error.isnot(None),
+        )
+        .group_by(YieldAccuracy.week)
+        .order_by(YieldAccuracy.week)
+    )
+    result = await db.execute(stmt)
+    rows = result.all()
+
+    if not rows:
+        raise HTTPException(status_code=404, detail=f"No yield accuracy data for {crop}")
+
+    return [
+        YieldAccuracyWeekItem(
+            crop=crop,
+            week=row.week,
+            avg_pct_error=round(float(row.avg_pct_error), 2) if row.avg_pct_error else None,
+            avg_coverage=round(float(row.avg_coverage), 3) if row.avg_coverage else None,
+            baseline_rrmse=round(float(row.baseline_rrmse), 2) if row.baseline_rrmse else None,
+            n_counties=row.n_counties,
+        )
+        for row in rows
+    ]

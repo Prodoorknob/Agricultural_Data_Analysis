@@ -1,0 +1,22 @@
+{
+  "wasde": "USDA's monthly World Agricultural Supply & Demand Estimates report. Drives futures reactions.",
+  "stocks-to-use": "Ending stocks divided by total use. A tightness gauge \u2014 lower values mean more price pressure.",
+  "basis": "Local cash price minus the nearest futures price. Measures local supply/demand.",
+  "bu/acre": "Bushels per acre \u2014 the standard yield unit for grains. Corn national average is around 180.",
+  "p10 / p50 / p90": "An 80% confidence range. Actual outcomes fall between p10 and p90 about 80% of the time.",
+  "mape": "Mean Absolute Percent Error. How far off a forecast is on average. Lower is better.",
+  "rrmse": "Relative Root Mean Squared Error. A percent-based error metric for yield forecasts.",
+  "marketing year": "The 12-month window used to track a crop\u2019s supply/demand (corn: Sep\u2013Aug; wheat: Jun\u2013May).",
+  "nearby contract": "The futures contract closest to delivery \u2014 the most liquid and most referenced price.",
+  "deferred contract": "A futures contract further out in time. Used to understand forward expectations.",
+  "backwardation": "Nearby prices higher than deferred \u2014 signals tight current supply.",
+  "contango": "Deferred prices higher than nearby \u2014 the more common state for grains.",
+  "dxy": "The U.S. Dollar Index. Stronger dollar usually pressures U.S. grain exports.",
+  "dsci": "Drought Severity & Coverage Index (0\u2013500 scale) from the U.S. Drought Monitor.",
+  "cci": "Crop Condition Index, derived from NASS weekly Good/Excellent ratings.",
+  "prospective plantings": "USDA\u2019s March 31 survey-based forecast of what farmers intend to plant.",
+  "crp": "Conservation Reserve Program \u2014 cropland paid to stay idle. Expirations free up land for planting.",
+  "production cost per bushel": "Total cost of producing one bushel \u2014 fertilizer, seed, labor, fuel, land, capital. From USDA ERS.",
+  "corn/soy ratio": "November soybean futures \u00f7 December corn futures. Drives planting mix \u2014 below 2.2 favors soy.",
+  "walk-forward backtest": "Training only on data available at the time, re-testing each year, to simulate real forecasting."
+}

@@ -11,6 +11,10 @@
 #   0 12 1 2 *  /home/ec2-user/Agricultural_Data_Analysis/pipeline/cron_runner.sh --annual-acreage  # Annual acreage forecast
 #   0 12 1 1,4,7,10 * /home/ec2-user/Agricultural_Data_Analysis/pipeline/cron_runner.sh --quarterly-fertilizer  # Quarterly fertilizer prices
 #   0 10 * * 4  /home/ec2-user/Agricultural_Data_Analysis/pipeline/cron_runner.sh --weekly-yield   # Weekly yield pipeline (Thursday 10 AM)
+#   0 10 * * 4  /home/ec2-user/Agricultural_Data_Analysis/pipeline/cron_runner.sh --weekly-drought  # Weekly DSCI drought (Thursday 10 AM)
+#   0 10 15 3 * /home/ec2-user/Agricultural_Data_Analysis/pipeline/cron_runner.sh --annual-rma     # Annual RMA insured acres (March 15)
+#   0 10 1 4 *  /home/ec2-user/Agricultural_Data_Analysis/pipeline/cron_runner.sh --annual-crp     # Annual CRP enrollment (April 1)
+#   0 14 * * 4  /home/ec2-user/Agricultural_Data_Analysis/pipeline/cron_runner.sh --weekly-exports  # Weekly FAS export sales (Thursday 2 PM)
 #
 # Modes:
 #   (default)              NASS QuickStats ingestion pipeline
@@ -20,6 +24,10 @@
 #   --annual-acreage       Acreage model inference + publish (February only)
 #   --quarterly-fertilizer ERS fertilizer price update (Jan, Apr, Jul, Oct)
 #   --weekly-yield         Yield pipeline: weather/drought ETL + features + inference (Thursdays)
+#   --weekly-drought       USDM state-level DSCI refresh (Thursdays)
+#   --annual-rma           RMA crop insurance insured acres (March)
+#   --annual-crp           FSA CRP enrollment/expirations (April)
+#   --weekly-exports       FAS weekly export sales (Thursdays)
 #
 # Flow (default mode):
 #   1. Activate virtual environment
@@ -193,6 +201,170 @@ if [ "${RUN_MODE}" = "--annual-ers" ]; then
         --subject "Price ETL: ERS Costs SUCCESS" \
         --message "ERS production costs updated at $(date)." \
         --region "${AWS_REGION}" 2>/dev/null || true
+    exit 0
+fi
+
+# ---------------------------------------------------------------------------
+# Mode: --quarterly-fertilizer  (ERS fertilizer price refresh)
+# ---------------------------------------------------------------------------
+if [ "${RUN_MODE}" = "--quarterly-fertilizer" ]; then
+    echo "Running QUARTERLY fertilizer price ingest..."
+    activate_backend_venv
+    cd "${PROJECT_ROOT}"
+
+    set +e
+    python -m backend.etl.ingest_fertilizer fred
+    FERT_EXIT=$?
+    set -e
+
+    if [ ${FERT_EXIT} -ne 0 ]; then
+        aws sns publish \
+            --topic-arn "${SNS_TOPIC_ARN}" \
+            --subject "Acreage ETL: Fertilizer FAILED" \
+            --message "Fertilizer price ingest failed at $(date). See log: ${LOGFILE}" \
+            --region "${AWS_REGION}" 2>/dev/null || true
+        exit 1
+    fi
+
+    echo "Quarterly fertilizer prices updated at $(date)"
+    exit 0
+fi
+
+# ---------------------------------------------------------------------------
+# Mode: --annual-acreage  (Acreage model inference + publish)
+# ---------------------------------------------------------------------------
+if [ "${RUN_MODE}" = "--annual-acreage" ]; then
+    echo "Running ANNUAL acreage inference..."
+    activate_backend_venv
+    cd "${PROJECT_ROOT}"
+
+    set +e
+    python -m backend.models.acreage_inference
+    ACREAGE_EXIT=$?
+    set -e
+
+    if [ ${ACREAGE_EXIT} -ne 0 ]; then
+        aws sns publish \
+            --topic-arn "${SNS_TOPIC_ARN}" \
+            --subject "Acreage Inference: FAILED" \
+            --message "Acreage inference failed at $(date). See log: ${LOGFILE}" \
+            --region "${AWS_REGION}" 2>/dev/null || true
+        exit 1
+    fi
+
+    # Restart FastAPI to reload model cache
+    sudo systemctl restart ag-prediction 2>/dev/null || true
+
+    echo "Annual acreage inference completed at $(date)"
+    aws sns publish \
+        --topic-arn "${SNS_TOPIC_ARN}" \
+        --subject "Acreage Inference: SUCCESS" \
+        --message "Acreage forecasts updated at $(date)." \
+        --region "${AWS_REGION}" 2>/dev/null || true
+    exit 0
+fi
+
+# ---------------------------------------------------------------------------
+# Mode: --weekly-drought  (USDM state-level DSCI refresh)
+# ---------------------------------------------------------------------------
+if [ "${RUN_MODE}" = "--weekly-drought" ]; then
+    echo "Running WEEKLY drought DSCI refresh..."
+    activate_backend_venv
+    cd "${PROJECT_ROOT}"
+
+    set +e
+    python -m backend.etl.ingest_drought_dsci
+    DSCI_EXIT=$?
+    set -e
+
+    if [ ${DSCI_EXIT} -ne 0 ]; then
+        aws sns publish \
+            --topic-arn "${SNS_TOPIC_ARN}" \
+            --subject "Acreage ETL: Drought DSCI FAILED" \
+            --message "Drought DSCI ingest failed at $(date). See log: ${LOGFILE}" \
+            --region "${AWS_REGION}" 2>/dev/null || true
+        exit 1
+    fi
+
+    echo "Weekly drought DSCI refresh completed at $(date)"
+    exit 0
+fi
+
+# ---------------------------------------------------------------------------
+# Mode: --annual-rma  (RMA crop insurance insured acres)
+# ---------------------------------------------------------------------------
+if [ "${RUN_MODE}" = "--annual-rma" ]; then
+    echo "Running ANNUAL RMA insured acres ingest..."
+    activate_backend_venv
+    cd "${PROJECT_ROOT}"
+
+    set +e
+    python -m backend.etl.ingest_rma
+    RMA_EXIT=$?
+    set -e
+
+    if [ ${RMA_EXIT} -ne 0 ]; then
+        aws sns publish \
+            --topic-arn "${SNS_TOPIC_ARN}" \
+            --subject "Acreage ETL: RMA FAILED" \
+            --message "RMA insured acres ingest failed at $(date). See log: ${LOGFILE}" \
+            --region "${AWS_REGION}" 2>/dev/null || true
+        exit 1
+    fi
+
+    echo "Annual RMA insured acres ingest completed at $(date)"
+    exit 0
+fi
+
+# ---------------------------------------------------------------------------
+# Mode: --annual-crp  (FSA CRP enrollment/expirations)
+# ---------------------------------------------------------------------------
+if [ "${RUN_MODE}" = "--annual-crp" ]; then
+    echo "Running ANNUAL CRP enrollment ingest..."
+    activate_backend_venv
+    cd "${PROJECT_ROOT}"
+
+    set +e
+    python -m backend.etl.ingest_crp --backfill
+    CRP_EXIT=$?
+    set -e
+
+    if [ ${CRP_EXIT} -ne 0 ]; then
+        aws sns publish \
+            --topic-arn "${SNS_TOPIC_ARN}" \
+            --subject "Acreage ETL: CRP FAILED" \
+            --message "CRP enrollment ingest failed at $(date). See log: ${LOGFILE}" \
+            --region "${AWS_REGION}" 2>/dev/null || true
+        exit 1
+    fi
+
+    echo "Annual CRP enrollment ingest completed at $(date)"
+    exit 0
+fi
+
+# ---------------------------------------------------------------------------
+# Mode: --weekly-exports  (FAS weekly export sales)
+# ---------------------------------------------------------------------------
+if [ "${RUN_MODE}" = "--weekly-exports" ]; then
+    echo "Running WEEKLY FAS export sales ingest..."
+    activate_backend_venv
+    cd "${PROJECT_ROOT}"
+
+    set +e
+    python -m backend.etl.ingest_fas_exports
+    EXPORTS_EXIT=$?
+    set -e
+
+    if [ ${EXPORTS_EXIT} -ne 0 ]; then
+        aws sns publish \
+            --topic-arn "${SNS_TOPIC_ARN}" \
+            --subject "Acreage ETL: Export Sales FAILED" \
+            --message "FAS export sales ingest failed at $(date). See log: ${LOGFILE}" \
+            --region "${AWS_REGION}" 2>/dev/null || true
+        exit 1
+    fi
+
+    echo "Weekly FAS export sales ingest completed at $(date)"
     exit 0
 fi
 

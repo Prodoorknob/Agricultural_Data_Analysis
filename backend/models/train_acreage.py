@@ -12,6 +12,7 @@ Usage:
 import argparse
 import subprocess
 import sys
+from datetime import datetime
 from pathlib import Path
 
 import numpy as np
@@ -188,20 +189,42 @@ def _merge_historical(nass_data: pd.DataFrame) -> pd.DataFrame:
     return combined[["state_fips", "commodity", "year", "acres_planted", "yield_bu"]]
 
 
+# Per-commodity residual configuration
+# Absolute targets for corn; 3yr avg residual for soybean and wheat splits
+RESIDUAL_CONFIG = {
+    "corn":         {"use_residual": False, "residual_col": "prior_year_acres"},
+    "soybean":      {"use_residual": True,  "residual_col": "prior_3yr_avg_acres"},
+    "wheat":        {"use_residual": True,  "residual_col": "prior_3yr_avg_acres"},
+    "wheat_winter": {"use_residual": True,  "residual_col": "prior_3yr_avg_acres"},
+    "wheat_spring": {"use_residual": True,  "residual_col": "prior_3yr_avg_acres"},
+}
+
+
 def train_commodity(
     commodity: str,
     nass_data: pd.DataFrame,
     output_dir: Path,
     run_cv: bool = True,
-) -> None:
-    """Train and save model for one commodity using state-panel data."""
+    persist_accuracy: bool = False,
+) -> pd.DataFrame:
+    """Train and save model for one commodity using state-panel data.
+
+    Returns the walk-forward predictions DataFrame (val + test rows).
+    If persist_accuracy is True, upserts them to the acreage_accuracy table.
+    """
     logger.info(f"=== Training {commodity} acreage model (state-panel) ===")
 
     states = TOP_STATES.get(commodity, ["00"])
 
+    # Map wheat_winter/wheat_spring to NASS "wheat" for data filtering
+    nass_commodity = commodity.split("_")[0] if "_" in commodity else commodity
+
+    # Per-commodity residual config
+    res_cfg = RESIDUAL_CONFIG.get(commodity, {"use_residual": False, "residual_col": "prior_year_acres"})
+
     # Determine year range from data availability
     commodity_data = nass_data[
-        (nass_data["commodity"] == commodity)
+        (nass_data["commodity"] == nass_commodity)
         & (nass_data["state_fips"].isin(states))
     ]
     min_year = int(commodity_data["year"].min())
@@ -213,10 +236,11 @@ def train_commodity(
 
     logger.info(
         f"  States: {len(states)}, Train: {feature_start}-2020, "
-        f"Val: 2021-2023, Test: 2024-2025"
+        f"Val: 2021-2023, Test: 2024-2025, "
+        f"residual={res_cfg['use_residual']} ({res_cfg['residual_col']})"
     )
 
-    ensemble, metrics = train_and_save(
+    ensemble, metrics, predictions_df = train_and_save(
         commodity=commodity,
         nass_data=nass_data,
         output_dir=output_dir,
@@ -225,6 +249,8 @@ def train_commodity(
         val_years=val_years,
         test_years=test_years,
         run_cv=run_cv,
+        use_residual=res_cfg["use_residual"],
+        residual_col=res_cfg["residual_col"],
     )
 
     # Summary
@@ -236,6 +262,70 @@ def train_commodity(
         f"Coverage: val={metrics.get('coverage_80_val', '?')}, "
         f"test={metrics.get('coverage_80_test', '?')}"
     )
+
+    # Persist walk-forward predictions to acreage_accuracy (§7.4 WI-1)
+    if persist_accuracy and not predictions_df.empty:
+        try:
+            n = persist_acreage_accuracy(predictions_df, model_ver=metrics["model_ver"])
+            logger.info(f"  Persisted {n} rows to acreage_accuracy")
+        except Exception as exc:
+            logger.error(f"  Failed to persist acreage accuracy: {exc}")
+
+    return predictions_df
+
+
+def persist_acreage_accuracy(predictions_df: pd.DataFrame, model_ver: str) -> int:
+    """Upsert walk-forward acreage predictions into acreage_accuracy table.
+
+    Computes model_vs_actual_pct for rows where actual is known.
+    The usda_prospective column is left null — populated separately by
+    backend/etl/ingest_prospective_plantings.py.
+
+    Returns number of rows upserted.
+    """
+    from sqlalchemy.dialects.postgresql import insert
+    from backend.etl.common import get_sync_session
+    from backend.models.db_tables import AcreageAccuracy
+
+    if predictions_df.empty:
+        return 0
+
+    rows = []
+    for _, row in predictions_df.iterrows():
+        actual = float(row["actual"])
+        forecast = float(row["model_p50"])
+        # model_vs_actual_pct: (forecast - actual) / actual * 100
+        pct_err = round((forecast - actual) / actual * 100, 2) if actual != 0 else None
+        rows.append({
+            "forecast_year": int(row["forecast_year"]),
+            "state_fips": str(row["state_fips"]),
+            "commodity": str(row["commodity"]),
+            "model_forecast": forecast,
+            "usda_june_actual": actual,
+            "model_vs_actual_pct": pct_err,
+            # usda_prospective and model_vs_usda_pct filled by Prospective Plantings ETL
+        })
+
+    session = get_sync_session()
+    try:
+        stmt = insert(AcreageAccuracy.__table__).values(rows)
+        stmt = stmt.on_conflict_do_update(
+            constraint="uq_acreage_accuracy",
+            set_={
+                "model_forecast": stmt.excluded.model_forecast,
+                "usda_june_actual": stmt.excluded.usda_june_actual,
+                "model_vs_actual_pct": stmt.excluded.model_vs_actual_pct,
+                "updated_at": datetime.utcnow(),
+            },
+        )
+        result = session.execute(stmt)
+        session.commit()
+        return result.rowcount
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
 
 
 def main():
@@ -266,6 +356,11 @@ def main():
         action="store_true",
         help="Upload artifacts to S3 after training",
     )
+    parser.add_argument(
+        "--persist-accuracy",
+        action="store_true",
+        help="Upsert walk-forward val+test predictions to acreage_accuracy table",
+    )
     args = parser.parse_args()
 
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
@@ -293,14 +388,21 @@ def main():
     logger.info(f"Cached NASS data to {nass_csv}")
 
     # Step 3: Train
-    commodities = (
-        ["corn", "soybean", "wheat"]
-        if args.commodity == "all"
-        else [args.commodity]
-    )
+    if args.commodity == "all":
+        commodities = ["corn", "soybean", "wheat_winter", "wheat_spring"]
+    elif args.commodity == "wheat":
+        commodities = ["wheat_winter", "wheat_spring"]
+    else:
+        commodities = [args.commodity]
 
     for commodity in commodities:
-        train_commodity(commodity, nass_data, ARTIFACT_DIR, run_cv=not args.skip_cv)
+        train_commodity(
+            commodity,
+            nass_data,
+            ARTIFACT_DIR,
+            run_cv=not args.skip_cv,
+            persist_accuracy=args.persist_accuracy,
+        )
 
     # Step 4: Optional S3 upload
     if args.upload_s3:
