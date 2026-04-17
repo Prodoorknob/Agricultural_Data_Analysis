@@ -1,0 +1,62 @@
+{
+  "crop": "wheat",
+  "week": 8,
+  "model_ver": "2026-04-15",
+  "train_rrmse": 17.9,
+  "val_rrmse": 20.95,
+  "test_rrmse": 25.35,
+  "baselines": {
+    "county_mean_rrmse": 21.8,
+    "prior_year_rrmse": 23.7
+  },
+  "beats_baseline": false,
+  "n_train": 19880,
+  "n_val": 3018,
+  "n_test": 955,
+  "n_features": 10,
+  "feature_cols": [
+    "county_mean_yield",
+    "county_yield_trend",
+    "prior_year_yield",
+    "county_yield_std",
+    "year",
+    "gdd_ytd",
+    "precip_season_in",
+    "precip_deficit_in",
+    "tmax_avg",
+    "hot_days"
+  ],
+  "has_weather_features": true,
+  "top_features": [
+    {
+      "name": "year",
+      "importance": 2068.0
+    },
+    {
+      "name": "county_mean_yield",
+      "importance": 1485.0
+    },
+    {
+      "name": "county_yield_trend",
+      "importance": 1125.0
+    },
+    {
+      "name": "county_yield_std",
+      "importance": 1123.0
+    },
+    {
+      "name": "tmax_avg",
+      "importance": 1118.0
+    },
+    {
+      "name": "prior_year_yield",
+      "importance": 1094.0
+    },
+    {
+      "name": "gdd_ytd",
+      "importance": 1080.0
+    }
+  ],
+  "conformal_q80": 15.40002458600642,
+  "confidence_tier": "medium"
+}

@@ -1,0 +1,28 @@
+{
+  "commodity": "wheat_winter",
+  "model_ver": "2026-04-14",
+  "n_train": 200,
+  "n_val": 24,
+  "n_test": 16,
+  "n_states": 8,
+  "train_mape": 3.64,
+  "val_mape": 5.91,
+  "val_rmse": 427109.0,
+  "coverage_80_val": 0.83,
+  "test_mape": 4.51,
+  "test_rmse": 168155.0,
+  "coverage_80_test": 1.0,
+  "persistence_mape": 5.8,
+  "fiveyear_avg_mape": 4.62,
+  "best_baseline_mape": 4.62,
+  "improvement_over_baseline_pp": -1.29,
+  "beats_baseline": false,
+  "conformal_q80": 544891.0,
+  "top_features": [
+    "yield_trend_5yr",
+    "prior_3yr_avg_acres",
+    "prior_year_yield",
+    "crp_pct_cropland",
+    "prior_year_acres"
+  ]
+}

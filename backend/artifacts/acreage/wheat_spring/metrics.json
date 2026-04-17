@@ -1,0 +1,28 @@
+{
+  "commodity": "wheat_spring",
+  "model_ver": "2026-04-14",
+  "n_train": 125,
+  "n_val": 15,
+  "n_test": 10,
+  "n_states": 5,
+  "train_mape": 4.7,
+  "val_mape": 9.94,
+  "val_rmse": 245376.0,
+  "coverage_80_val": 0.8,
+  "test_mape": 4.92,
+  "test_rmse": 140946.0,
+  "coverage_80_test": 1.0,
+  "persistence_mape": 4.17,
+  "fiveyear_avg_mape": 5.95,
+  "best_baseline_mape": 4.17,
+  "improvement_over_baseline_pp": -5.77,
+  "beats_baseline": false,
+  "conformal_q80": 347414.0,
+  "top_features": [
+    "yield_trend_5yr",
+    "export_outstanding_pct",
+    "crp_pct_cropland",
+    "prior_5yr_avg_acres",
+    "rotation_ratio"
+  ]
+}

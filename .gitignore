@@ -68,6 +68,39 @@ pipeline/_chunks/              # Temp ingestion chunks
 *.pickle
 *.tar.gz
 
+# Experimental acreage training variants stay ignored entirely.
+backend/artifacts/acreage_3yr_residual/
+backend/artifacts/acreage_5yr_residual/
+
+# Allow the small per-model metrics JSON files through so that /api/v1/meta/models
+# works on EC2 (the S3 startup download only fetches ensemble.pkl; metrics.json
+# must ship with the code to avoid an empty meta response). Production artifact
+# variants only — experimental residual sweeps (acreage_3yr_*, acreage_5yr_*)
+# stay ignored.
+!backend/artifacts/acreage/
+!backend/artifacts/acreage/corn/
+!backend/artifacts/acreage/soybean/
+!backend/artifacts/acreage/wheat/
+!backend/artifacts/acreage/wheat_winter/
+!backend/artifacts/acreage/wheat_spring/
+!backend/artifacts/acreage/*/metrics.json
+!backend/artifacts/corn/
+!backend/artifacts/corn/horizon_*/
+!backend/artifacts/corn/horizon_*/metrics.json
+!backend/artifacts/soybean/
+!backend/artifacts/soybean/horizon_*/
+!backend/artifacts/soybean/horizon_*/metrics.json
+!backend/artifacts/wheat/
+!backend/artifacts/wheat/horizon_*/
+!backend/artifacts/wheat/horizon_*/metrics.json
+!backend/artifacts/yield/
+!backend/artifacts/yield/corn/
+!backend/artifacts/yield/soybean/
+!backend/artifacts/yield/wheat/
+!backend/artifacts/yield/*/week_*/
+!backend/artifacts/yield/*/week_*/metrics.json
+!backend/artifacts/yield/*/summary.json
+
 # Backup files
 *.bak
 *.backup

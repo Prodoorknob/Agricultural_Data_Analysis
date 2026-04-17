@@ -1,0 +1,18 @@
+{
+  "commodity": "soybean",
+  "horizon": 1,
+  "model_ver": "2026-04-14",
+  "mape_train": 10.7549,
+  "mape_val": 5.0173,
+  "rmse_val": 0.9002,
+  "futures_baseline_mape": 4.8665,
+  "beats_baseline": true,
+  "coverage_90": 0.9189,
+  "conformity_offset": 1.087,
+  "mape_test": 8.4268,
+  "rmse_test": 1.2164,
+  "coverage_90_test": 0.96,
+  "n_train": 122,
+  "n_val": 37,
+  "n_test": 25
+}

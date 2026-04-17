@@ -1,0 +1,28 @@
+{
+  "commodity": "soybean",
+  "model_ver": "2026-04-16",
+  "n_train": 375,
+  "n_val": 45,
+  "n_test": 30,
+  "n_states": 15,
+  "train_mape": 4.25,
+  "val_mape": 5.39,
+  "val_rmse": 350317.0,
+  "coverage_80_val": 0.8,
+  "test_mape": 4.64,
+  "test_rmse": 237089.0,
+  "coverage_80_test": 0.9,
+  "persistence_mape": 6.12,
+  "fiveyear_avg_mape": 5.42,
+  "best_baseline_mape": 5.42,
+  "improvement_over_baseline_pp": 0.03,
+  "beats_baseline": true,
+  "conformal_q80": 468449.0,
+  "top_features": [
+    "crp_pct_cropland",
+    "prior_year_acres",
+    "yield_trend_5yr",
+    "prior_year_yield",
+    "insured_acres_prior"
+  ]
+}

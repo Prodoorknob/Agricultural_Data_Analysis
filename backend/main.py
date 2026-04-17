@@ -22,6 +22,11 @@ def _download_from_s3(s3_key: str, local_path: Path) -> bool:
     Also attempts to download the matching .sig sidecar (for HMAC verification
     at load time). A missing sig is not fatal — it only matters if
     MODEL_REQUIRE_SIGNED=1 is set, in which case load() will refuse to unpickle.
+
+    For ensemble.pkl downloads, also best-effort fetches the sibling
+    metrics.json so the /api/v1/meta/models endpoint can surface fresh
+    training stats on EC2 even when the JSON wasn't shipped with the code
+    (e.g. after a retrain that only uploaded new pickles).
     """
     import boto3
     from botocore.exceptions import ClientError
@@ -41,6 +46,21 @@ def _download_from_s3(s3_key: str, local_path: Path) -> bool:
         except ClientError as sig_exc:
             if sig_exc.response["Error"]["Code"] not in ("404", "NoSuchKey"):
                 logger.warning("Signature download failed for %s: %s", sig_key, sig_exc)
+
+        # Best-effort fetch of the sibling metrics.json / summary.json so the
+        # /meta/models endpoint doesn't rely on the files being committed.
+        if s3_key.endswith("ensemble.pkl") or s3_key.endswith("model.pkl"):
+            for sibling in ("metrics.json", "summary.json"):
+                sibling_key = s3_key.rsplit("/", 1)[0] + "/" + sibling
+                sibling_path = local_path.parent / sibling
+                if sibling_path.exists():
+                    continue
+                try:
+                    s3.download_file(settings.S3_BUCKET, sibling_key, str(sibling_path))
+                    logger.debug("Downloaded sibling %s", sibling_key)
+                except ClientError as sib_exc:
+                    if sib_exc.response["Error"]["Code"] not in ("404", "NoSuchKey"):
+                        logger.debug("Sibling download failed for %s: %s", sibling_key, sib_exc)
 
         return True
     except ClientError as exc:

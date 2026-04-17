@@ -1,0 +1,62 @@
+{
+  "crop": "soybean",
+  "week": 3,
+  "model_ver": "2026-04-15",
+  "train_rrmse": 15.39,
+  "val_rrmse": 16.95,
+  "test_rrmse": 17.64,
+  "baselines": {
+    "county_mean_rrmse": 23.15,
+    "prior_year_rrmse": 15.62
+  },
+  "beats_baseline": true,
+  "n_train": 9675,
+  "n_val": 2291,
+  "n_test": 1449,
+  "n_features": 10,
+  "feature_cols": [
+    "county_mean_yield",
+    "county_yield_trend",
+    "prior_year_yield",
+    "county_yield_std",
+    "year",
+    "gdd_ytd",
+    "precip_season_in",
+    "precip_deficit_in",
+    "tmax_avg",
+    "hot_days"
+  ],
+  "has_weather_features": true,
+  "top_features": [
+    {
+      "name": "year",
+      "importance": 1419.0
+    },
+    {
+      "name": "county_yield_trend",
+      "importance": 1184.0
+    },
+    {
+      "name": "county_mean_yield",
+      "importance": 1148.0
+    },
+    {
+      "name": "county_yield_std",
+      "importance": 1064.0
+    },
+    {
+      "name": "prior_year_yield",
+      "importance": 1000.0
+    },
+    {
+      "name": "gdd_ytd",
+      "importance": 892.0
+    },
+    {
+      "name": "precip_season_in",
+      "importance": 692.0
+    }
+  ],
+  "conformal_q80": 10.264446733554585,
+  "confidence_tier": "low"
+}

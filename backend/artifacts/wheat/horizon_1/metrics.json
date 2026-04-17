@@ -1,0 +1,18 @@
+{
+  "commodity": "wheat",
+  "horizon": 1,
+  "model_ver": "2026-04-14",
+  "mape_train": 16.8822,
+  "mape_val": 9.0995,
+  "rmse_val": 0.9568,
+  "futures_baseline_mape": 6.9452,
+  "beats_baseline": false,
+  "coverage_90": 0.9189,
+  "conformity_offset": 2.4095,
+  "mape_test": 12.7682,
+  "rmse_test": 0.885,
+  "coverage_90_test": 1.0,
+  "n_train": 122,
+  "n_val": 37,
+  "n_test": 12
+}

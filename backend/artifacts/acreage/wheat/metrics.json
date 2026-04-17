@@ -1,0 +1,33 @@
+{
+  "commodity": "wheat",
+  "model_ver": "2026-04-11",
+  "n_train": 375,
+  "n_val": 45,
+  "n_test": 30,
+  "n_states": 15,
+  "train_mape": 11.42,
+  "val_mape": 13.0,
+  "val_rmse": 355801.0,
+  "coverage_80_val": 0.64,
+  "test_mape": 8.65,
+  "test_rmse": 166401.0,
+  "coverage_80_test": 0.77,
+  "persistence_mape": 5.73,
+  "fiveyear_avg_mape": 6.53,
+  "best_baseline_mape": 5.73,
+  "improvement_over_baseline_pp": -7.27,
+  "beats_baseline": false,
+  "cv_mean_mape": 15.75,
+  "cv_std_mape": 7.05,
+  "cv_n_folds": 25,
+  "cv_worst_fold_year": 2018,
+  "cv_worst_fold_mape": 42.78,
+  "conformal_q80": 260541.0,
+  "top_features": [
+    "prior_5yr_avg_acres",
+    "prior_year_acres",
+    "prior_year_yield",
+    "insured_acres_prior",
+    "crp_pct_cropland"
+  ]
+}

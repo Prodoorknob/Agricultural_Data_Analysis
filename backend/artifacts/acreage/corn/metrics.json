@@ -1,0 +1,28 @@
+{
+  "commodity": "corn",
+  "model_ver": "2026-04-16",
+  "n_train": 375,
+  "n_val": 45,
+  "n_test": 30,
+  "n_states": 15,
+  "train_mape": 4.56,
+  "val_mape": 8.37,
+  "val_rmse": 423746.0,
+  "coverage_80_val": 0.8,
+  "test_mape": 6.26,
+  "test_rmse": 451778.0,
+  "coverage_80_test": 0.83,
+  "persistence_mape": 6.78,
+  "fiveyear_avg_mape": 6.24,
+  "best_baseline_mape": 6.24,
+  "improvement_over_baseline_pp": -2.13,
+  "beats_baseline": false,
+  "conformal_q80": 445608.0,
+  "top_features": [
+    "prior_3yr_avg_acres",
+    "prior_5yr_avg_acres",
+    "rotation_ratio",
+    "corn_soy_ratio",
+    "crp_pct_cropland"
+  ]
+}

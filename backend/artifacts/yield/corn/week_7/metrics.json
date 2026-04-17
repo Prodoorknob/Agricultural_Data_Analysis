@@ -1,0 +1,62 @@
+{
+  "crop": "corn",
+  "week": 7,
+  "model_ver": "2026-04-14",
+  "train_rrmse": 16.6,
+  "val_rrmse": 14.8,
+  "test_rrmse": 18.09,
+  "baselines": {
+    "county_mean_rrmse": 23.78,
+    "prior_year_rrmse": 16.06
+  },
+  "beats_baseline": true,
+  "n_train": 11595,
+  "n_val": 2608,
+  "n_test": 1701,
+  "n_features": 10,
+  "feature_cols": [
+    "county_mean_yield",
+    "county_yield_trend",
+    "prior_year_yield",
+    "county_yield_std",
+    "year",
+    "gdd_ytd",
+    "precip_season_in",
+    "precip_deficit_in",
+    "tmax_avg",
+    "hot_days"
+  ],
+  "has_weather_features": true,
+  "top_features": [
+    {
+      "name": "year",
+      "importance": 1590.0
+    },
+    {
+      "name": "county_mean_yield",
+      "importance": 1299.0
+    },
+    {
+      "name": "county_yield_std",
+      "importance": 1296.0
+    },
+    {
+      "name": "county_yield_trend",
+      "importance": 1267.0
+    },
+    {
+      "name": "prior_year_yield",
+      "importance": 1134.0
+    },
+    {
+      "name": "tmax_avg",
+      "importance": 947.0
+    },
+    {
+      "name": "precip_season_in",
+      "importance": 919.0
+    }
+  ],
+  "conformal_q80": 27.057979812187433,
+  "confidence_tier": "low"
+}

@@ -1,0 +1,18 @@
+{
+  "commodity": "corn",
+  "horizon": 5,
+  "model_ver": "2026-04-14",
+  "mape_train": 59.0202,
+  "mape_val": 15.8385,
+  "rmse_val": 0.9493,
+  "futures_baseline_mape": 17.2445,
+  "beats_baseline": true,
+  "coverage_90": 0.9189,
+  "conformity_offset": 1.4607,
+  "mape_test": 15.7148,
+  "rmse_test": 0.9595,
+  "coverage_90_test": 1.0,
+  "n_train": 86,
+  "n_val": 37,
+  "n_test": 25
+}
