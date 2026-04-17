@@ -198,6 +198,23 @@ class FertilizerPriceResponse(BaseModel):
     potash_ton: float | None = None
 
 
+class ExportPaceResponse(BaseModel):
+    """Weekly export commitments vs the 5-year same-week average.
+
+    Fills the Market tab's third-card slot when the commodity is wheat
+    (the corn/soy ratio card is meaningless there).
+    """
+    commodity: str
+    as_of_date: date
+    marketing_year: str
+    outstanding_sales_mt: float | None
+    accumulated_exports_mt: float | None
+    total_committed_mt: float | None
+    five_yr_avg_committed_mt: float | None
+    pct_of_5yr_avg: float | None
+    week_of_marketing_year: int | None
+
+
 class YieldAccuracyWeekItem(BaseModel):
     crop: str
     week: int

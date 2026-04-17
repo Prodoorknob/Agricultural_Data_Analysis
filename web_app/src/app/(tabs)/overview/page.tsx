@@ -2,200 +2,305 @@
 
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useFilters } from '@/hooks/useFilters';
-import { LATEST_NASS_YEAR } from '@/lib/constants';
-import { US_STATES, fetchStateData, fetchNationalCrops } from '@/utils/serviceData';
-import { filterData, getTopCrops, getMapData } from '@/utils/processData';
+import { LATEST_NASS_YEAR, COMMODITY_COLORS } from '@/lib/constants';
+import { US_STATES } from '@/utils/serviceData';
+import {
+  fetchStateTotals,
+  fetchStateCommodityTotals,
+  fetchCountyMetrics,
+  type StateTotalRow,
+  type StateCommodityRow,
+  type CountyMetricRow,
+} from '@/utils/overviewData';
 import BandShell from '@/components/shared/BandShell';
 import HeroStrip from '@/components/overview/HeroStrip';
 import USChoropleth from '@/components/maps/USChoropleth';
 import StateFingerprint from '@/components/overview/StateFingerprint';
 import StoryCards from '@/components/overview/StoryCards';
 import peerStatesMap from '@/data/peerStates.json';
-import { COMMODITY_COLORS } from '@/lib/constants';
 
 const peers = peerStatesMap as Record<string, string[]>;
+
+// Census years since 2012 give a dense, commodity-complete baseline that
+// non-Census years lack. Using year-5 against a sparse baseline was the
+// cause of the Overview hero's +15487% growth artifact.
+const GROWTH_BASE_YEAR = 2022;
 
 export default function OverviewPage() {
   const { filters, setState } = useFilters();
   const stateCode = filters.state;
-  const stateName = stateCode ? (US_STATES[stateCode] || stateCode) : 'United States';
+  const stateName = stateCode ? US_STATES[stateCode] || stateCode : 'United States';
 
-  const [nationalData, setNationalData] = useState<any[]>([]);
-  const [stateData, setStateData] = useState<any[]>([]);
+  const [stateTotals, setStateTotals] = useState<StateTotalRow[]>([]);
+  const [stateCommodityTotals, setStateCommodityTotals] = useState<StateCommodityRow[]>([]);
+  const [countyMetrics, setCountyMetrics] = useState<CountyMetricRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Load initial national data + state data
+  // One-time load of the two small aggregates that serve national + state view.
   useEffect(() => {
+    const ac = new AbortController();
     setLoading(true);
     setError(null);
-    const fetchData = async () => {
-      try {
-        const natl = await fetchNationalCrops();
-        setNationalData(natl || []);
-        if (stateCode) {
-          const sd = await fetchStateData(stateCode);
-          setStateData(sd || []);
-        } else {
-          setStateData([]);
+    Promise.all([
+      fetchStateTotals(ac.signal),
+      fetchStateCommodityTotals(ac.signal),
+    ])
+      .then(([totals, commodities]) => {
+        setStateTotals(totals);
+        setStateCommodityTotals(commodities);
+      })
+      .catch((e) => {
+        if ((e as { name?: string })?.name !== 'AbortError') {
+          setError('Failed to load overview aggregates.');
         }
-      } catch (e) {
-        setError('Failed to load data. Check your connection and try again.');
-      }
-      setLoading(false);
-    };
-    fetchData();
+      })
+      .finally(() => setLoading(false));
+    return () => ac.abort();
+  }, []);
+
+  // County data only loads when a state is selected (drives the drill-down map).
+  useEffect(() => {
+    if (!stateCode) {
+      setCountyMetrics([]);
+      return;
+    }
+    const ac = new AbortController();
+    fetchCountyMetrics(stateCode, ac.signal)
+      .then(setCountyMetrics)
+      .catch(() => setCountyMetrics([]));
+    return () => ac.abort();
   }, [stateCode]);
 
-  // Read saved state from localStorage on first visit
+  // Read saved state from localStorage on first visit.
   useEffect(() => {
     if (!stateCode && typeof window !== 'undefined') {
       const saved = localStorage.getItem('fieldpulse_state');
-      if (saved && US_STATES[saved]) {
-        setState(saved);
-      }
+      if (saved && US_STATES[saved]) setState(saved);
     }
-    // Only on mount
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Derived data
-  const activeData = useMemo(() => {
-    const raw = stateCode ? stateData : nationalData;
-    return filterData(raw);
-  }, [stateCode, stateData, nationalData]);
-
   const year = LATEST_NASS_YEAR;
 
-  // Hero strip data
+  // All rows for the current year — shared by hero / map / peer panel.
+  const currentYearTotals = useMemo(
+    () => stateTotals.filter((r) => r.year === year),
+    [stateTotals, year],
+  );
+
+  // Hero strip data — draws from state_totals when a state is selected,
+  // else sums national. Rank is computed from the sorted row.
   const heroData = useMemo(() => {
-    const salesRows = activeData.filter(
-      (r: any) => r.year === year && r.statisticcat_desc === 'SALES' && r.unit_desc === '$'
+    if (stateCode) {
+      const row = currentYearTotals.find((r) => r.state_alpha === stateCode);
+      const priorRow = stateTotals.find(
+        (r) => r.year === GROWTH_BASE_YEAR && r.state_alpha === stateCode,
+      );
+      const priorAcreRow = stateTotals.find(
+        (r) => r.year === year - 1 && r.state_alpha === stateCode,
+      );
+      const sales = row?.total_sales_usd || 0;
+      const priorSales = priorRow?.total_sales_usd || 0;
+      const growth = priorSales > 0 ? ((sales - priorSales) / priorSales) * 100 : 0;
+      const acres = row?.total_area_planted_acres || 0;
+      const priorAcres = priorAcreRow?.total_area_planted_acres || 0;
+      const acresDelta = acres - priorAcres;
+
+      // Top crop + streak: same top-commodity 5 years running?
+      let streak = 0;
+      for (let i = 0; i < 6; i += 1) {
+        const y = stateTotals.find(
+          (r) => r.year === year - i && r.state_alpha === stateCode,
+        );
+        if (y && y.top_commodity === row?.top_commodity) streak += 1;
+        else break;
+      }
+
+      return {
+        stateName,
+        stateCode,
+        totalSales: sales,
+        salesRank: row?.rank_by_sales || 0,
+        salesGrowthPct: Math.round(growth),
+        salesGrowthBaseYear: GROWTH_BASE_YEAR,
+        totalAcresPlanted: acres,
+        acresDelta,
+        acresDeltaDriver: row?.top_commodity || 'corn',
+        topCrop: row?.top_commodity || 'N/A',
+        topCropSales: row?.top_commodity_sales_usd || 0,
+        topCropStreak: streak,
+        commodityCount: row?.commodity_count || 0,
+      };
+    }
+
+    // National rollup
+    const totalSales = currentYearTotals.reduce((s, r) => s + (r.total_sales_usd || 0), 0);
+    const priorSales = stateTotals
+      .filter((r) => r.year === GROWTH_BASE_YEAR)
+      .reduce((s, r) => s + (r.total_sales_usd || 0), 0);
+    const growth = priorSales > 0 ? ((totalSales - priorSales) / priorSales) * 100 : 0;
+    const totalAcres = currentYearTotals.reduce(
+      (s, r) => s + (r.total_area_planted_acres || 0),
+      0,
     );
-    const totalSales = salesRows.reduce((s: number, r: any) => s + (r.value_num || 0), 0);
+    const priorAcres = stateTotals
+      .filter((r) => r.year === year - 1)
+      .reduce((s, r) => s + (r.total_area_planted_acres || 0), 0);
 
-    const areaRows = activeData.filter(
-      (r: any) => r.year === year && r.statisticcat_desc === 'AREA PLANTED' && r.unit_desc === 'ACRES'
-    );
-    const totalAcres = areaRows.reduce((s: number, r: any) => s + (r.value_num || 0), 0);
-    const commodityCount = new Set(areaRows.map((r: any) => r.commodity_desc)).size;
-
-    // Prior year acres for delta
-    const priorAreaRows = activeData.filter(
-      (r: any) => r.year === year - 1 && r.statisticcat_desc === 'AREA PLANTED' && r.unit_desc === 'ACRES'
-    );
-    const priorAcres = priorAreaRows.reduce((s: number, r: any) => s + (r.value_num || 0), 0);
-
-    // Top crop by sales
-    const topCrops = getTopCrops(activeData, year, 'SALES');
-    const top = topCrops[0];
-
-    // 5yr ago sales for growth
-    const sales5yr = activeData
-      .filter((r: any) => r.year === year - 5 && r.statisticcat_desc === 'SALES' && r.unit_desc === '$')
-      .reduce((s: number, r: any) => s + (r.value_num || 0), 0);
-    const salesGrowth = sales5yr > 0 ? ((totalSales - sales5yr) / sales5yr) * 100 : 0;
+    // National top crop — aggregate commodity sales across states.
+    const byCommodity = new Map<string, number>();
+    stateCommodityTotals
+      .filter((r) => r.year === year)
+      .forEach((r) => {
+        if (r.sales_usd) {
+          byCommodity.set(r.commodity_desc, (byCommodity.get(r.commodity_desc) || 0) + r.sales_usd);
+        }
+      });
+    let topCom = 'N/A', topComVal = 0;
+    for (const [c, v] of byCommodity) {
+      if (v > topComVal) { topCom = c; topComVal = v; }
+    }
 
     return {
-      stateName,
-      stateCode,
+      stateName: 'United States',
+      stateCode: null,
       totalSales,
-      salesRank: 0, // Would need all-states data to compute
-      salesGrowthPct: Math.round(salesGrowth),
+      salesRank: 0,
+      salesGrowthPct: Math.round(growth),
+      salesGrowthBaseYear: GROWTH_BASE_YEAR,
       totalAcresPlanted: totalAcres,
       acresDelta: totalAcres - priorAcres,
-      acresDeltaDriver: top?.commodity || 'corn',
-      topCrop: top?.commodity || 'N/A',
-      topCropSales: top?.value || 0,
-      topCropStreak: 5, // Placeholder
-      commodityCount,
+      acresDeltaDriver: topCom,
+      topCrop: topCom,
+      topCropSales: topComVal,
+      topCropStreak: 1,
+      commodityCount: byCommodity.size,
     };
-  }, [activeData, stateName, stateCode, year]);
+  }, [currentYearTotals, stateTotals, stateCommodityTotals, stateCode, stateName, year]);
 
-  // Map data — total sales per state (for national view we'd need all states)
+  // Choropleth map data — state_alpha → total sales for the current year.
   const mapData = useMemo(() => {
-    if (nationalData.length > 0) {
-      return getMapData(nationalData, year, 'SALES');
-    }
-    return {};
-  }, [nationalData, year]);
+    const map: Record<string, number> = {};
+    currentYearTotals.forEach((r) => {
+      if (r.total_sales_usd) map[r.state_alpha] = r.total_sales_usd;
+    });
+    return map;
+  }, [currentYearTotals]);
 
-  // State fingerprint data
+  // County-drill-down data for the selected state, year = latest.
+  const countyMap = useMemo(() => {
+    if (!stateCode) return {};
+    const map: Record<string, number> = {};
+    countyMetrics
+      .filter((r) => r.year === year)
+      .forEach((r) => {
+        // Use area_harvested as the density metric — available for more
+        // (fips, commodity) combos than production or yield. Sum across
+        // commodities to get "total harvested acres per county".
+        if (r.fips && r.area_harvested_acres) {
+          map[r.fips] = (map[r.fips] || 0) + r.area_harvested_acres;
+        }
+      });
+    return map;
+  }, [countyMetrics, stateCode, year]);
+
+  // State-fingerprint data.
   const fingerprintData = useMemo(() => {
-    const topCrops = getTopCrops(activeData, year, 'SALES');
-    const top6 = topCrops.slice(0, 6);
-    const othersVal = topCrops.slice(6).reduce((s, c) => s + (c.value || 0), 0);
+    const state = stateCode || null;
+    const commoditiesThisYear = stateCommodityTotals.filter(
+      (r) => r.year === year && r.sales_usd && (!state || r.state_alpha === state),
+    );
 
+    // Roll up by commodity (for national view) or just filter (for state view).
+    const byCommodity = new Map<string, number>();
+    commoditiesThisYear.forEach((r) => {
+      byCommodity.set(
+        r.commodity_desc,
+        (byCommodity.get(r.commodity_desc) || 0) + (r.sales_usd || 0),
+      );
+    });
+
+    const sorted = [...byCommodity.entries()].sort((a, b) => b[1] - a[1]);
+    const top6 = sorted.slice(0, 6);
+    const othersVal = sorted.slice(6).reduce((s, [, v]) => s + v, 0);
     const revenueMix = [
-      ...top6.map((c, i) => ({
-        commodity: c.commodity,
-        sales: c.value || 0,
-        color: COMMODITY_COLORS[c.commodity.toLowerCase()] || `var(--text3)`,
+      ...top6.map(([commodity, sales]) => ({
+        commodity,
+        sales,
+        color: COMMODITY_COLORS[commodity.toLowerCase()] || 'var(--text3)',
       })),
-      ...(othersVal > 0 ? [{ commodity: 'Other', sales: othersVal, color: 'var(--muted)' }] : []),
+      ...(othersVal > 0
+        ? [{ commodity: 'Other', sales: othersVal, color: 'var(--muted)' }]
+        : []),
     ];
-
     const totalRevenue = revenueMix.reduce((s, r) => s + r.sales, 0);
 
-    // Sparklines — top 5 crops, 25 years of planted area
-    const sparklines = top6.slice(0, 5).map((c) => {
-      const vals = Array.from({ length: 25 }, (_, i) => {
+    // 25-year sparklines — top 5 commodities by current-year sales. Sum
+    // across states for national view, filter to single state otherwise.
+    // Area_planted preferred; area_harvested fallback for commodities like
+    // HAY that publish only harvested acres.
+    const topCommodities = top6.slice(0, 5).map(([c]) => c);
+    const sparklines = topCommodities.map((commodity) => {
+      const values = Array.from({ length: 25 }, (_, i) => {
         const y = year - 24 + i;
-        const row = activeData.find(
-          (r: any) =>
+        const rows = stateCommodityTotals.filter(
+          (r) =>
             r.year === y &&
-            r.commodity_desc === c.commodity &&
-            r.statisticcat_desc === 'AREA PLANTED'
+            r.commodity_desc === commodity &&
+            (!state || r.state_alpha === state),
         );
-        return row?.value_num || 0;
+        const planted = rows.reduce((s, r) => s + (r.area_planted_acres || 0), 0);
+        const harvested = rows.reduce((s, r) => s + (r.area_harvested_acres || 0), 0);
+        return planted > 0 ? planted : harvested;
       });
       return {
-        commodity: c.commodity,
-        values: vals,
-        latestValue: vals[vals.length - 1] || 0,
+        commodity,
+        values,
+        latestValue: values[values.length - 1] || 0,
       };
     });
 
-    // Peer comparison
-    const peerCodes = stateCode ? (peers[stateCode] || []) : [];
-    const peerComparison = stateCode
+    // Peer comparison — look up each peer state's current-year total sales.
+    const peerCodes = state ? peers[state] || [] : [];
+    const peerComparison = state
       ? [
-          { state: stateCode, value: heroData.totalSales },
+          {
+            state,
+            value: currentYearTotals.find((r) => r.state_alpha === state)?.total_sales_usd || 0,
+          },
           ...peerCodes.slice(0, 4).map((pc) => ({
             state: pc,
-            value: 0, // Would need per-state data
+            value: currentYearTotals.find((r) => r.state_alpha === pc)?.total_sales_usd || 0,
           })),
-        ]
+        ].filter((p) => p.value > 0)
       : [];
 
     return {
       revenueMix,
       totalRevenue,
       sparklines,
-      peerComparison: peerComparison.filter((p) => p.value > 0),
+      peerComparison,
       peerMetric: 'Total Sales',
-      selectedState: stateCode,
+      selectedState: state,
     };
-  }, [activeData, year, stateCode, heroData.totalSales]);
+  }, [stateCommodityTotals, currentYearTotals, stateCode, year]);
 
   const retry = useCallback(() => {
     setLoading(true);
     setError(null);
-    const fetchData = async () => {
-      try {
-        const natl = await fetchNationalCrops();
-        setNationalData(natl || []);
-        if (stateCode) {
-          const sd = await fetchStateData(stateCode);
-          setStateData(sd || []);
-        }
-      } catch {
-        setError('Failed to load data.');
-      }
-      setLoading(false);
-    };
-    fetchData();
-  }, [stateCode]);
+    const ac = new AbortController();
+    Promise.all([
+      fetchStateTotals(ac.signal),
+      fetchStateCommodityTotals(ac.signal),
+    ])
+      .then(([t, c]) => {
+        setStateTotals(t);
+        setStateCommodityTotals(c);
+      })
+      .catch(() => setError('Failed to load.'))
+      .finally(() => setLoading(false));
+  }, []);
 
   return (
     <div>
@@ -222,15 +327,18 @@ export default function OverviewPage() {
         </div>
       )}
 
-      {/* Band B — Map + State Fingerprint */}
+      {/* Band B — Map + State Fingerprint. Grid uses `items-stretch` so
+          the choropleth container stretches to match the fingerprint column's
+          taller content, eliminating the empty space below the old fixed-height map. */}
       <BandShell loading={loading} error={error} skeletonHeight={400}>
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-5 mb-8">
-          <div className="lg:col-span-3">
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-5 mb-8 items-stretch">
+          <div className="lg:col-span-3 min-h-[560px]">
             <USChoropleth
-              data={mapData}
+              data={stateCode ? countyMap : mapData}
               selectedState={stateCode}
               onStateSelect={setState}
-              metricLabel="Sales $"
+              metricLabel={stateCode ? 'Harvested acres' : 'Sales $'}
+              mode={stateCode ? 'county' : 'state'}
             />
           </div>
           <div className="lg:col-span-2">

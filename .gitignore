@@ -97,3 +97,12 @@ htmlcov/
 # -----------------------------------------------------------------------------
 .cache/
 tmpclaude-*
+
+# Pipeline outputs (all in S3)
+pipeline/output_rebuilt/
+pipeline/output_counties_cached/
+pipeline/output_overview/
+pipeline/output_s3_cached/
+
+# Local notebooks
+notebooks/

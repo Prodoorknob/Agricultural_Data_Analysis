@@ -15,6 +15,7 @@ from sqlalchemy import select, func, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.database import get_db
+from backend.routers.deps import commodity_param
 from backend.features.acreage_features import FIPS_TO_STATE
 from backend.models.schemas import (
     AcreageAccuracyItem,
@@ -42,7 +43,7 @@ def _get_acreage_ensemble(request: Request, commodity: str):
 @router.get("/", response_model=AcreageForecastResponse)
 async def get_acreage_forecast(
     request: Request,
-    commodity: str = Query(..., pattern="^(corn|soybean|wheat)$"),
+    commodity: str = Depends(commodity_param),
     year: Optional[int] = Query(default=None),
     level: str = Query(default="national", pattern="^(national|state)$"),
     state_fips: Optional[str] = Query(default=None),
@@ -142,7 +143,7 @@ async def get_acreage_forecast(
 
 @router.get("/states", response_model=StatesAcreageResponse)
 async def get_states_forecast(
-    commodity: str = Query(..., pattern="^(corn|soybean|wheat)$"),
+    commodity: str = Depends(commodity_param),
     year: Optional[int] = Query(default=None),
     db: AsyncSession = Depends(get_db),
 ):
@@ -280,7 +281,14 @@ async def get_price_ratio(
     soy_price = float(soy_row[1])
     as_of = corn_row[0]
 
-    ratio = corn_price / soy_price if soy_price > 0 else None
+    # Industry-standard convention is soy / corn (≈ 2.0 – 3.0), not corn / soy.
+    # The 2.2 / 2.5 decision thresholds that planters use are all written for
+    # the soy/corn form. Previously we returned corn / soy (≈ 0.35 – 0.45) and
+    # every reading clipped into the "soy favored" zone regardless of reality.
+    #
+    # Note on units: futures settlements are stored in cents/bu for corn and
+    # cents/bu for soy, so the ratio is dimensionless either way.
+    ratio = soy_price / corn_price if corn_price > 0 else None
 
     # Historical percentile
     percentile = None
@@ -291,7 +299,7 @@ async def get_price_ratio(
         pctile_stmt = text("""
             SELECT COUNT(*) FILTER (WHERE sub.ratio <= :ratio) * 100 / NULLIF(COUNT(*), 0)
             FROM (
-                SELECT c.settlement / NULLIF(s.settlement, 0) AS ratio
+                SELECT s.settlement / NULLIF(c.settlement, 0) AS ratio
                 FROM futures_daily c
                 JOIN futures_daily s ON c.trade_date = s.trade_date
                 WHERE c.commodity = 'corn' AND s.commodity = 'soybean'
@@ -303,7 +311,7 @@ async def get_price_ratio(
         if percentile is not None:
             percentile = int(percentile)
 
-        # Interpretation
+        # Interpretation — thresholds apply to soy/corn convention.
         if ratio < 2.2:
             implication = "soy_favored"
             context = (

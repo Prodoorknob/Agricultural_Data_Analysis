@@ -18,6 +18,7 @@ from sqlalchemy import Numeric, select, func, case
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.database import get_db
+from backend.routers.deps import crop_param
 from backend.models.db_tables import YieldAccuracy, YieldForecast
 from backend.models.schemas import (
     YieldAccuracyWeekItem,
@@ -43,7 +44,7 @@ def _get_yield_model(request: Request, crop: str, week: int):
 async def get_yield_forecast(
     request: Request,
     fips: str = Query(..., min_length=5, max_length=5, description="5-digit county FIPS"),
-    crop: str = Query(..., pattern="^(corn|soybean|wheat)$"),
+    crop: str = Depends(crop_param),
     year: int | None = Query(None, description="Crop year (defaults to current)"),
     db: AsyncSession = Depends(get_db),
 ):
@@ -103,7 +104,7 @@ async def get_yield_forecast(
 
 @router.get("/map", response_model=YieldMapResponse)
 async def get_yield_map(
-    crop: str = Query(..., pattern="^(corn|soybean|wheat)$"),
+    crop: str = Depends(crop_param),
     week: int | None = Query(None, ge=1, le=20, description="Week of season"),
     year: int | None = Query(None, description="Crop year"),
     db: AsyncSession = Depends(get_db),
@@ -186,7 +187,7 @@ async def get_yield_map(
 @router.get("/history", response_model=list[YieldHistoryItem])
 async def get_yield_history(
     fips: str = Query(..., min_length=5, max_length=5),
-    crop: str = Query(..., pattern="^(corn|soybean|wheat)$"),
+    crop: str = Depends(crop_param),
     start_year: int = Query(2015, description="First year to include"),
     db: AsyncSession = Depends(get_db),
 ):
@@ -230,7 +231,7 @@ async def get_yield_history(
 
 @router.get("/accuracy", response_model=list[YieldAccuracyWeekItem])
 async def get_yield_accuracy(
-    crop: str = Query(..., pattern="^(corn|soybean|wheat)$"),
+    crop: str = Depends(crop_param),
     split: str = Query("test", pattern="^(val|test)$", description="Walk-forward split"),
     db: AsyncSession = Depends(get_db),
 ):
@@ -285,7 +286,7 @@ async def get_yield_accuracy(
 
 @router.get("/metadata", response_model=YieldModelMetadataResponse)
 async def get_yield_metadata(
-    crop: str = Query(..., pattern="^(corn|soybean|wheat)$"),
+    crop: str = Depends(crop_param),
 ):
     """Return the per-crop training summary so the UI can render an honest
     performance banner alongside the forecast.

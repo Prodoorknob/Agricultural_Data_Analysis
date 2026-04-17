@@ -97,7 +97,7 @@ def run_inference(
         # National rollup
         if state_results:
             state_df = pd.DataFrame(state_results)
-            national = compute_national_forecast(state_df)
+            national = compute_national_forecast(state_df, commodity=commodity)
         else:
             features = build_acreage_features("00", commodity, forecast_year, nass_data)
             avail_cols = [c for c in ensemble.feature_cols if c in features.index]

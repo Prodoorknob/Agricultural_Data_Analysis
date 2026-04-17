@@ -441,7 +441,7 @@ def apply_competition_constraint(
     return state_forecasts
 
 
-def compute_national_forecast(state_df: pd.DataFrame) -> dict:
+def compute_national_forecast(state_df: pd.DataFrame, commodity: str | None = None) -> dict:
     """Sum state-level predictions to national total with correlated uncertainty.
 
     The per-state p10/p90 stored on each prediction is an 80% symmetric
@@ -449,6 +449,13 @@ def compute_national_forecast(state_df: pd.DataFrame) -> dict:
     recovered with the 80% z-score 1.2816 — not 1.645 (which is 90%).
     Using 1.645 here was understating state sigma by ~22% and producing
     a too-narrow national rollup.
+
+    When ``commodity`` is supplied, the final p50/p10/p90 are multiplied
+    by NATIONAL_COVERAGE_MULTIPLIERS[commodity] to scale the top-15-state
+    sum to a true US-wide total consistent with USDA's Prospective
+    Plantings report. Interval widens proportionally so coverage is
+    preserved. Without the multiplier, soybean rolled up to 71.7M
+    against a USDA-published 83.5M (missing long-tail states).
     """
     # Two-sided 80% normal quantile: Φ⁻¹(0.90) ≈ 1.2816
     Z_80 = 1.2816
@@ -468,10 +475,18 @@ def compute_national_forecast(state_df: pd.DataFrame) -> dict:
     national_var = total_var + 2 * rho * cross_var
     national_sigma = np.sqrt(max(national_var, 0))
 
+    # Apply the long-tail state scale-up (see acreage_features.NATIONAL_COVERAGE_MULTIPLIERS).
+    multiplier = 1.0
+    if commodity is not None:
+        # Import here to avoid circular dependency on module-level import.
+        from backend.features.acreage_features import NATIONAL_COVERAGE_MULTIPLIERS
+        multiplier = NATIONAL_COVERAGE_MULTIPLIERS.get(commodity, 1.0)
+
     return {
-        "p50": national_p50,
-        "p10": national_p50 - Z_80 * national_sigma,
-        "p90": national_p50 + Z_80 * national_sigma,
+        "p50": national_p50 * multiplier,
+        "p10": (national_p50 - Z_80 * national_sigma) * multiplier,
+        "p90": (national_p50 + Z_80 * national_sigma) * multiplier,
+        "scale_multiplier": multiplier,
     }
 
 

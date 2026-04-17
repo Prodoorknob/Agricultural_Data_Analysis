@@ -81,9 +81,13 @@ class ErsProductionCost(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     year: Mapped[int] = mapped_column(Integer, nullable=False)
-    commodity: Mapped[str] = mapped_column(String(10), nullable=False)
+    commodity: Mapped[str] = mapped_column(String(20), nullable=False)
     variable_cost_per_bu: Mapped[float | None] = mapped_column(Numeric(8, 4), nullable=True)
     total_cost_per_bu: Mapped[float | None] = mapped_column(Numeric(8, 4), nullable=True)
+    variable_cost_per_acre: Mapped[float | None] = mapped_column(Numeric(12, 2), nullable=True)
+    total_cost_per_acre: Mapped[float | None] = mapped_column(Numeric(12, 2), nullable=True)
+    yield_units: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    yield_value: Mapped[float | None] = mapped_column(Numeric(12, 2), nullable=True)
 
     __table_args__ = (
         UniqueConstraint("year", "commodity", name="uq_ers_costs"),
@@ -325,4 +329,35 @@ class YieldAccuracy(Base):
             "forecast_year", "fips", "crop", "week", "model_ver",
             name="uq_yield_accuracy",
         ),
+    )
+
+
+class LandUseCategory(Base):
+    __tablename__ = "land_use_categories"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    state_fips: Mapped[str] = mapped_column(String(2), nullable=False)
+    state_alpha: Mapped[str] = mapped_column(String(2), nullable=False)
+    year: Mapped[int] = mapped_column(Integer, nullable=False)
+    category: Mapped[str] = mapped_column(String(20), nullable=False)
+    acres: Mapped[float | None] = mapped_column(Numeric(14, 1), nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("state_fips", "year", "category", name="uq_land_use_categories"),
+    )
+
+
+class BlsEstablishment(Base):
+    __tablename__ = "bls_establishments"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    state_fips: Mapped[str] = mapped_column(String(2), nullable=False)
+    year: Mapped[int] = mapped_column(Integer, nullable=False)
+    naics: Mapped[str] = mapped_column(String(6), nullable=False)
+    establishments: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    employment: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    avg_annual_pay: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("state_fips", "year", "naics", name="uq_bls_establishments"),
     )

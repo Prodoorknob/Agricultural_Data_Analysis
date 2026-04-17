@@ -13,6 +13,7 @@ interface HeroStripProps {
   totalSales: number;
   salesRank: number;
   salesGrowthPct: number;
+  salesGrowthBaseYear?: number;
   totalAcresPlanted: number;
   acresDelta: number;
   acresDeltaDriver: string;
@@ -28,6 +29,7 @@ export default function HeroStrip({
   totalSales,
   salesRank,
   salesGrowthPct,
+  salesGrowthBaseYear,
   totalAcresPlanted,
   acresDelta,
   acresDeltaDriver,
@@ -37,14 +39,14 @@ export default function HeroStrip({
   commodityCount,
 }: HeroStripProps) {
   const displayName = stateCode ? (US_STATES[stateCode] || stateCode) : 'United States';
+  const compareYear = salesGrowthBaseYear ?? LATEST_NASS_YEAR - 5;
 
-  const salesCaption = generateCaption('overview-hero-sales', {
-    stateName: displayName,
-    salesRank,
-    salesDirection: salesGrowthPct >= 0 ? 'up' : 'down',
-    salesGrowthPct: Math.abs(salesGrowthPct).toFixed(0),
-    salesCompareYear: LATEST_NASS_YEAR - 5,
-  });
+  // Rank 0 means "not applicable" (national view) — hide it from the caption
+  // rather than ship "ranks #0" again.
+  const rankClause = salesRank > 0 ? `ranks #${salesRank} by total farm sales, ` : '';
+  const salesCaption = stateCode
+    ? `${displayName} ${rankClause}${salesGrowthPct >= 0 ? 'up' : 'down'} ${Math.abs(salesGrowthPct).toFixed(0)}% since ${compareYear}.`
+    : `U.S. total farm sales ${salesGrowthPct >= 0 ? 'up' : 'down'} ${Math.abs(salesGrowthPct).toFixed(0)}% since ${compareYear}.`;
 
   const acresCaption = generateCaption('overview-hero-acres', {
     acresDeltaDirection: acresDelta >= 0 ? 'Up' : 'Down',

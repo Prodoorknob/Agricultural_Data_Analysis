@@ -488,24 +488,160 @@ def clean_dataframe(df: pd.DataFrame, sector: str) -> pd.DataFrame:
     return df
 
 
+# ---------------------------------------------------------------------------
+# Canonical aggregation for enrichment
+# ---------------------------------------------------------------------------
+#
+# USDA NASS publishes the same underlying measurement several ways:
+#   - CORN is published as (GRAIN, SILAGE, ALL CLASSES) under `class_desc`.
+#   - HAY is published as (ALFALFA, EXCL ALFALFA, ALL CLASSES).
+#   - PRICE RECEIVED has reference_period_desc ∈ {YEAR, MARKETING YEAR, AUG,
+#     OCT FORECAST, ...}; AREA HARVESTED can carry AUG/OCT forecast rows.
+# Blindly pivoting and summing across these dimensions double- or triple-counts
+# the same bushels, acres, or dollars. The previous implementation did exactly
+# that and produced absurd DERIVED rows (e.g. Indiana HAY "sales" $338B).
+#
+# The rewrite restricts the enrichment input to *canonical* rows — the single
+# row per (state, commodity, year, stat, unit) that USDA itself reports as the
+# aggregate — before the pivot. Units are paired explicitly so $/BU price only
+# ever multiplies BU production.
+
+CANON_PROD_PRACTICE = {"ALL PRODUCTION PRACTICES", ""}
+CANON_REF_PERIOD = {"YEAR", "MARKETING YEAR", ""}
+# Production practice and reference period are strictly filtered — these
+# always have a rolled-up "ALL ..." level and we want it. Class and util
+# practice are NOT strictly filtered here because some commodities ship
+# only sub-class rows (e.g. MELONS → WATERMELON, no ALL CLASSES row) and
+# some ship only sub-util rows (e.g. CORN → GRAIN/SILAGE $, no util=ALL
+# row for revenue). Those are handled in _pick_canonical_tier().
+
+# Price-unit → production-unit pairings. Only these combinations yield a valid
+# revenue estimate via PRICE × PRODUCTION. Anything else (e.g. AUG FORECAST $/TON
+# against an annual BU production) is discarded.
+PRICE_PRODUCTION_UNIT_PAIRS = [
+    ("$ / BU", "BU"),
+    ("$ / CWT", "CWT"),
+    ("$ / TON", "TONS"),
+    ("$ / LB", "LB"),
+    ("$ / HEAD, LIVE BASIS", "HEAD"),
+    ("$ / LB, LIVE BASIS", "LB, LIVE BASIS"),
+]
+
+# Cap to reject obviously-wrong derived revenue (pre-dedup sanity check). No
+# single state-commodity-year revenue should exceed this in reality; values
+# above usually indicate unit/class over-summation leaking through.
+DERIVED_REVENUE_CAP_USD = 50_000_000_000  # $50 B
+
+
+def _canonical_mask(df: pd.DataFrame) -> pd.Series:
+    """Rows eligible for canonical aggregation.
+
+    Strict filters (apply uniformly):
+    - domain_desc == 'TOTAL'                  (no bracket-breakdowns)
+    - freq_desc in {'ANNUAL', ''}             (drop weekly/monthly)
+    - reference_period_desc ∈ {YEAR, MARKETING YEAR, ''} (drop AUG/OCT
+      forecasts and monthly price series — both would pollute sums)
+    - prodn_practice_desc in {'ALL PRODUCTION PRACTICES', ''}
+      (drop IRRIGATED/NON-IRRIGATED splits; USDA always publishes
+      a rolled-up row)
+
+    class_desc and util_practice_desc are *not* strictly filtered here:
+    they are handled per-commodity in _pick_canonical_tier, because
+    whether an ALL CLASSES / ALL UTILIZATION PRACTICES row exists
+    depends on the commodity.
+    """
+    mask = pd.Series(True, index=df.index)
+
+    if "prodn_practice_desc" in df.columns:
+        mask &= df["prodn_practice_desc"].fillna("").isin(CANON_PROD_PRACTICE)
+
+    if "reference_period_desc" in df.columns:
+        mask &= df["reference_period_desc"].fillna("").isin(CANON_REF_PERIOD)
+
+    if "domain_desc" in df.columns:
+        mask &= df["domain_desc"].fillna("TOTAL").eq("TOTAL")
+
+    if "freq_desc" in df.columns:
+        mask &= df["freq_desc"].fillna("").isin(["ANNUAL", ""])
+
+    return mask
+
+
+# Aggregation rule per statisticcat_desc. SUM for additive quantities
+# (dollar totals, bushels, acres), MAX for prices and intensive measures
+# (per-unit prices, yield per acre).
+SUM_STATS = {"SALES", "PRODUCTION", "AREA PLANTED", "AREA HARVESTED",
+             "INVENTORY", "SLAUGHTERED", "HEAD", "OPERATIONS"}
+MAX_STATS = {"PRICE RECEIVED", "YIELD"}
+
+
+def _aggregate_by_tier(canon: pd.DataFrame, group_keys: list[str]) -> pd.DataFrame:
+    """Collapse canonical rows to one value per (state, commodity, year, stat, unit).
+
+    For each (state, commodity, year, stat, unit):
+      1. If any rows have class_desc='ALL CLASSES', use *only* those — that
+         is USDA's own rollup and avoids double-counting sub-class rows.
+      2. Else sum across all sub-class rows (e.g. MELONS has no ALL CLASSES
+         row; WATERMELON + CANTALOUPE + HONEYDEW must be summed).
+    Within the chosen tier, apply SUM or MAX per stat (e.g. sum $ across
+    util_practices like CORN GRAIN + SILAGE; max for $/BU prices).
+    """
+    tier_keys = group_keys + ["statisticcat_desc", "unit_desc"]
+    canon = canon.copy()
+    canon["_class_filled"] = canon["class_desc"].fillna("")
+
+    # Within each (key, stat, unit), does an ALL CLASSES row exist?
+    has_all_classes = (
+        canon.groupby(tier_keys)["_class_filled"]
+        .apply(lambda s: (s == "ALL CLASSES").any())
+    )
+    # Keep all rows in keys where ALL CLASSES exists AND class == ALL CLASSES;
+    # keep all rows in keys where ALL CLASSES does NOT exist.
+    merged = canon.merge(
+        has_all_classes.rename("_has_all_classes").reset_index(),
+        on=tier_keys, how="left",
+    )
+    kept = merged[
+        (~merged["_has_all_classes"]) |
+        (merged["_class_filled"] == "ALL CLASSES")
+    ]
+    if kept.empty:
+        return pd.DataFrame(columns=tier_keys + ["value_num"])
+
+    # Aggregate per stat: sum for additive, max for prices/yields, max as default.
+    def agg_fn(stat: str):
+        if stat in SUM_STATS:
+            return "sum"
+        return "max"
+
+    results = []
+    for stat, sub in kept.groupby("statisticcat_desc"):
+        agg = sub.groupby(tier_keys)["value_num"].agg(agg_fn(stat)).reset_index()
+        results.append(agg)
+    return pd.concat(results, ignore_index=True) if results else pd.DataFrame()
+
+
 def enrich_dataframe(df: pd.DataFrame) -> pd.DataFrame:
-    """Add derived metrics computed at the (state, commodity, year) level.
+    """Add derived metrics at the (state, commodity, year) level.
 
-    Computes:
-    - REVENUE PER ACRE: SALES / AREA HARVESTED
-    - PLANTED TO HARVESTED RATIO: AREA PLANTED / AREA HARVESTED
-    - Imputed SALES: PRICE RECEIVED * PRODUCTION (when SALES is missing)
+    Emits exactly one canonical row per (state, commodity, year) for:
+    - SALES ($) — priority: direct SURVEY/CENSUS SALES > PRODUCTION $ >
+      PRICE × PRODUCTION (unit-matched). USDA's own PRODUCTION-in-$ series
+      is a published revenue estimate for most field crops, so it is
+      preferred over re-multiplying price × quantity.
+    - REVENUE PER ACRE ($ / ACRE) — SALES / AREA HARVESTED.
+    - PLANTED TO HARVESTED RATIO (RATIO) — AREA PLANTED / AREA HARVESTED.
 
-    Derived rows are tagged with source_desc='DERIVED' so the frontend
-    can distinguish them from official USDA data.
+    Derived rows are tagged source_desc='DERIVED', class_desc='ALL CLASSES',
+    domain_desc='TOTAL' so the canonical-row filter picks them up downstream.
 
-    County rows (agg_level_desc == 'COUNTY') are passed through unchanged —
-    derivations are meaningless aggregated across counties at this stage.
+    County rows (agg_level_desc == 'COUNTY') pass through unchanged.
     """
     if df.empty:
         return df
 
-    # Split county rows out — enrich state/national rows only
+    # Split county rows out — derivations are meaningless when aggregated
+    # across counties at this stage.
     if "agg_level_desc" in df.columns:
         county_mask = df["agg_level_desc"] == "COUNTY"
         county_df = df[county_mask].copy()
@@ -521,70 +657,110 @@ def enrich_dataframe(df: pd.DataFrame) -> pd.DataFrame:
         result = df if county_df.empty else pd.concat([df, county_df], ignore_index=True)
         return result
 
-    # Only use ANNUAL data for deriving metrics (skip weekly CONDITION/PROGRESS)
-    if "freq_desc" in df.columns:
-        annual = df[df["freq_desc"].isin(["ANNUAL", ""])  | df["freq_desc"].isna()].copy()
-    else:
-        annual = df.copy()
+    # Restrict to canonical rows (strict filters), then collapse per
+    # (state, commodity, year, stat, unit) via tier-aware aggregation —
+    # prefer ALL CLASSES rows if any exist, else sum across sub-classes.
+    # This is the single most important change vs. the old implementation:
+    # the old code blindly summed across class_desc and produced $338B HAY.
+    canon = df[_canonical_mask(df)].copy()
+    if canon.empty:
+        return df if county_df.empty else pd.concat([df, county_df], ignore_index=True)
 
-    if annual.empty:
-        return df
-
-    # Build wide-format lookup: (state, commodity, year) -> {stat_cat: value}
-    pivot = (
-        annual.groupby(available_keys + ["statisticcat_desc"])["value_num"]
-        .sum()
-        .reset_index()
-    )
-    wide = pivot.pivot_table(
-        index=available_keys, columns="statisticcat_desc", values="value_num"
-    ).reset_index()
+    keyed = _aggregate_by_tier(canon, available_keys)
+    if keyed.empty:
+        return df if county_df.empty else pd.concat([df, county_df], ignore_index=True)
 
     derived_rows = []
-    for _, row in wide.iterrows():
-        base = {k: row[k] for k in available_keys}
-        area_h = row.get("AREA HARVESTED", np.nan)
-        area_p = row.get("AREA PLANTED", np.nan)
-        production = row.get("PRODUCTION", np.nan)
-        sales = row.get("SALES", np.nan)
-        price = row.get("PRICE RECEIVED", np.nan)
+    skipped_cap = 0
+    for (st, com, yr), grp in keyed.groupby(available_keys, sort=False):
+        stats = {
+            (r.statisticcat_desc, r.unit_desc): r.value_num
+            for r in grp.itertuples(index=False)
+            if pd.notna(r.value_num)
+        }
 
-        # Revenue per acre
-        if pd.notna(sales) and pd.notna(area_h) and area_h > 0:
-            derived_rows.append({
-                **base,
-                "statisticcat_desc": "REVENUE PER ACRE",
-                "value_num": sales / area_h,
-                "unit_desc": "$ / ACRE",
-                "source_desc": "DERIVED",
-                "domain_desc": "TOTAL",
-            })
+        area_h = stats.get(("AREA HARVESTED", "ACRES"))
+        area_p = stats.get(("AREA PLANTED", "ACRES"))
+        sales_direct = stats.get(("SALES", "$"))
+        prod_usd = stats.get(("PRODUCTION", "$"))
 
-        # Planted-to-harvested ratio
-        if pd.notna(area_p) and pd.notna(area_h) and area_h > 0:
-            derived_rows.append({
-                **base,
-                "statisticcat_desc": "PLANTED TO HARVESTED RATIO",
-                "value_num": area_p / area_h,
-                "unit_desc": "RATIO",
-                "source_desc": "DERIVED",
-                "domain_desc": "TOTAL",
-            })
+        # Canonical revenue value — single pass, priority-ordered.
+        revenue = None
+        revenue_origin = None
+        if sales_direct is not None and sales_direct > 0:
+            # Direct USDA SALES $ row exists — no derivation needed, but emit
+            # a tagged row so downstream canonical-row filters find it under a
+            # consistent source_desc. Real SURVEY/CENSUS row is still in df.
+            pass
+        elif prod_usd is not None and prod_usd > 0:
+            revenue = prod_usd
+            revenue_origin = "PRODUCTION_USD"
+        else:
+            for price_unit, prod_unit in PRICE_PRODUCTION_UNIT_PAIRS:
+                p = stats.get(("PRICE RECEIVED", price_unit))
+                q = stats.get(("PRODUCTION", prod_unit))
+                if p is not None and q is not None and p > 0 and q > 0:
+                    revenue = p * q
+                    revenue_origin = f"PRICE_x_{prod_unit}"
+                    break
 
-        # Imputed revenue (price * production) when SALES is missing
-        if (pd.isna(sales) or sales == 0) and pd.notna(price) and pd.notna(production) and price > 0:
+        # Sanity cap: reject anything larger than the largest plausible
+        # state-commodity-year revenue. These are almost always unit or
+        # class over-summation leaking through.
+        if revenue is not None and revenue > DERIVED_REVENUE_CAP_USD:
+            skipped_cap += 1
+            revenue = None
+            revenue_origin = None
+
+        base = {"state_alpha": st, "commodity_desc": com, "year": yr}
+
+        if revenue is not None:
             derived_rows.append({
                 **base,
                 "statisticcat_desc": "SALES",
-                "value_num": price * production,
+                "value_num": float(revenue),
                 "unit_desc": "$",
+                "class_desc": "ALL CLASSES",
+                "source_desc": "DERIVED",
+                "domain_desc": "TOTAL",
+                "short_desc": f"{com} - SALES, MEASURED IN $ (DERIVED from {revenue_origin})",
+            })
+
+        # REVENUE PER ACRE: use direct SALES if present, else the derived
+        # revenue; skip when neither is available.
+        effective_revenue = sales_direct if (sales_direct is not None and sales_direct > 0) else revenue
+        if effective_revenue is not None and area_h is not None and area_h > 0:
+            derived_rows.append({
+                **base,
+                "statisticcat_desc": "REVENUE PER ACRE",
+                "value_num": float(effective_revenue) / float(area_h),
+                "unit_desc": "$ / ACRE",
+                "class_desc": "ALL CLASSES",
                 "source_desc": "DERIVED",
                 "domain_desc": "TOTAL",
             })
 
+        # PLANTED TO HARVESTED RATIO: unaffected by the DERIVED bug, keep
+        # as-is but gated on canonical rows.
+        if area_p is not None and area_h is not None and area_h > 0:
+            derived_rows.append({
+                **base,
+                "statisticcat_desc": "PLANTED TO HARVESTED RATIO",
+                "value_num": float(area_p) / float(area_h),
+                "unit_desc": "RATIO",
+                "class_desc": "ALL CLASSES",
+                "source_desc": "DERIVED",
+                "domain_desc": "TOTAL",
+            })
+
+    if skipped_cap:
+        logger.warning(
+            f"  Rejected {skipped_cap} derived SALES rows exceeding "
+            f"${DERIVED_REVENUE_CAP_USD:,.0f} cap (likely class over-summation)"
+        )
+
     if derived_rows:
         derived_df = pd.DataFrame(derived_rows)
-        # Fill missing columns with appropriate defaults
         for col in df.columns:
             if col not in derived_df.columns:
                 if df[col].dtype in ["float64", "Float64"]:
@@ -594,9 +770,8 @@ def enrich_dataframe(df: pd.DataFrame) -> pd.DataFrame:
                 else:
                     derived_df[col] = ""
         df = pd.concat([df, derived_df], ignore_index=True)
-        logger.info(f"  Added {len(derived_rows):,} derived metric rows")
+        logger.info(f"  Added {len(derived_rows):,} canonical derived metric rows")
 
-    # Re-attach county rows
     if not county_df.empty:
         df = pd.concat([df, county_df], ignore_index=True)
 

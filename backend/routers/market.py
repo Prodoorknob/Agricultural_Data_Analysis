@@ -10,7 +10,7 @@ Spec reference: frontend-spec-v1.md §2.10, §5.2
 from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select, func, and_
+from sqlalchemy import select, func, and_, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.database import get_db
@@ -18,11 +18,14 @@ from backend.models.db_tables import (
     DxyDaily,
     ErsFertilizerPrice,
     ErsProductionCost,
+    ExportCommitment,
     FuturesDaily,
 )
+from backend.routers.deps import commodity_param
 from backend.models.schemas import (
     DxyPoint,
     DxyTimeSeriesResponse,
+    ExportPaceResponse,
     FertilizerPriceResponse,
     ForwardCurvePoint,
     ForwardCurveResponse,
@@ -45,7 +48,7 @@ def _nearby_contract_filter(commodity: str, trade_date: date) -> str:
 
 @router.get("/futures", response_model=FuturesTimeSeriesResponse)
 async def get_futures_time_series(
-    commodity: str = Query(..., pattern="^(corn|soybean|wheat)$"),
+    commodity: str = Depends(commodity_param),
     start: str | None = Query(None, description="ISO date, e.g. 2025-01-01"),
     end: str | None = Query(None, description="ISO date, e.g. 2026-04-15"),
     db: AsyncSession = Depends(get_db),
@@ -120,7 +123,7 @@ async def get_futures_time_series(
 
 @router.get("/curve", response_model=ForwardCurveResponse)
 async def get_forward_curve(
-    commodity: str = Query(..., pattern="^(corn|soybean|wheat)$"),
+    commodity: str = Depends(commodity_param),
     as_of: str | None = Query(None, description="ISO date (defaults to latest available)"),
     db: AsyncSession = Depends(get_db),
 ):
@@ -219,7 +222,7 @@ async def get_dxy_time_series(
 
 @router.get("/costs", response_model=ProductionCostResponse)
 async def get_production_costs(
-    commodity: str = Query(..., pattern="^(corn|soybean|wheat)$"),
+    commodity: str = Depends(commodity_param),
     db: AsyncSession = Depends(get_db),
 ):
     """Latest ERS production cost per bushel + current futures for margin calc."""
@@ -295,3 +298,100 @@ async def get_fertilizer_prices(
         )
         for row in rows
     ]
+
+
+# Marketing year start month (US convention):
+#   Wheat: June  |  Corn & Soybean: September
+_MARKETING_YEAR_START_MONTH = {"wheat": 6, "corn": 9, "soybean": 9}
+
+
+def _week_of_marketing_year(as_of: date, commodity: str) -> int:
+    """Weeks elapsed since the start of the current marketing year (1-indexed)."""
+    start_month = _MARKETING_YEAR_START_MONTH.get(commodity, 9)
+    start_year = as_of.year if as_of.month >= start_month else as_of.year - 1
+    start = date(start_year, start_month, 1)
+    return max(1, (as_of - start).days // 7 + 1)
+
+
+@router.get("/exports", response_model=ExportPaceResponse)
+async def get_export_pace(
+    commodity: str = Depends(commodity_param),
+    db: AsyncSession = Depends(get_db),
+):
+    """Latest weekly export commitment snapshot vs the 5-year same-week average.
+
+    "Committed" = outstanding sales + accumulated exports, the standard FAS
+    pipeline metric. The 5-year average is taken over the same week-of-
+    marketing-year across the prior five marketing years, which normalizes
+    for seasonality (exports ramp through the marketing year) and lets the
+    frontend show a "pace vs normal" signal regardless of absolute volume.
+    """
+    # Latest snapshot
+    latest_stmt = (
+        select(ExportCommitment)
+        .where(ExportCommitment.commodity == commodity)
+        .order_by(ExportCommitment.as_of_date.desc())
+        .limit(1)
+    )
+    result = await db.execute(latest_stmt)
+    latest = result.scalar_one_or_none()
+    if latest is None:
+        raise HTTPException(404, f"No export commitment data for {commodity}")
+
+    outstanding = float(latest.outstanding_sales_mt) if latest.outstanding_sales_mt is not None else None
+    accumulated = float(latest.accumulated_exports_mt) if latest.accumulated_exports_mt is not None else None
+    committed = None
+    if outstanding is not None and accumulated is not None:
+        committed = outstanding + accumulated
+
+    woy = _week_of_marketing_year(latest.as_of_date, commodity)
+
+    # 5-year same-week average. "Same week" = +/- 3 days from the matching
+    # week-of-marketing-year date across the prior five marketing years.
+    avg_stmt = text("""
+        WITH prior_years AS (
+            SELECT
+                (COALESCE(outstanding_sales_mt, 0) + COALESCE(accumulated_exports_mt, 0)) AS committed_mt,
+                as_of_date,
+                EXTRACT(YEAR FROM as_of_date) AS yr
+            FROM export_commitments
+            WHERE commodity = :commodity
+              AND as_of_date < :cutoff
+              AND as_of_date >= :earliest
+        )
+        SELECT AVG(committed_mt) FROM (
+            SELECT DISTINCT ON (yr) committed_mt, yr
+            FROM prior_years
+            WHERE ABS(EXTRACT(DOY FROM as_of_date) - :target_doy) <= 3
+               OR ABS(EXTRACT(DOY FROM as_of_date) - :target_doy_wrap) <= 3
+            ORDER BY yr, ABS(EXTRACT(DOY FROM as_of_date) - :target_doy)
+        ) sub
+    """)
+    # day-of-year of the current snapshot for same-week matching. Wrap-around
+    # handles the Jan 1 boundary when target_doy is near 1 or 365.
+    target_doy = int(latest.as_of_date.strftime("%j"))
+    avg_result = await db.execute(avg_stmt, {
+        "commodity": commodity,
+        "cutoff": latest.as_of_date.replace(year=latest.as_of_date.year - 1),
+        "earliest": latest.as_of_date.replace(year=latest.as_of_date.year - 6),
+        "target_doy": target_doy,
+        "target_doy_wrap": target_doy if target_doy > 180 else target_doy + 365,
+    })
+    five_yr_avg = avg_result.scalar_one_or_none()
+    five_yr_avg = float(five_yr_avg) if five_yr_avg is not None else None
+
+    pct_of_avg = None
+    if committed is not None and five_yr_avg and five_yr_avg > 0:
+        pct_of_avg = round(committed / five_yr_avg * 100, 1)
+
+    return ExportPaceResponse(
+        commodity=commodity,
+        as_of_date=latest.as_of_date,
+        marketing_year=latest.marketing_year,
+        outstanding_sales_mt=round(outstanding, 1) if outstanding is not None else None,
+        accumulated_exports_mt=round(accumulated, 1) if accumulated is not None else None,
+        total_committed_mt=round(committed, 1) if committed is not None else None,
+        five_yr_avg_committed_mt=round(five_yr_avg, 1) if five_yr_avg is not None else None,
+        pct_of_5yr_avg=pct_of_avg,
+        week_of_marketing_year=woy,
+    )

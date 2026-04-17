@@ -67,6 +67,12 @@
     --text3:     #9C9488;
     --muted:     #D1CBBF;
 
+    /* Section heading — slightly darker than --text2 for uppercase labels.
+       Previously sections used --text3 which disappeared on the cream bg;
+       introduce a dedicated token so every band label lands at the same
+       readable contrast tier. */
+    --section-heading: #3A352E;
+
     /* Field Green */
     --field:         #2D6A4F;
     --field-light:   #40916C;
@@ -158,6 +164,7 @@
     --text2:     #A8A090;
     --text3:     #706858;
     --muted:     #3A3428;
+    --section-heading: #C9C0B0;
 
     --field:         #52B788;
     --field-light:   #6ECF9A;

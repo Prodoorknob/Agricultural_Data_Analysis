@@ -41,7 +41,17 @@ COMMODITY_NASS_MAP = {
     "wheat": "WHEAT",
 }
 
-# Top producing states (by FIPS) for each commodity — used for state-level models
+# Top producing states (by FIPS) for each commodity — used for state-level models.
+#
+# Tried expanding to 30+ states on 2026-04-16 to close the national-rollup
+# gap (soy 71.7M forecast vs USDA 83.5M). Result: val MAPE regressed badly
+# (corn 8.9% → 16.6%) because tail states (~20 additional) have high
+# year-to-year variance the model couldn't learn with limited samples.
+#
+# Kept the top-15 training panel but added a post-hoc scale-up in
+# compute_national_forecast — multiply the state-sum by the 5-year
+# average USDA (national_total / sum_of_top_15_states). See
+# NATIONAL_COVERAGE_MULTIPLIERS below.
 TOP_STATES = {
     "corn": [
         "17", "19", "18", "27", "31", "39", "55", "46", "29", "26",
@@ -62,6 +72,26 @@ TOP_STATES = {
     "wheat_spring": [
         "38", "27", "46", "30", "16",  # ND, MN, SD, MT, ID (SD/MT in both — dual-season)
     ],
+}
+
+# Scale-up multipliers for national rollups. Computed from the
+# state_commodity_totals aggregate — the 5-yr (2020-2024) average of
+# (national_total_acres / top_15_sum). Derived once and embedded as a
+# constant so the inference path is deterministic and doesn't trigger
+# a parquet load per request.
+#
+# Produced by pipeline/output_overview/state_commodity_totals.parquet:
+#   corn      top15 ≈ 90.9M / national ≈ 92.6M  → 1.019
+#   soybean   top15 ≈ 79.0M / national ≈ 85.0M  → 1.076
+#   wheat     top15 ≈ 40.1M / national ≈ 46.4M  → 1.157
+# compute_national_forecast() multiplies the top-15-state sum by these
+# to produce a national figure consistent with USDA Prospective Plantings.
+NATIONAL_COVERAGE_MULTIPLIERS = {
+    "corn":         1.019,
+    "soybean":      1.076,
+    "wheat":        1.157,
+    "wheat_winter": 1.075,  # approximate — winter wheat coverage
+    "wheat_spring": 1.050,  # approximate — spring wheat coverage
 }
 
 # Decision dates by commodity — when farmers commit to planting
@@ -180,6 +210,13 @@ def get_november_price_ratio(forecast_year: int) -> float | None:
 
     Uses December corn and November soybean contracts — the standard
     economic signal farmers use for next-year planting decisions.
+
+    NOTE: this returns corn/soy (≈ 0.35 – 0.45), *opposite* of the
+    industry-standard soy/corn convention used by the public
+    /api/v1/predict/acreage/price-ratio endpoint. That divergence is
+    intentional — the acreage training feature learned this direction
+    and flipping it would invalidate the signed model artifacts. Do not
+    change this without retraining + bumping model_ver.
     """
     as_of = date(forecast_year - 1, 11, 1)
     corn_dec = _query_futures_settlement("corn", as_of, f"{forecast_year - 1}-12")
