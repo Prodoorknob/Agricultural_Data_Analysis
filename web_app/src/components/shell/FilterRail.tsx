@@ -13,28 +13,31 @@ export default function FilterRail() {
   const { filters, setState, setYear, setCommodity, currentTab } = useFilters();
   const showCommodity = COMMODITY_TABS.has(currentTab);
   const showYear = currentTab !== 'market'; // Market uses range chips instead
+  const showState = currentTab !== 'market'; // Market is national-only
 
   return (
     <div
       className="flex items-center h-[44px] px-5 gap-3 overflow-x-auto"
       style={{ background: 'var(--surface2)', borderBottom: '1px solid var(--border)' }}
     >
-      {/* State pill — always visible */}
-      <Pill label="State">
-        <select
-          value={filters.state || ''}
-          onChange={(e) => setState(e.target.value || null)}
-          className="appearance-none bg-transparent outline-none cursor-pointer text-[12px] font-medium pr-4"
-          style={{ color: 'var(--text)', fontFamily: 'var(--font-mono)' }}
-        >
-          <option value="">National</option>
-          {STATE_CODES.map((code) => (
-            <option key={code} value={code}>
-              {code}
-            </option>
-          ))}
-        </select>
-      </Pill>
+      {/* State pill — hidden on Market tab */}
+      {showState && (
+        <Pill label="State">
+          <select
+            value={filters.state || ''}
+            onChange={(e) => setState(e.target.value || null)}
+            className="appearance-none bg-transparent outline-none cursor-pointer text-[12px] font-medium pr-4"
+            style={{ color: 'var(--text)', fontFamily: 'var(--font-mono)' }}
+          >
+            <option value="">National</option>
+            {STATE_CODES.map((code) => (
+              <option key={code} value={code}>
+                {code}
+              </option>
+            ))}
+          </select>
+        </Pill>
+      )}
 
       {/* Year pill — hidden on Market tab */}
       {showYear && (

@@ -1,15 +1,22 @@
 'use client';
 
 import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  BarChart, Bar, Cell,
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
+  BarChart, Bar,
 } from 'recharts';
 import CitationBlock from '@/components/shared/CitationBlock';
+import SectionHeading from '@/components/shared/SectionHeading';
 
 interface WageTrendPoint {
   year: number;
-  stateWage: number;
-  nationalWage: number;
+  /** NASS WAGE RATE for the selected state — hourly $ (undefined nationally). */
+  stateWage?: number;
+  /** NASS WAGE RATE 'National Avg' — hourly $. */
+  nationalWage?: number;
+  /** BLS QCEW avg_annual_pay for NAICS 111 (crop production). Denser than
+      NASS wage rates, especially post-2014. Displayed on a secondary axis
+      because annual pay and hourly wage aren't directly comparable. */
+  blsAnnualPay?: number;
 }
 
 interface WageRankItem {
@@ -26,12 +33,14 @@ interface LaborWagesProps {
 export default function LaborWages({ wageTrend, wageRanking, stateName }: LaborWagesProps) {
   const hasWage = wageTrend.length > 0;
   const hasRank = wageRanking.length > 0;
+  const hasBls = wageTrend.some((d) => d.blsAnnualPay != null);
 
   const latest = wageTrend[wageTrend.length - 1];
   const earliest = wageTrend[0];
-  const growthPct = earliest?.stateWage > 0
-    ? ((latest?.stateWage - earliest.stateWage) / earliest.stateWage) * 100
-    : 0;
+  const growthPct =
+    (earliest?.stateWage ?? 0) > 0
+      ? (((latest?.stateWage ?? 0) - (earliest?.stateWage ?? 0)) / (earliest?.stateWage ?? 1)) * 100
+      : 0;
 
   return (
     <div className="mb-10" id="labor">
@@ -48,20 +57,37 @@ export default function LaborWages({ wageTrend, wageRanking, stateName }: LaborW
         {/* Wage trend */}
         {hasWage && (
           <div className="p-4 rounded-[var(--radius-lg)] border" style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}>
-            <p className="text-[11px] font-bold tracking-[0.1em] uppercase mb-2"
-              style={{ color: 'var(--text3)', fontFamily: 'var(--font-mono)' }}>Avg Farm Wage</p>
-            <div style={{ height: 220 }}>
+            <SectionHeading className="mb-2">Avg Farm Wage</SectionHeading>
+            <div style={{ height: 240 }}>
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={wageTrend} margin={{ top: 5, right: 10, bottom: 5, left: 10 }}>
+                <LineChart data={wageTrend} margin={{ top: 5, right: 20, bottom: 30, left: 10 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
                   <XAxis dataKey="year" axisLine={false} tickLine={false}
                     tick={{ fill: 'var(--text3)', fontSize: 10, fontFamily: 'var(--font-mono)' }} />
-                  <YAxis axisLine={false} tickLine={false}
+                  <YAxis
+                    yAxisId="hourly"
+                    axisLine={false}
+                    tickLine={false}
                     tick={{ fill: 'var(--text3)', fontSize: 10, fontFamily: 'var(--font-mono)' }}
-                    tickFormatter={(v) => `$${v}`} />
+                    tickFormatter={(v) => `$${v}/hr`}
+                  />
+                  {hasBls && (
+                    <YAxis
+                      yAxisId="annual"
+                      orientation="right"
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fill: 'var(--text3)', fontSize: 10, fontFamily: 'var(--font-mono)' }}
+                      tickFormatter={(v) => `$${Math.round(Number(v) / 1000)}K`}
+                    />
+                  )}
                   <Tooltip contentStyle={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', fontSize: 12, color: 'var(--text)' }} />
-                  <Line type="monotone" dataKey="stateWage" stroke="var(--field)" strokeWidth={2} dot={false} name={stateName} />
-                  <Line type="monotone" dataKey="nationalWage" stroke="var(--text3)" strokeWidth={1.5} strokeDasharray="4 3" dot={false} name="National" />
+                  <Legend verticalAlign="bottom" wrapperStyle={{ fontSize: 11, fontFamily: 'var(--font-mono)', paddingTop: 8 }} />
+                  <Line yAxisId="hourly" type="monotone" dataKey="stateWage" stroke="var(--field)" strokeWidth={2} dot={false} connectNulls name={`${stateName} (NASS $/hr)`} />
+                  <Line yAxisId="hourly" type="monotone" dataKey="nationalWage" stroke="var(--text3)" strokeWidth={1.5} strokeDasharray="4 3" dot={false} connectNulls name="National (NASS $/hr)" />
+                  {hasBls && (
+                    <Line yAxisId="annual" type="monotone" dataKey="blsAnnualPay" stroke="var(--harvest)" strokeWidth={1.5} dot={false} connectNulls name="BLS QCEW annual pay" />
+                  )}
                 </LineChart>
               </ResponsiveContainer>
             </div>
@@ -71,8 +97,7 @@ export default function LaborWages({ wageTrend, wageRanking, stateName }: LaborW
         {/* Wage growth ranking */}
         {hasRank && (
           <div className="p-4 rounded-[var(--radius-lg)] border" style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}>
-            <p className="text-[11px] font-bold tracking-[0.1em] uppercase mb-2"
-              style={{ color: 'var(--text3)', fontFamily: 'var(--font-mono)' }}>Wage Growth Ranking (Top 10)</p>
+            <SectionHeading className="mb-2">Wage Growth Ranking (Top 10)</SectionHeading>
             <div style={{ height: 220 }}>
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={wageRanking.slice(0, 10)} layout="vertical" margin={{ left: 30, right: 20 }}>

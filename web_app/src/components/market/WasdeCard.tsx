@@ -1,6 +1,7 @@
 'use client';
 
 import Term from '@/components/shared/Term';
+import SectionHeading from '@/components/shared/SectionHeading';
 
 interface WasdeCardProps {
   releaseDate: string;
@@ -39,10 +40,9 @@ export default function WasdeCard({
       className="p-5 rounded-[var(--radius-lg)] border flex-1"
       style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}
     >
-      <p className="text-[11px] font-bold tracking-[0.1em] uppercase mb-3"
-        style={{ color: 'var(--text3)', fontFamily: 'var(--font-mono)' }}>
+      <SectionHeading>
         Latest <Term>WASDE</Term> &middot; {releaseDate}
-      </p>
+      </SectionHeading>
 
       <div className="flex flex-col gap-3">
         {/* Ending stocks */}

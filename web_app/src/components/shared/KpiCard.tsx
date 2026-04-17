@@ -10,6 +10,8 @@ interface KpiCardProps {
   delta?: number;              // percent change for DeltaChip
   sparklineData?: number[];    // optional 5-25 year sparkline
   sparklineColor?: string;
+  sparklineYears?: number[];   // optional year labels — enables tooltip + endpoints
+  sparklineUnit?: string;      // optional unit shown in the tooltip
   size?: 'lg' | 'md';         // lg = Barlow 48px, md = Barlow 36px
   unit?: string;               // small subscript after value
   className?: string;
@@ -22,6 +24,8 @@ export default function KpiCard({
   delta,
   sparklineData,
   sparklineColor,
+  sparklineYears,
+  sparklineUnit,
   size = 'lg',
   unit,
   className = '',
@@ -78,7 +82,12 @@ export default function KpiCard({
 
         {/* Sparkline */}
         {sparklineData && sparklineData.length > 2 && (
-          <Sparkline data={sparklineData} color={sparklineColor} />
+          <Sparkline
+            data={sparklineData}
+            years={sparklineYears}
+            color={sparklineColor}
+            unit={sparklineUnit}
+          />
         )}
       </div>
 

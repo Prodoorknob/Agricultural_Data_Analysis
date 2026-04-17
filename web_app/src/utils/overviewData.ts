@@ -67,6 +67,15 @@ export interface LandUseRow {
   acres: number | null;
 }
 
+export interface BlsEstablishmentRow {
+  year: number;
+  state_fips: string;        // 2-digit zero-padded FIPS (e.g. '19' for Iowa)
+  naics: string;             // NAICS code as string (e.g. '111' for crop production)
+  establishments: number | null;
+  employment: number | null;
+  avg_annual_pay: number | null;
+}
+
 async function fetchParquet<T>(url: string, signal?: AbortSignal): Promise<T[]> {
   let buf: ArrayBuffer;
   try {
@@ -137,4 +146,8 @@ export function fetchCountyMetrics(stateAlpha: string, signal?: AbortSignal): Pr
 
 export function fetchLandUse(signal?: AbortSignal): Promise<LandUseRow[]> {
   return fetchParquet<LandUseRow>(`${S3_BASE}/land_use.parquet`, signal);
+}
+
+export function fetchBlsEstablishments(signal?: AbortSignal): Promise<BlsEstablishmentRow[]> {
+  return fetchParquet<BlsEstablishmentRow>(`${S3_BASE}/bls_establishments.parquet`, signal);
 }

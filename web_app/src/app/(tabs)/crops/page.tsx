@@ -14,6 +14,43 @@ import HarvestEfficiency from '@/components/crops/HarvestEfficiency';
 import CropProgressStrip from '@/components/crops/CropProgressStrip';
 import CountyDrillDown from '@/components/crops/CountyDrillDown';
 
+// Backend /api/v1/crops/profit-history accepts these keys. Frontend stores
+// commodity uppercase with plural for 'SOYBEANS' / 'PEANUTS', so normalize
+// before hitting the endpoint.
+const PROFIT_COMMODITY_MAP: Record<string, string> = {
+  corn: 'corn',
+  soybeans: 'soybean',
+  soybean: 'soybean',
+  wheat: 'wheat',
+  cotton: 'cotton',
+  rice: 'rice',
+  peanuts: 'peanut',
+  peanut: 'peanut',
+  sorghum: 'sorghum',
+  oats: 'oats',
+  barley: 'barley',
+};
+
+interface ProfitPoint {
+  year: number;
+  price: number | null;
+  price_unit: string | null;
+  yield_value: number | null;
+  yield_unit: string | null;
+  revenue_per_acre: number | null;
+  variable_cost_per_acre: number | null;
+  total_cost_per_acre: number | null;
+  profit_per_acre: number | null;
+}
+
+interface ProfitHistoryResponse {
+  commodity: string;
+  state: string;
+  cost_source: string | null;
+  note: string | null;
+  points: ProfitPoint[];
+}
+
 export default function CropsPage() {
   const { filters, setCommodity } = useFilters();
   const stateCode = filters.state;
@@ -66,16 +103,53 @@ export default function CropsPage() {
     const areaPrior = priorYear?.areaPlanted || 0;
     const areaDelta = areaPrior > 0 ? ((areaNow - areaPrior) / areaPrior) * 100 : 0;
 
-    // Operations count from raw data
-    const opsRows = activeData.filter(
-      (r: any) => r.year === year && r.commodity_desc === commodity && r.statisticcat_desc === 'OPERATIONS'
-    );
-    const opsCount = opsRows.reduce((s: number, r: any) => s + (r.value_num || 0), 0);
-    const opsRows2010 = activeData.filter(
-      (r: any) => r.year === 2010 && r.commodity_desc === commodity && r.statisticcat_desc === 'OPERATIONS'
-    );
-    const opsCount2010 = opsRows2010.reduce((s: number, r: any) => s + (r.value_num || 0), 0);
-    const opsDelta = opsCount2010 > 0 ? ((opsCount - opsCount2010) / opsCount2010) * 100 : 0;
+    // Operations count — NASS OPERATIONS is dense only in Census years
+    // (2002, 2007, 2012, 2017, 2022). Walk a fallback chain so the card
+    // still shows something reasonable in non-Census years.
+    //
+    // Use the pre-filter raw dataset: filterData() drops CENSUS rows that
+    // aren't SALES+$, so CENSUS-sourced OPERATIONS rows would otherwise
+    // vanish.
+    const rawForOps = stateCode ? stateData : nationalData;
+    const sumOpsForYear = (y: number) =>
+      rawForOps
+        .filter(
+          (r: any) =>
+            r.year === y &&
+            r.commodity_desc === commodity &&
+            r.statisticcat_desc === 'OPERATIONS' &&
+            !r.commodity_desc?.includes('TOTAL') &&
+            !r.commodity_desc?.includes('ALL CLASSES') &&
+            (r.domain_desc === 'TOTAL' || !r.domain_desc),
+        )
+        .reduce((s: number, r: any) => s + (r.value_num || 0), 0);
+
+    const latestCandidates = [year, year - 1, 2022, 2017, 2012, 2007, 2002];
+    let opsCount = 0;
+    let opsYearUsed: number | null = null;
+    for (const y of latestCandidates) {
+      const v = sumOpsForYear(y);
+      if (v > 0) {
+        opsCount = v;
+        opsYearUsed = y;
+        break;
+      }
+    }
+
+    // Baseline: first available Census year to ground the delta.
+    const baselineCandidates = [2002, 2007, 2012];
+    let opsCountBaseline = 0;
+    let opsBaselineYear: number | null = null;
+    for (const y of baselineCandidates) {
+      if (y >= (opsYearUsed ?? 9999)) break; // baseline must be strictly before latest
+      const v = sumOpsForYear(y);
+      if (v > 0) {
+        opsCountBaseline = v;
+        opsBaselineYear = y;
+        break;
+      }
+    }
+    const opsDelta = opsCountBaseline > 0 ? ((opsCount - opsCountBaseline) / opsCountBaseline) * 100 : 0;
 
     const salesNow = thisYear?.revenue || 0;
     const salesPrior = priorYear?.revenue || 0;
@@ -96,13 +170,15 @@ export default function CropsPage() {
       areaYoyDelta: areaDelta,
       operationsCount: opsCount,
       operationsDeltaSince2010: opsDelta,
+      operationsYearUsed: opsYearUsed,
+      operationsBaselineYear: opsBaselineYear,
       totalSales: salesNow,
       salesYoyDelta: salesDelta,
       salesShareOfState: salesShare,
       stateName,
       commodity: commodity.charAt(0) + commodity.slice(1).toLowerCase(),
     };
-  }, [story, activeData, year, commodity, stateName]);
+  }, [story, activeData, stateData, nationalData, stateCode, year, commodity, stateName]);
 
   // Yield trend data with anomalies
   const yieldTrendData = useMemo(() => {
@@ -136,17 +212,43 @@ export default function CropsPage() {
       .sort((a: any, b: any) => a.year - b.year);
   }, [story]);
 
-  // Profit data — placeholder (needs futures + costs from backend, stubbed for now)
+  // Profit data — fetched from /api/v1/crops/profit-history. When the tab
+  // is on national view there's no state parquet for ERS to anchor yields
+  // against, so default to Iowa (a reasonable corn/soy baseline) and
+  // caption that substitution below the chart.
+  const [profitHistory, setProfitHistory] = useState<ProfitHistoryResponse | null>(null);
+
+  useEffect(() => {
+    const backendKey = PROFIT_COMMODITY_MAP[commodity.toLowerCase()];
+    if (!backendKey) {
+      setProfitHistory(null);
+      return;
+    }
+    const stateForEndpoint = stateCode || 'IA';
+    const base = process.env.NEXT_PUBLIC_PREDICTION_API_URL || 'http://localhost:8000';
+    const controller = new AbortController();
+    fetch(
+      `${base}/api/v1/crops/profit-history?commodity=${backendKey}&state=${stateForEndpoint}`,
+      { signal: controller.signal },
+    )
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: ProfitHistoryResponse | null) => setProfitHistory(data))
+      .catch((err: unknown) => {
+        if ((err as { name?: string })?.name !== 'AbortError') setProfitHistory(null);
+      });
+    return () => controller.abort();
+  }, [commodity, stateCode]);
+
   const profitData = useMemo(() => {
-    // Rough profit estimate: yield × $4.50 (placeholder price) − $700 (placeholder cost/acre)
-    return story
-      .filter((s: any) => s.yield > 0)
-      .map((s: any) => ({
-        year: s.year,
-        profitPerAcre: Math.round(s.yield * 4.5 - 700),
-      }))
-      .sort((a: any, b: any) => a.year - b.year);
-  }, [story]);
+    if (!profitHistory) return [];
+    return profitHistory.points
+      .filter((p) => p.profit_per_acre != null)
+      .map((p) => ({ year: p.year, profitPerAcre: p.profit_per_acre as number }))
+      .sort((a, b) => a.year - b.year);
+  }, [profitHistory]);
+
+  const profitNote = profitHistory?.note ?? null;
+  const profitIowaFallback = !stateCode;
 
   // Crop condition data
   const conditionData = useMemo(() => {
@@ -182,6 +284,32 @@ export default function CropsPage() {
 
   const commodityLabel = commodity.charAt(0) + commodity.slice(1).toLowerCase();
 
+  // When a state is selected, restrict the picker to commodities actually
+  // grown there in the last 3 years (AREA PLANTED > 0). National view keeps
+  // the full list. Mapping between NASS `commodity_desc` (uppercase, plural
+  // only for a few crops) and the frontend `CROP_COMMODITIES` keys is
+  // looser than exact match — we compare uppercased frontend labels.
+  const grownInStateCommodities = useMemo(() => {
+    if (!stateCode) return CROP_COMMODITIES;
+    const latest = LATEST_NASS_YEAR;
+    const threeYears = new Set([latest, latest - 1, latest - 2]);
+    const grown = new Set<string>();
+    for (const r of stateData) {
+      if (!threeYears.has(r.year)) continue;
+      if (r.statisticcat_desc !== 'AREA PLANTED') continue;
+      if (!(r.value_num > 0)) continue;
+      if (r.commodity_desc) grown.add(String(r.commodity_desc).toUpperCase());
+    }
+    if (grown.size === 0) return CROP_COMMODITIES;
+    const filtered = CROP_COMMODITIES.filter((c) => {
+      const upper = c.label.toUpperCase();
+      // NASS uses "SOYBEANS" plural; a few commodities drop 's' vs frontend
+      // (peanuts → PEANUT). Check both variants.
+      return grown.has(upper) || grown.has(upper.replace(/S$/, '')) || grown.has(upper + 'S');
+    });
+    return filtered.length > 0 ? filtered : CROP_COMMODITIES;
+  }, [stateCode, stateData]);
+
   return (
     <div>
       {/* Band A — Commodity picker */}
@@ -189,6 +317,7 @@ export default function CropsPage() {
         <CommodityPicker
           selected={filters.commodity || 'corn'}
           onSelect={setCommodity}
+          commodities={grownInStateCommodities}
         />
       </div>
 
@@ -224,7 +353,13 @@ export default function CropsPage() {
 
         {/* Band D — Profit + Harvest efficiency side by side */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-8">
-          <ProfitChart data={profitData} commodity={commodityLabel} stateName={stateName} />
+          <ProfitChart
+            data={profitData}
+            commodity={commodityLabel}
+            stateName={stateName}
+            note={profitNote}
+            iowaFallback={profitIowaFallback}
+          />
           <HarvestEfficiency data={efficiencyData} commodity={commodityLabel} stateName={stateName} />
         </div>
 

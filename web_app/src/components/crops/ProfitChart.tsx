@@ -15,10 +15,32 @@ interface ProfitChartProps {
   data: ProfitPoint[];
   commodity: string;
   stateName: string;
+  /** Endpoint-supplied explanation (e.g. why a commodity has no ERS data). */
+  note?: string | null;
+  /** Shown when state filter is null — profit is anchored to Iowa yields. */
+  iowaFallback?: boolean;
 }
 
-export default function ProfitChart({ data, commodity, stateName }: ProfitChartProps) {
-  if (data.length === 0) return null;
+export default function ProfitChart({ data, commodity, stateName, note, iowaFallback }: ProfitChartProps) {
+  if (data.length === 0) {
+    if (note) {
+      return (
+        <div
+          className="p-4 rounded-[var(--radius-lg)] border flex-1"
+          style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}
+        >
+          <h4
+            className="text-[15px] font-bold mb-2"
+            style={{ color: 'var(--text)', fontFamily: 'var(--font-body)' }}
+          >
+            Profit per Acre
+          </h4>
+          <p className="text-[13px]" style={{ color: 'var(--text3)' }}>{note}</p>
+        </div>
+      );
+    }
+    return null;
+  }
 
   const min = Math.min(...data.map((d) => d.profitPerAcre));
   const max = Math.max(...data.map((d) => d.profitPerAcre));
@@ -80,6 +102,13 @@ export default function ProfitChart({ data, commodity, stateName }: ProfitChartP
           </BarChart>
         </ResponsiveContainer>
       </div>
+      {(iowaFallback || note) && (
+        <p className="mt-2 text-[11px]" style={{ color: 'var(--text3)', fontFamily: 'var(--font-mono)' }}>
+          {iowaFallback
+            ? 'National view — profit anchored to Iowa yields against US-average costs.'
+            : note}
+        </p>
+      )}
       <CitationBlock source="NASS yield × CME Oct 1 settle − ERS cost" />
     </div>
   );

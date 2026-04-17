@@ -1,6 +1,7 @@
 'use client';
 
 import { useAgSeason } from '@/hooks/useAgSeason';
+import SectionHeading from '@/components/shared/SectionHeading';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -17,12 +18,7 @@ export default function SeasonClock() {
       className="p-4 rounded-[var(--radius-lg)] border mb-6"
       style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}
     >
-      <p
-        className="text-[11px] font-bold tracking-[0.1em] uppercase mb-3"
-        style={{ color: 'var(--text3)', fontFamily: 'var(--font-mono)' }}
-      >
-        Season Clock
-      </p>
+      <SectionHeading>Season Clock</SectionHeading>
 
       {/* Month strip */}
       <div className="flex items-center gap-0 mb-2">
@@ -65,8 +61,12 @@ export default function SeasonClock() {
         {MONTHS.map((_, i) => {
           let bg = 'transparent';
           if (i >= 4 && i <= 9) {
-            if (!isYieldLive) bg = 'var(--surface2)';
-            else if (i <= 6) bg = 'var(--harvest-subtle)'; // low confidence
+            if (!isYieldLive) {
+              // Hatched pattern signals "upcoming, not live" with enough
+              // contrast to remain legible in both light and dark themes.
+              bg =
+                'repeating-linear-gradient(45deg, var(--border2) 0 3px, transparent 3px 6px)';
+            } else if (i <= 6) bg = 'var(--harvest-subtle)'; // low confidence
             else if (i <= 8) bg = 'var(--harvest)'; // medium
             else bg = 'var(--field)'; // high
           }

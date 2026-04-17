@@ -5,6 +5,7 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from 'recharts';
 import CitationBlock from '@/components/shared/CitationBlock';
+import SectionHeading from '@/components/shared/SectionHeading';
 import { COMMODITY_COLORS } from '@/lib/constants';
 
 /**
@@ -133,12 +134,7 @@ export default function YieldSeasonReview() {
       {/* Header: crop tabs */}
       <div className="flex items-center justify-between flex-wrap gap-3 mb-4">
         <div>
-          <p
-            className="text-[11px] font-bold tracking-[0.1em] uppercase"
-            style={{ color: 'var(--text3)', fontFamily: 'var(--font-mono)' }}
-          >
-            2024–2025 Season Review
-          </p>
+          <SectionHeading className="mb-0">2024–2025 Season Review</SectionHeading>
           <p className="text-[13px] mt-1" style={{ color: 'var(--text2)' }}>
             Walk-forward test results. County-level model predictions vs realized yields,
             averaged across every county in the training panel.

@@ -9,6 +9,7 @@ import MarketHero from '@/components/market/MarketHero';
 import PriceHistoryChart from '@/components/market/PriceHistoryChart';
 import WasdeCard from '@/components/market/WasdeCard';
 import RatioDial from '@/components/market/RatioDial';
+import ExportPaceCard from '@/components/market/ExportPaceCard';
 import InputCostCard from '@/components/market/InputCostCard';
 import DxyStrip from '@/components/market/DxyStrip';
 import { CROP_COMMODITIES } from '@/lib/constants';
@@ -44,6 +45,7 @@ export default function MarketPage() {
   const [costs, setCosts] = useState<any>(null);
   const [fertilizer, setFertilizer] = useState<any>(null);
   const [priceRatio, setPriceRatio] = useState<any>(null);
+  const [exportPace, setExportPace] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -54,13 +56,14 @@ export default function MarketPage() {
       const start = rangeToStart(range);
       const dxyStart = rangeToStart('1Y');
 
-      const [fut, dxy, wasdeRes, costsRes, fertRes, ratioRes] = await Promise.all([
+      const [fut, dxy, wasdeRes, costsRes, fertRes, ratioRes, exportRes] = await Promise.all([
         market.fetchFutures(commodity, start),
         market.fetchDxy(dxyStart),
         market.fetchWasdeSignal(commodity),
         market.fetchCosts(commodity),
         market.fetchFertilizer(4),
         commodity === 'corn' || commodity === 'soybeans' ? market.fetchPriceRatio() : Promise.resolve(null),
+        commodity === 'wheat' ? market.fetchExportPace(commodity) : Promise.resolve(null),
       ]);
 
       setFuturesData(fut?.points || []);
@@ -69,6 +72,7 @@ export default function MarketPage() {
       setCosts(costsRes);
       setFertilizer(fertRes);
       setPriceRatio(ratioRes);
+      setExportPace(exportRes);
     } catch {
       setError('Failed to load market data. Is the backend running?');
     }
@@ -144,6 +148,7 @@ export default function MarketPage() {
   }, [costs, fertilizer, commodity]);
 
   const showRatio = commodity === 'corn' || commodity === 'soybeans';
+  const showExportPace = commodity === 'wheat' && exportPace;
 
   return (
     <div>
@@ -186,8 +191,19 @@ export default function MarketPage() {
             />
           )}
 
-          {/* C.2 — Ratio dial (corn/soy only) */}
+          {/* C.2 — Ratio dial (corn/soy) or Export Pace (wheat) */}
           {showRatio && ratioDialData && <RatioDial {...ratioDialData} />}
+          {showExportPace && (
+            <ExportPaceCard
+              commodity={commodity}
+              asOfDate={exportPace.as_of_date}
+              marketingYear={exportPace.marketing_year}
+              totalCommittedMt={exportPace.total_committed_mt}
+              fiveYrAvgMt={exportPace.five_yr_avg_committed_mt}
+              pctOfAvg={exportPace.pct_of_5yr_avg}
+              weekOfMy={exportPace.week_of_marketing_year}
+            />
+          )}
 
           {/* C.3 — Input costs */}
           {inputCostData && <InputCostCard {...inputCostData} />}

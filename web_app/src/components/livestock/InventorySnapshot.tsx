@@ -1,6 +1,7 @@
 'use client';
 
 import KpiCard from '@/components/shared/KpiCard';
+import SectionHeading from '@/components/shared/SectionHeading';
 import { formatCompact } from '@/lib/format';
 
 interface LivestockKPI {
@@ -9,6 +10,7 @@ interface LivestockKPI {
   headCount: number;
   unit: string;
   sparkline5yr: number[];
+  sparklineYears?: number[];
   yoyDeltaPct: number;
 }
 
@@ -31,10 +33,7 @@ export default function InventorySnapshot({ data }: InventorySnapshotProps) {
 
   return (
     <div className="mb-8">
-      <p className="text-[11px] font-bold tracking-[0.1em] uppercase mb-3"
-        style={{ color: 'var(--text3)', fontFamily: 'var(--font-mono)' }}>
-        Inventory Snapshot
-      </p>
+      <SectionHeading>Inventory Snapshot</SectionHeading>
 
       {/* Primary row — 4 cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
@@ -46,6 +45,8 @@ export default function InventorySnapshot({ data }: InventorySnapshotProps) {
             unit={item.unit}
             delta={item.yoyDeltaPct}
             sparklineData={item.sparkline5yr}
+            sparklineYears={item.sparklineYears}
+            sparklineUnit={item.unit}
             sparklineColor={SPECIES_COLORS[item.species] || 'var(--field)'}
             size="md"
           />

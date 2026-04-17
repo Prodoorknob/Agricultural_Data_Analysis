@@ -1,6 +1,7 @@
 'use client';
 
 import Term from '@/components/shared/Term';
+import SectionHeading from '@/components/shared/SectionHeading';
 
 interface RatioDialProps {
   ratio: number;
@@ -29,10 +30,9 @@ export default function RatioDial({
       className="p-5 rounded-[var(--radius-lg)] border flex-1"
       style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}
     >
-      <p className="text-[11px] font-bold tracking-[0.1em] uppercase mb-3"
-        style={{ color: 'var(--text3)', fontFamily: 'var(--font-mono)' }}>
+      <SectionHeading>
         <Term term="corn/soy ratio">Corn/Soy Ratio</Term>
-      </p>
+      </SectionHeading>
 
       {/* Big number */}
       <span

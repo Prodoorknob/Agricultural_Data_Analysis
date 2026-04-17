@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react';
 import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   ReferenceDot,
 } from 'recharts';
 import CitationBlock from '@/components/shared/CitationBlock';
@@ -99,8 +99,14 @@ export default function YieldTrendChart({ data, commodity, stateName, unit }: Yi
                   fontFamily: 'var(--font-mono)',
                   color: 'var(--text)',
                 }}
-                formatter={(val: unknown) => [`${Number(val).toFixed(1)} ${unit}`, '']}
+                formatter={(val: unknown, name: string) => [`${Number(val).toFixed(1)} ${unit}`, name]}
                 labelFormatter={(yr) => `${yr}`}
+              />
+              <Legend
+                verticalAlign="top"
+                align="right"
+                iconType="plainline"
+                wrapperStyle={{ fontSize: 11, fontFamily: 'var(--font-mono)', paddingBottom: 8 }}
               />
               <Line
                 type="monotone"
@@ -126,12 +132,29 @@ export default function YieldTrendChart({ data, commodity, stateName, unit }: Yi
                   key={ap.year}
                   x={ap.year}
                   y={ap.stateYield}
-                  r={6}
-                  fill="var(--negative)"
-                  stroke="var(--surface)"
-                  strokeWidth={2}
-                  onMouseEnter={() => setHoveredAnomaly(`${commodity.toLowerCase()}_${ap.year}`)}
-                  onMouseLeave={() => setHoveredAnomaly(null)}
+                  // Custom shape — invisible 12px hit target over a visible
+                  // 6px dot so hover doesn't require pixel-perfect aim.
+                  shape={(props: { cx?: number; cy?: number }) => {
+                    const cx = props.cx ?? 0;
+                    const cy = props.cy ?? 0;
+                    return (
+                      <g
+                        style={{ cursor: 'pointer' }}
+                        onMouseEnter={() => setHoveredAnomaly(`${commodity.toLowerCase()}_${ap.year}`)}
+                        onMouseLeave={() => setHoveredAnomaly(null)}
+                      >
+                        <circle cx={cx} cy={cy} r={12} fill="transparent" style={{ pointerEvents: 'all' }} />
+                        <circle
+                          cx={cx}
+                          cy={cy}
+                          r={6}
+                          fill="var(--negative)"
+                          stroke="var(--surface)"
+                          strokeWidth={2}
+                        />
+                      </g>
+                    );
+                  }}
                 />
               ))}
             </LineChart>

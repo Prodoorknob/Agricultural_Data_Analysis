@@ -2,6 +2,7 @@
 
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip } from 'recharts';
 import Sparkline from '@/components/shared/Sparkline';
+import SectionHeading from '@/components/shared/SectionHeading';
 import { formatCurrency, formatCompact } from '@/lib/format';
 import { COMMODITY_COLORS } from '@/lib/constants';
 
@@ -52,12 +53,7 @@ export default function StateFingerprint({
         className="p-4 rounded-[var(--radius-lg)] border"
         style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}
       >
-        <p
-          className="text-[11px] font-bold tracking-[0.1em] uppercase mb-3"
-          style={{ color: 'var(--text3)', fontFamily: 'var(--font-mono)' }}
-        >
-          Revenue Mix
-        </p>
+        <SectionHeading>Revenue Mix</SectionHeading>
         <div className="flex items-center gap-4">
           <div style={{ width: 120, height: 120 }}>
             <ResponsiveContainer width="100%" height="100%">
@@ -104,12 +100,7 @@ export default function StateFingerprint({
         className="p-4 rounded-[var(--radius-lg)] border"
         style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}
       >
-        <p
-          className="text-[11px] font-bold tracking-[0.1em] uppercase mb-3"
-          style={{ color: 'var(--text3)', fontFamily: 'var(--font-mono)' }}
-        >
-          25-Year Planted Area
-        </p>
+        <SectionHeading>25-Year Planted Area</SectionHeading>
         <div className="flex flex-col gap-2">
           {sparklines.slice(0, 5).map((item) => (
             <div key={item.commodity} className="flex items-center gap-3">
@@ -142,12 +133,7 @@ export default function StateFingerprint({
           className="p-4 rounded-[var(--radius-lg)] border"
           style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}
         >
-          <p
-            className="text-[11px] font-bold tracking-[0.1em] uppercase mb-3"
-            style={{ color: 'var(--text3)', fontFamily: 'var(--font-mono)' }}
-          >
-            Peer Comparison &middot; {peerMetric}
-          </p>
+          <SectionHeading>Peer Comparison &middot; {peerMetric}</SectionHeading>
           <div style={{ height: 120 }}>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={peerComparison} layout="vertical" margin={{ left: 24, right: 8, top: 4, bottom: 4 }}>

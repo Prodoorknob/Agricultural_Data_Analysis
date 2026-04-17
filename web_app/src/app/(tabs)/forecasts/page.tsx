@@ -8,6 +8,7 @@ import SeasonClock from '@/components/forecasts/SeasonClock';
 import AcreageCard from '@/components/forecasts/AcreageCard';
 import AccuracyPanel from '@/components/forecasts/AccuracyPanel';
 import YieldSeasonReview from '@/components/forecasts/YieldSeasonReview';
+import SectionHeading from '@/components/shared/SectionHeading';
 
 type YieldViewMode = 'current' | 'review';
 
@@ -39,10 +40,15 @@ export default function ForecastsPage() {
   const allLoading = corn.loading || soy.loading || wheat.loading;
   const anyError = corn.error || soy.error || wheat.error;
 
+  // Only national rows feed the accuracy chart — §5.3.D compares model
+  // forecasts against USDA national baselines, not state-by-state.
+  const onlyNational = (arr: AcreageAccuracyItem[] | undefined) =>
+    (arr || []).filter((a) => a.level === 'national' || !a.level);
+
   const acreageAccuracy: AcreageAccuracyItem[] = [
-    ...(corn.accuracy || []),
-    ...(soy.accuracy || []),
-    ...(wheat.accuracy || []),
+    ...onlyNational(corn.accuracy),
+    ...onlyNational(soy.accuracy),
+    ...onlyNational(wheat.accuracy),
   ];
 
   const [yieldAccuracy, setYieldAccuracy] = useState<YieldAccuracyWeekItem[]>([]);
@@ -50,9 +56,22 @@ export default function ForecastsPage() {
   useEffect(() => {
     const controller = new AbortController();
     const base = process.env.NEXT_PUBLIC_PREDICTION_API_URL || 'http://localhost:8000';
-    fetch(`${base}/api/v1/predict/yield/accuracy?crop=corn`, { signal: controller.signal })
-      .then((r) => (r.ok ? r.json() : []))
-      .then((data) => setYieldAccuracy(Array.isArray(data) ? data : []))
+    // Fetch all three crops in parallel so the chart can overlay them.
+    // Each response is still per-week with `crop` tagged, so the chart
+    // pivots by week downstream.
+    Promise.all(
+      ['corn', 'soybean', 'wheat'].map((crop) =>
+        fetch(`${base}/api/v1/predict/yield/accuracy?crop=${crop}`, { signal: controller.signal })
+          .then((r) => (r.ok ? r.json() : []))
+          .then((data): YieldAccuracyWeekItem[] =>
+            Array.isArray(data)
+              ? data.map((d: YieldAccuracyWeekItem) => ({ ...d, crop }))
+              : []
+          )
+          .catch(() => [] as YieldAccuracyWeekItem[])
+      )
+    )
+      .then((lists) => setYieldAccuracy(lists.flat()))
       .catch((err: unknown) => {
         if ((err as { name?: string })?.name !== 'AbortError') setYieldAccuracy([]);
       });
@@ -108,12 +127,7 @@ export default function ForecastsPage() {
 
       {/* Band B — Acreage forecast cards */}
       <div className="mb-8">
-        <p
-          className="text-[11px] font-bold tracking-[0.1em] uppercase mb-3"
-          style={{ color: 'var(--text3)', fontFamily: 'var(--font-mono)' }}
-        >
-          Planted Acreage Forecasts
-        </p>
+        <SectionHeading>Planted Acreage Forecasts</SectionHeading>
         <BandShell loading={allLoading} error={anyError} skeletonHeight={300}>
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             <AcreageCard {...buildCardProps(corn, 'corn')} />
@@ -153,12 +167,7 @@ function YieldSection() {
   return (
     <div className="mb-8">
       <div className="flex items-center justify-between flex-wrap gap-3 mb-3">
-        <p
-          className="text-[11px] font-bold tracking-[0.1em] uppercase"
-          style={{ color: 'var(--text3)', fontFamily: 'var(--font-mono)' }}
-        >
-          County Yield Forecasts
-        </p>
+        <SectionHeading className="mb-0">County Yield Forecasts</SectionHeading>
         <div
           className="inline-flex items-center p-1 rounded-[var(--radius-full)]"
           style={{ background: 'var(--surface2)' }}

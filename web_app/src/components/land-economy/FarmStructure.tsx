@@ -4,6 +4,7 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts';
 import CitationBlock from '@/components/shared/CitationBlock';
+import SectionHeading from '@/components/shared/SectionHeading';
 import { formatCompact } from '@/lib/format';
 
 interface FarmStructurePoint {
@@ -41,8 +42,7 @@ export default function FarmStructure({ data, stateName }: FarmStructureProps) {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Operations count */}
         <div className="p-4 rounded-[var(--radius-lg)] border" style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}>
-          <p className="text-[11px] font-bold tracking-[0.1em] uppercase mb-2"
-            style={{ color: 'var(--text3)', fontFamily: 'var(--font-mono)' }}>Operations Count</p>
+          <SectionHeading className="mb-2">Operations Count</SectionHeading>
           <div style={{ height: 200 }}>
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={data} margin={{ top: 5, right: 10, bottom: 5, left: 10 }}>
@@ -62,8 +62,7 @@ export default function FarmStructure({ data, stateName }: FarmStructureProps) {
 
         {/* Avg farm size */}
         <div className="p-4 rounded-[var(--radius-lg)] border" style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}>
-          <p className="text-[11px] font-bold tracking-[0.1em] uppercase mb-2"
-            style={{ color: 'var(--text3)', fontFamily: 'var(--font-mono)' }}>Avg Farm Size (acres)</p>
+          <SectionHeading className="mb-2">Avg Farm Size (acres)</SectionHeading>
           <div style={{ height: 200 }}>
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={data} margin={{ top: 5, right: 10, bottom: 5, left: 10 }}>

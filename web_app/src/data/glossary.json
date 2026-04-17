@@ -4,6 +4,7 @@
   "basis": "Local cash price minus the nearest futures price. Measures local supply/demand.",
   "bu/acre": "Bushels per acre \u2014 the standard yield unit for grains. Corn national average is around 180.",
   "p10 / p50 / p90": "An 80% confidence range. Actual outcomes fall between p10 and p90 about 80% of the time.",
+  "80% interval": "80% of the time the actual planted acreage falls between these two values, based on conformal calibration.",
   "mape": "Mean Absolute Percent Error. How far off a forecast is on average. Lower is better.",
   "rrmse": "Relative Root Mean Squared Error. A percent-based error metric for yield forecasts.",
   "marketing year": "The 12-month window used to track a crop\u2019s supply/demand (corn: Sep\u2013Aug; wheat: Jun\u2013May).",

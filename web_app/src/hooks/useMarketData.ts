@@ -75,6 +75,10 @@ export function useMarketData() {
     return fetchJson<any>(`${BASE}/api/v1/predict/acreage/price-ratio`);
   }, []);
 
+  const fetchExportPace = useCallback(async (commodity: string) => {
+    return fetchJson<any>(`${BASE}/api/v1/market/exports?commodity=${commodity}`);
+  }, []);
+
   return {
     loading,
     error,
@@ -85,5 +89,6 @@ export function useMarketData() {
     fetchFertilizer,
     fetchWasdeSignal,
     fetchPriceRatio,
+    fetchExportPace,
   };
 }

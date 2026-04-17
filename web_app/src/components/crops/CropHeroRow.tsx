@@ -12,12 +12,16 @@ interface CropHeroRowProps {
   areaYoyDelta: number;
   operationsCount: number;
   operationsDeltaSince2010: number;
+  operationsYearUsed?: number | null;
+  operationsBaselineYear?: number | null;
   totalSales: number;
   salesYoyDelta: number;
   salesShareOfState: number;
   stateName: string;
   commodity: string;
 }
+
+const CENSUS_YEARS = new Set([2002, 2007, 2012, 2017, 2022]);
 
 export default function CropHeroRow({
   yieldThisYear,
@@ -28,6 +32,8 @@ export default function CropHeroRow({
   areaYoyDelta,
   operationsCount,
   operationsDeltaSince2010,
+  operationsYearUsed,
+  operationsBaselineYear,
   totalSales,
   salesYoyDelta,
   salesShareOfState,
@@ -42,8 +48,14 @@ export default function CropHeroRow({
     ? `${formatCompact(areaPlanted)} acres — ${areaYoyDelta >= 0 ? 'up' : 'down'} ${Math.abs(areaYoyDelta).toFixed(1)}% from last year.`
     : '';
 
+  const opsYearLabel = operationsYearUsed
+    ? `(${CENSUS_YEARS.has(operationsYearUsed) ? 'Census ' : ''}${operationsYearUsed})`
+    : undefined;
+  const baselineClause = operationsBaselineYear
+    ? `since ${CENSUS_YEARS.has(operationsBaselineYear) ? 'the ' + operationsBaselineYear + ' Census' : operationsBaselineYear}`
+    : 'over time';
   const opsCaption = operationsCount > 0
-    ? `${formatCompact(operationsCount)} operations — ${operationsDeltaSince2010 >= 0 ? 'up' : 'down'} ${Math.abs(operationsDeltaSince2010).toFixed(0)}% since 2010.`
+    ? `${formatCompact(operationsCount)} operations — ${operationsDeltaSince2010 >= 0 ? 'up' : 'down'} ${Math.abs(operationsDeltaSince2010).toFixed(0)}% ${baselineClause}.`
     : '';
 
   const salesCaption = totalSales > 0
@@ -68,13 +80,16 @@ export default function CropHeroRow({
         delta={areaYoyDelta}
         size="md"
       />
-      <KpiCard
-        value={operationsCount > 0 ? formatCompact(operationsCount) : 'N/A'}
-        label="Operations"
-        caption={opsCaption}
-        delta={operationsDeltaSince2010}
-        size="md"
-      />
+      {operationsCount > 0 && (
+        <KpiCard
+          value={formatCompact(operationsCount)}
+          label="Operations"
+          unit={opsYearLabel}
+          caption={opsCaption}
+          delta={operationsDeltaSince2010 !== 0 ? operationsDeltaSince2010 : undefined}
+          size="md"
+        />
+      )}
       <KpiCard
         value={totalSales > 0 ? formatCurrency(totalSales) : 'N/A'}
         label="Total Sales"

@@ -3,6 +3,7 @@
 import DeltaChip from '@/components/shared/DeltaChip';
 import ExperimentalPill from '@/components/shared/ExperimentalPill';
 import CitationBlock from '@/components/shared/CitationBlock';
+import Term from '@/components/shared/Term';
 import { formatCompact } from '@/lib/format';
 import { COMMODITY_COLORS } from '@/lib/constants';
 
@@ -78,25 +79,44 @@ export default function AcreageCard({
             <div className="mt-2"><DeltaChip value={yoyDeltaPct} label="YoY" /></div>
           )}
 
-          {/* P10-P90 bar */}
-          {p10 !== null && p90 !== null && (
-            <div className="mt-3">
-              <div className="h-2 rounded-full relative" style={{ background: 'var(--surface2)' }}>
-                <div
-                  className="absolute h-2 rounded-full"
-                  style={{
-                    background: 'var(--field-subtle)',
-                    left: '10%',
-                    right: '10%',
-                    border: `1px solid var(--field)`,
-                  }}
-                />
+          {/* P10-P90 bar — axis spans p50 ± 15%, positions are computed
+              relative to that window so the bar width honors the actual
+              interval instead of a hardcoded placeholder. */}
+          {p10 !== null && p90 !== null && forecastAcres !== null && (() => {
+            const axisMin = forecastAcres * 0.85;
+            const axisMax = forecastAcres * 1.15;
+            const range = axisMax - axisMin || 1;
+            const clamp = (pct: number) => Math.max(0, Math.min(100, pct));
+            const leftPct = clamp(((p10 - axisMin) / range) * 100);
+            const rightPct = clamp(((axisMax - p90) / range) * 100);
+            const markerPct = clamp(((forecastAcres - axisMin) / range) * 100);
+            return (
+              <div className="mt-3">
+                <div className="h-2 rounded-full relative" style={{ background: 'var(--surface2)' }}>
+                  <div
+                    className="absolute h-2 rounded-full"
+                    style={{
+                      background: 'var(--field-subtle)',
+                      left: `${leftPct}%`,
+                      right: `${rightPct}%`,
+                      border: `1px solid var(--field)`,
+                    }}
+                  />
+                  <div
+                    className="absolute top-[-1px] h-2.5 w-0.5 rounded-full"
+                    style={{
+                      left: `${markerPct}%`,
+                      background: 'var(--text)',
+                      transform: 'translateX(-50%)',
+                    }}
+                  />
+                </div>
+                <p className="text-[10px] mt-1" style={{ color: 'var(--text3)', fontFamily: 'var(--font-mono)' }}>
+                  <Term term="80% interval">80% interval</Term>: {formatCompact(p10)}–{formatCompact(p90)}
+                </p>
               </div>
-              <p className="text-[10px] mt-1" style={{ color: 'var(--text3)', fontFamily: 'var(--font-mono)' }}>
-                80% interval: {formatCompact(p10)}–{formatCompact(p90)}
-              </p>
-            </div>
-          )}
+            );
+          })()}
 
           {/* Key driver */}
           {keyDriver && (

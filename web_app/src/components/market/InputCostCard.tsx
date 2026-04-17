@@ -1,5 +1,7 @@
 'use client';
 
+import SectionHeading from '@/components/shared/SectionHeading';
+
 interface InputCostCardProps {
   commodity: string;
   productionCostPerBu: number | null;
@@ -27,12 +29,7 @@ export default function InputCostCard({
       className="p-5 rounded-[var(--radius-lg)] border flex-1"
       style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}
     >
-      <p
-        className="text-[11px] font-bold tracking-[0.1em] uppercase mb-3"
-        style={{ color: 'var(--text3)', fontFamily: 'var(--font-mono)' }}
-      >
-        Input Costs
-      </p>
+      <SectionHeading>Input Costs</SectionHeading>
 
       {/* Production cost headline */}
       {hasCost && (

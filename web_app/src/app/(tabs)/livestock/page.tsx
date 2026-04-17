@@ -7,69 +7,127 @@ import { US_STATES, fetchStateData, fetchNationalCrops } from '@/utils/serviceDa
 import { filterData } from '@/utils/processData';
 import BandShell from '@/components/shared/BandShell';
 import InventorySnapshot from '@/components/livestock/InventorySnapshot';
-import ProductionCharts from '@/components/livestock/ProductionCharts';
-import CitationBlock from '@/components/shared/CitationBlock';
+import ProductionSalesTable from '@/components/livestock/ProductionSalesTable';
 
-const LIVESTOCK_SPECIES = [
-  { id: 'cattle', commodity: 'CATTLE', label: 'Cattle', stat: 'INVENTORY', unit: 'head' },
-  { id: 'hogs', commodity: 'HOGS', label: 'Hogs', stat: 'INVENTORY', unit: 'head' },
-  { id: 'dairy', commodity: 'CATTLE', label: 'Dairy Cows', stat: 'INVENTORY', unit: 'head', filter: 'MILK' },
-  { id: 'broilers', commodity: 'CHICKENS', label: 'Broilers', stat: 'PRODUCTION', unit: 'head' },
-  { id: 'layers', commodity: 'CHICKENS', label: 'Layers', stat: 'INVENTORY', unit: 'head' },
-  { id: 'turkeys', commodity: 'TURKEYS', label: 'Turkeys', stat: 'INVENTORY', unit: 'head' },
+// Inventory species — all drawn from the raw state parquet with:
+//   - exact commodity_desc match (kills substring overcounting)
+//   - unit_desc === 'HEAD' (keeps head counts, drops $ valuations)
+//   - class_desc filter (keeps the species of interest)
+// When NASS publishes quarterly (hogs) we pick the MAX across reports in
+// the year rather than summing — gives peak inventory instead of 4x.
+const isHead = (r: any) => !r.unit_desc || r.unit_desc === 'HEAD';
+
+const INVENTORY_SPECIES = [
+  {
+    id: 'cattle',
+    label: 'Cattle',
+    unit: 'head',
+    match: (r: any) =>
+      r.commodity_desc === 'CATTLE' &&
+      r.statisticcat_desc === 'INVENTORY' &&
+      isHead(r) &&
+      (r.class_desc === 'ALL CLASSES' || !r.class_desc),
+  },
+  {
+    id: 'hogs',
+    label: 'Hogs',
+    unit: 'head',
+    match: (r: any) =>
+      r.commodity_desc === 'HOGS' &&
+      r.statisticcat_desc === 'INVENTORY' &&
+      isHead(r) &&
+      (r.class_desc === 'ALL CLASSES' || !r.class_desc),
+  },
+  {
+    id: 'dairy',
+    label: 'Dairy Cows',
+    unit: 'head',
+    match: (r: any) =>
+      r.commodity_desc === 'CATTLE' &&
+      r.statisticcat_desc === 'INVENTORY' &&
+      isHead(r) &&
+      typeof r.class_desc === 'string' &&
+      r.class_desc.includes('MILK'),
+  },
+  {
+    id: 'broilers',
+    label: 'Broilers',
+    unit: 'head',
+    match: (r: any) =>
+      r.commodity_desc === 'CHICKENS' &&
+      r.statisticcat_desc === 'PRODUCTION' &&
+      isHead(r),
+  },
+  {
+    id: 'layers',
+    label: 'Layers',
+    unit: 'head',
+    match: (r: any) =>
+      r.commodity_desc === 'CHICKENS' &&
+      r.statisticcat_desc === 'INVENTORY' &&
+      isHead(r),
+  },
+  {
+    id: 'turkeys',
+    label: 'Turkeys',
+    unit: 'head',
+    match: (r: any) =>
+      r.commodity_desc === 'TURKEYS' &&
+      r.statisticcat_desc === 'INVENTORY' &&
+      isHead(r) &&
+      (r.class_desc === 'ALL CLASSES' || !r.class_desc),
+  },
 ];
 
 export default function LivestockPage() {
   const { filters } = useFilters();
   const stateCode = filters.state;
-  const stateName = stateCode ? (US_STATES[stateCode] || stateCode) : 'United States';
+  const stateName = stateCode ? US_STATES[stateCode] || stateCode : 'United States';
   const year = filters.year ?? LATEST_NASS_YEAR;
 
-  const [data, setData] = useState<any[]>([]);
+  const [rawData, setRawData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     setLoading(true);
+    setError(null);
+    const controller = new AbortController();
     (async () => {
       try {
-        const raw = stateCode ? await fetchStateData(stateCode) : await fetchNationalCrops();
-        setData(raw || []);
-      } catch {
-        setError('Failed to load livestock data.');
+        const raw = stateCode
+          ? await fetchStateData(stateCode, controller.signal)
+          : await fetchNationalCrops(controller.signal);
+        setRawData(raw || []);
+      } catch (err: any) {
+        if (err?.name !== 'AbortError') {
+          setError('Failed to load livestock data.');
+        }
       }
       setLoading(false);
     })();
+    return () => controller.abort();
   }, [stateCode]);
 
-  const filtered = useMemo(() => filterData(data), [data]);
+  const filteredRaw = useMemo(() => filterData(rawData), [rawData]);
 
-  // Inventory KPIs
+  // Inventory KPIs — peak inventory in the year (max across any quarterly
+  // reports), avoiding the 4x overcount that would come from summing.
   const inventoryKpis = useMemo(() => {
-    return LIVESTOCK_SPECIES.map((spec) => {
-      const rows = filtered.filter(
-        (r: any) =>
-          r.commodity_desc?.includes(spec.commodity) &&
-          r.statisticcat_desc === spec.stat &&
-          r.year === year
-      );
-      const headCount = rows.reduce((s: number, r: any) => s + (r.value_num || 0), 0);
+    return INVENTORY_SPECIES.map((spec) => {
+      const rowsForSpec = filteredRaw.filter(spec.match);
+      const peakForYear = (y: number) => {
+        const vals = rowsForSpec
+          .filter((r: any) => r.year === y)
+          .map((r: any) => r.value_num || 0);
+        return vals.length ? Math.max(...vals) : 0;
+      };
 
-      // 5-year sparkline
-      const sparkline = Array.from({ length: 5 }, (_, i) => {
-        const y = year - 4 + i;
-        const yRows = filtered.filter(
-          (r: any) => r.commodity_desc?.includes(spec.commodity) && r.statisticcat_desc === spec.stat && r.year === y
-        );
-        return yRows.reduce((s: number, r: any) => s + (r.value_num || 0), 0);
-      });
-
-      // YoY delta
-      const priorRows = filtered.filter(
-        (r: any) => r.commodity_desc?.includes(spec.commodity) && r.statisticcat_desc === spec.stat && r.year === year - 1
-      );
-      const priorCount = priorRows.reduce((s: number, r: any) => s + (r.value_num || 0), 0);
+      const headCount = peakForYear(year);
+      const priorCount = peakForYear(year - 1);
       const yoyDelta = priorCount > 0 ? ((headCount - priorCount) / priorCount) * 100 : 0;
+      const sparklineYears = [year - 4, year - 3, year - 2, year - 1, year];
+      const sparkline = sparklineYears.map(peakForYear);
 
       return {
         species: spec.id,
@@ -77,48 +135,65 @@ export default function LivestockPage() {
         headCount,
         unit: spec.unit,
         sparkline5yr: sparkline,
+        sparklineYears,
         yoyDeltaPct: yoyDelta,
       };
     }).filter((k) => k.headCount > 0);
-  }, [filtered, year]);
+  }, [filteredRaw, year]);
 
-  // Production series
-  const productionSeries = useMemo(() => {
-    const series = [
-      { commodity: 'CATTLE', stat: 'SALES', title: 'Cattle Sales', unit: '$', color: 'var(--chart-cattle)' },
-      { commodity: 'HOGS', stat: 'SALES', title: 'Hog Sales', unit: '$', color: 'var(--chart-hogs)' },
-      { commodity: 'MILK', stat: 'PRODUCTION', title: 'Milk Production', unit: 'lbs', color: 'var(--chart-dairy)' },
-    ];
+  // Production & Sales table — three metrics aligned by year.
+  const productionTable = useMemo(() => {
+    const sumRaw = (y: number, commodity: string, stat: string) =>
+      filteredRaw
+        .filter((r: any) => {
+          if (r.year !== y) return false;
+          if (r.statisticcat_desc !== stat) return false;
+          if (stat === 'SALES' && r.unit_desc !== '$') return false;
+          // Exact match — no more substring overcounting.
+          return r.commodity_desc === commodity;
+        })
+        .reduce((s: number, r: any) => s + (r.value_num || 0), 0);
 
-    return series.map((s) => {
-      const allYears = [...new Set(filtered.filter((r: any) => r.commodity_desc?.includes(s.commodity)).map((r: any) => r.year))].sort();
-      const points = allYears.map((y) => {
-        const rows = filtered.filter(
-          (r: any) => r.commodity_desc?.includes(s.commodity) && r.statisticcat_desc === s.stat && r.year === y
-        );
-        const val = rows.reduce((sum: number, r: any) => sum + (r.value_num || 0), 0);
-        return { year: y as number, stateValue: val, nationalValue: 0 };
-      }).filter((p) => p.stateValue > 0);
+    const years = Array.from({ length: 11 }, (_, i) => year - 10 + i);
+    const rows = years.map((y) => ({
+      year: y,
+      cattleSales: sumRaw(y, 'CATTLE', 'SALES'),
+      hogSales: sumRaw(y, 'HOGS', 'SALES'),
+      milkProduction: sumRaw(y, 'MILK', 'PRODUCTION'),
+    }));
 
-      return { ...s, data: points };
-    }).filter((s) => s.data.length > 0);
-  }, [filtered]);
+    return {
+      rows,
+      cattleSparkYears: rows.map((r) => r.year),
+      cattleSparkValues: rows.map((r) => r.cattleSales),
+      hogSparkYears: rows.map((r) => r.year),
+      hogSparkValues: rows.map((r) => r.hogSales),
+      milkSparkYears: rows.map((r) => r.year),
+      milkSparkValues: rows.map((r) => r.milkProduction),
+    };
+  }, [filteredRaw, year]);
 
   return (
     <div>
-      <h1 className="text-[28px] font-extrabold tracking-[-0.02em] mb-6"
-        style={{ color: 'var(--text)', fontFamily: 'var(--font-body)' }}>
+      <h1
+        className="text-[28px] font-extrabold tracking-[-0.02em] mb-6"
+        style={{ color: 'var(--text)', fontFamily: 'var(--font-body)' }}
+      >
         Livestock — {stateName}
       </h1>
 
-      <BandShell loading={loading} error={error} skeletonHeight={300}
+      <BandShell
+        loading={loading}
+        error={error}
+        skeletonHeight={300}
         empty={inventoryKpis.length === 0 && !loading}
-        emptyMessage={`Livestock data is limited for ${stateName}.`}>
+        emptyMessage={`Livestock data is limited for ${stateName}.`}
+      >
         {/* Band A — Inventory */}
         <InventorySnapshot data={inventoryKpis} />
 
-        {/* Band B — Production */}
-        <ProductionCharts series={productionSeries} stateName={stateName} />
+        {/* Band B — Production & Sales table */}
+        <ProductionSalesTable data={productionTable} stateName={stateName} />
       </BandShell>
     </div>
   );

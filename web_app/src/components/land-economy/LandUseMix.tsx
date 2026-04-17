@@ -1,7 +1,7 @@
 'use client';
 
 import {
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts';
 import CitationBlock from '@/components/shared/CitationBlock';
 import { formatCompact } from '@/lib/format';
@@ -12,6 +12,9 @@ interface LandUsePoint {
   pasture: number;
   forest: number;
   urban: number;
+  /** "Special use" — parks, wildlife refuges, roads, defense. New category
+      from the land_use parquet. */
+  special?: number;
   other: number;
 }
 
@@ -46,10 +49,12 @@ export default function LandUseMix({ data, stateName }: LandUseMixProps) {
                 background: 'var(--surface)', border: '1px solid var(--border)',
                 borderRadius: 'var(--radius-md)', fontSize: 12, color: 'var(--text)',
               }} formatter={(v: unknown) => [formatCompact(Number(v)) + ' acres']} />
+              <Legend verticalAlign="bottom" iconType="square" wrapperStyle={{ fontSize: 11, fontFamily: 'var(--font-mono)', paddingTop: 8 }} />
               <Area type="monotone" dataKey="cropland" stackId="1" fill="var(--field)" stroke="var(--field)" fillOpacity={0.7} name="Cropland" />
               <Area type="monotone" dataKey="pasture" stackId="1" fill="var(--harvest)" stroke="var(--harvest)" fillOpacity={0.5} name="Pasture" />
               <Area type="monotone" dataKey="forest" stackId="1" fill="var(--chart-hay)" stroke="var(--chart-hay)" fillOpacity={0.4} name="Forest" />
               <Area type="monotone" dataKey="urban" stackId="1" fill="var(--soil)" stroke="var(--soil)" fillOpacity={0.4} name="Urban" />
+              <Area type="monotone" dataKey="special" stackId="1" fill="var(--sky)" stroke="var(--sky)" fillOpacity={0.3} name="Special Use" />
               <Area type="monotone" dataKey="other" stackId="1" fill="var(--muted)" stroke="var(--muted)" fillOpacity={0.3} name="Other" />
             </AreaChart>
           </ResponsiveContainer>

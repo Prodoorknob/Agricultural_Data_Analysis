@@ -2,6 +2,7 @@
 
 import { useAgSeason } from '@/hooks/useAgSeason';
 import { useFilters } from '@/hooks/useFilters';
+import SectionHeading from '@/components/shared/SectionHeading';
 import type { Tab } from '@/types/filters';
 
 interface StoryCard {
@@ -97,12 +98,7 @@ export default function StoryCards() {
 
   return (
     <section className="mt-8">
-      <p
-        className="text-[11px] font-bold tracking-[0.1em] uppercase mb-4"
-        style={{ color: 'var(--text3)', fontFamily: 'var(--font-mono)' }}
-      >
-        Stories
-      </p>
+      <SectionHeading className="mb-4">Stories</SectionHeading>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {cards.map((card, i) => (
           <button
