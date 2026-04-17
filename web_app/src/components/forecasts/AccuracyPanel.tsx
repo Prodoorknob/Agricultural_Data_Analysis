@@ -134,10 +134,10 @@ export default function AccuracyPanel({ acreageAccuracy, yieldAccuracy }: Accura
                       background: 'var(--surface)', border: '1px solid var(--border)',
                       borderRadius: 'var(--radius-md)', fontSize: 12, color: 'var(--text)',
                     }}
-                    formatter={(val: number | string, name: string) => [
-                      `${Number(val).toFixed(1)}%`,
-                      name.charAt(0).toUpperCase() + name.slice(1),
-                    ]}
+                    formatter={(val, name) => {
+                      const n = String(name ?? '');
+                      return [`${Number(val).toFixed(1)}%`, n.charAt(0).toUpperCase() + n.slice(1)];
+                    }}
                   />
                   <Legend verticalAlign="bottom" wrapperStyle={{ fontSize: 11, fontFamily: 'var(--font-mono)', paddingTop: 8 }} />
                   <Line type="monotone" dataKey="corn" name="Corn" stroke={cornColor} strokeWidth={2} dot={{ r: 3, fill: cornColor }} connectNulls />
@@ -189,11 +189,8 @@ export default function AccuracyPanel({ acreageAccuracy, yieldAccuracy }: Accura
                       background: 'var(--surface)', border: '1px solid var(--border)',
                       borderRadius: 'var(--radius-md)', fontSize: 12, color: 'var(--text)',
                     }}
-                    formatter={(val: number | string, name: string) => [
-                      `${Number(val).toFixed(1)}%`,
-                      name,
-                    ]}
-                    labelFormatter={(w: number | string) => `Week ${w}`}
+                    formatter={(val, name) => [`${Number(val).toFixed(1)}%`, String(name ?? '')]}
+                    labelFormatter={(w) => `Week ${w}`}
                   />
                   <Legend verticalAlign="bottom" wrapperStyle={{ fontSize: 11, fontFamily: 'var(--font-mono)', paddingTop: 8 }} />
                   <Area type="monotone" dataKey="corn" name="Corn" stroke={cornColor} strokeWidth={2} fill="url(#fill-corn)" fillOpacity={1} connectNulls />

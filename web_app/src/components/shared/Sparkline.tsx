@@ -94,7 +94,7 @@ export default function Sparkline({
                 fontFamily: 'var(--font-mono)',
                 color: 'var(--text)',
               }}
-              formatter={(v: number | string) => [
+              formatter={(v) => [
                 `${formatCompact(Number(v))}${unit ? ' ' + unit : ''}`,
                 '',
               ]}

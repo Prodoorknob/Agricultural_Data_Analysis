@@ -8,4 +8,5 @@ export const VIEW_FILTER_DEFAULTS: Record<Tab, FilterDefaults> = {
   crops:          { year: LATEST_NASS_YEAR, commodity: 'corn', section: null },
   'land-economy': { year: LATEST_NASS_YEAR, commodity: null,   section: 'revenue' },
   livestock:      { year: LATEST_NASS_YEAR, commodity: null,   section: 'cattle' },
+  about:          { year: null,             commodity: null,   section: null },
 };

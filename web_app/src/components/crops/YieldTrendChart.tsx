@@ -99,7 +99,7 @@ export default function YieldTrendChart({ data, commodity, stateName, unit }: Yi
                   fontFamily: 'var(--font-mono)',
                   color: 'var(--text)',
                 }}
-                formatter={(val: unknown, name: string) => [`${Number(val).toFixed(1)} ${unit}`, name]}
+                formatter={(val, name) => [`${Number(val).toFixed(1)} ${unit}`, String(name ?? '')]}
                 labelFormatter={(yr) => `${yr}`}
               />
               <Legend
