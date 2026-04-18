@@ -1,0 +1,12 @@
+{
+  "crop": "corn",
+  "model_ver": "2026-04-14",
+  "n_weeks": 20,
+  "n_weeks_pass_gate": 20,
+  "gate_status": "pass",
+  "avg_val_rrmse": 14.81,
+  "avg_test_rrmse": 17.97,
+  "avg_baseline_rrmse": 23.78,
+  "has_weather_features": true,
+  "gate_threshold_pct": 10.0
+}

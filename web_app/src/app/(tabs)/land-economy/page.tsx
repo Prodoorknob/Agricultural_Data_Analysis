@@ -38,6 +38,10 @@ const STATE_ALPHA_TO_FIPS: Record<string, string> = {
   WI: '55', WY: '56',
 };
 
+const STATE_FIPS_TO_ALPHA: Record<string, string> = Object.fromEntries(
+  Object.entries(STATE_ALPHA_TO_FIPS).map(([k, v]) => [v, k]),
+);
+
 export default function LandEconomyPage() {
   const { filters, setSection } = useFilters();
   const stateCode = filters.state;
@@ -275,7 +279,41 @@ export default function LandEconomyPage() {
       })
       .filter((d) => d.stateWage != null || d.nationalWage != null || d.blsAnnualPay != null);
 
-    return { wageTrend, wageRanking: [] as any[] };
+    // Per-state wage-growth ranking: 10-year (or widest-available) BLS
+    // avg_annual_pay growth for NAICS 111. Groups blsRaw by state, picks the
+    // earliest and latest year per state (capped to a 10-year lookback so
+    // states with 2004-only data don't dominate), and sorts top-down.
+    const byState = new Map<string, Map<number, number>>();
+    for (const r of blsRaw) {
+      if (String(r.naics) !== '111' || r.avg_annual_pay == null || r.year == null) continue;
+      if (!r.state_fips) continue;
+      const m = byState.get(r.state_fips) ?? new Map<number, number>();
+      m.set(r.year, r.avg_annual_pay);
+      byState.set(r.state_fips, m);
+    }
+    const ranking: { state: string; wageGrowthPct10yr: number }[] = [];
+    for (const [fips, yearMap] of byState) {
+      if (yearMap.size < 2) continue;
+      const years = [...yearMap.keys()].sort((a, b) => a - b);
+      const latest = years[years.length - 1];
+      const target = latest - 10;
+      // Nearest available year >= (latest-10); falls back to the earliest on
+      // file if nothing in the 10yr window.
+      const earliest = years.find((y) => y >= target) ?? years[0];
+      if (earliest === latest) continue;
+      const pay0 = yearMap.get(earliest)!;
+      const pay1 = yearMap.get(latest)!;
+      if (pay0 <= 0) continue;
+      const alpha = STATE_FIPS_TO_ALPHA[fips];
+      if (!alpha) continue;
+      ranking.push({
+        state: alpha,
+        wageGrowthPct10yr: ((pay1 - pay0) / pay0) * 100,
+      });
+    }
+    ranking.sort((a, b) => b.wageGrowthPct10yr - a.wageGrowthPct10yr);
+
+    return { wageTrend, wageRanking: ranking };
   }, [filtered, stateCode, blsRaw]);
 
   return (

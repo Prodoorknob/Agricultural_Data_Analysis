@@ -12,6 +12,10 @@ interface AccuracyItem {
   commodity: string;
   level?: string;
   model_vs_actual_pct?: number | null;
+  // State-level rows carry these; nationals often don't (the training loop
+  // persists per-state walk-forward predictions but doesn't roll them up).
+  model_forecast?: number | null;
+  usda_june_actual?: number | null;
 }
 
 interface YieldAccuracyWeek {
@@ -38,21 +42,52 @@ function normalizeCommodity(c: string): 'corn' | 'soybean' | 'wheat' | null {
 
 // Pivot an array of per-(year,commodity) rows into a chart-friendly shape:
 //   [{year: 2021, corn: -3.2, soybean: +1.1, wheat: +4.5}, ...]
-// If a single year has multiple rows for the same normalized commodity (e.g.
-// wheat_winter + wheat_spring), keep the first seen so the chart doesn't
-// flicker on retrain.
+// Prefers precomputed `model_vs_actual_pct` on national rows. Falls back to
+// aggregating state-level forecasts (∑ model / ∑ actual − 1) when the
+// national row exists but has null percentages — the training loop persists
+// per-state predictions but doesn't always write a national rollup.
 function pivotAcreageByYear(
   rows: AccuracyItem[],
 ): Array<{ year: number; corn?: number; soybean?: number; wheat?: number }> {
-  const by = new Map<number, { year: number; corn?: number; soybean?: number; wheat?: number }>();
+  const by = new Map<
+    number,
+    { year: number; corn?: number; soybean?: number; wheat?: number }
+  >();
+
+  type Agg = { model: number; actual: number };
+  const agg = new Map<string, Agg>(); // key = `${year}|${crop}`
+  const aggKey = (y: number, c: string) => `${y}|${c}`;
+
   for (const r of rows) {
-    if (r.model_vs_actual_pct == null) continue;
     const key = normalizeCommodity(r.commodity);
     if (!key) continue;
     const bucket = by.get(r.forecast_year) ?? { year: r.forecast_year };
-    if (bucket[key] === undefined) bucket[key] = r.model_vs_actual_pct;
+
+    if (r.model_vs_actual_pct != null && bucket[key] === undefined) {
+      bucket[key] = r.model_vs_actual_pct;
+    } else if (r.model_forecast != null && r.usda_june_actual != null) {
+      const k = aggKey(r.forecast_year, key);
+      const prev = agg.get(k) ?? { model: 0, actual: 0 };
+      prev.model += r.model_forecast;
+      prev.actual += r.usda_june_actual;
+      agg.set(k, prev);
+    }
+
     by.set(r.forecast_year, bucket);
   }
+
+  // Second pass: fill in missing crop slots from the state-level aggregate.
+  for (const [k, { model, actual }] of agg.entries()) {
+    const [yStr, crop] = k.split('|');
+    const y = Number(yStr);
+    const bucket = by.get(y) ?? { year: y };
+    const cropKey = crop as 'corn' | 'soybean' | 'wheat';
+    if (bucket[cropKey] === undefined && actual > 0) {
+      bucket[cropKey] = ((model - actual) / actual) * 100;
+    }
+    by.set(y, bucket);
+  }
+
   return Array.from(by.values()).sort((a, b) => a.year - b.year);
 }
 

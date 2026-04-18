@@ -1,0 +1,12 @@
+{
+  "crop": "wheat",
+  "model_ver": "2026-04-15",
+  "n_weeks": 20,
+  "n_weeks_pass_gate": 0,
+  "gate_status": "fail",
+  "avg_val_rrmse": 21.0,
+  "avg_test_rrmse": 25.51,
+  "avg_baseline_rrmse": 21.8,
+  "has_weather_features": true,
+  "gate_threshold_pct": 10.0
+}

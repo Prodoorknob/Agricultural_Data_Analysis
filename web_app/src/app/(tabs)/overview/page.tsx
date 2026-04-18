@@ -2,7 +2,60 @@
 
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useFilters } from '@/hooks/useFilters';
-import { LATEST_NASS_YEAR, COMMODITY_COLORS } from '@/lib/constants';
+import { LATEST_NASS_YEAR } from '@/lib/constants';
+
+// Revenue-mix palettes. NASS commodity names rarely match the CROP_COMMODITIES
+// lookup (e.g. 'HAY & HAYLAGE' ≠ 'hay'), so we use a sector-aware resolver:
+// exact-match overrides first, then an ordinal palette by rank.
+const CROP_PALETTE = [
+  'var(--chart-hay)',     // sage
+  'var(--chart-corn)',    // amber
+  'var(--chart-wheat)',   // clay
+  'var(--chart-soy)',     // deep green
+  'var(--chart-cotton)',  // purple
+  'var(--sky)',           // blue
+];
+
+const LIVESTOCK_PALETTE = [
+  'var(--chart-cattle)',  // saddle
+  'var(--chart-hogs)',    // muted red
+  'var(--chart-dairy)',   // teal
+  'var(--chart-corn)',    // amber
+  'var(--chart-cotton)',  // purple
+  'var(--field)',         // green
+];
+
+const CROP_OVERRIDES: Record<string, string> = {
+  hay: 'var(--chart-hay)',
+  'hay & haylage': 'var(--chart-hay)',
+  haylage: 'var(--chart-hay)',
+  corn: 'var(--chart-corn)',
+  wheat: 'var(--chart-wheat)',
+  soybeans: 'var(--chart-soy)',
+  cotton: 'var(--chart-cotton)',
+};
+
+const LIVESTOCK_OVERRIDES: Record<string, string> = {
+  cattle: 'var(--chart-cattle)',
+  hogs: 'var(--chart-hogs)',
+  milk: 'var(--chart-dairy)',
+  eggs: 'var(--chart-corn)',
+  chickens: 'var(--chart-wheat)',
+  equine: 'var(--chart-cotton)',
+};
+
+function pickRevenueColor(
+  commodity: string,
+  sector: 'CROPS' | 'LIVESTOCK',
+  rank: number,
+): string {
+  if (commodity === 'Other') return 'var(--muted)';
+  const key = commodity.toLowerCase();
+  const overrides = sector === 'CROPS' ? CROP_OVERRIDES : LIVESTOCK_OVERRIDES;
+  if (overrides[key]) return overrides[key];
+  const palette = sector === 'CROPS' ? CROP_PALETTE : LIVESTOCK_PALETTE;
+  return palette[rank % palette.length];
+}
 import { US_STATES } from '@/utils/serviceData';
 import {
   fetchStateTotals,
@@ -261,27 +314,49 @@ export default function OverviewPage() {
       (r) => r.year === year && r.sales_usd && (!state || r.state_alpha === state),
     );
 
-    // Roll up by commodity (for national view) or just filter (for state view).
-    const byCommodity = new Map<string, number>();
+    // Roll up by commodity, split by NASS sector so the fingerprint can show
+    // crops and livestock as separate tables. Non-crop/non-livestock rows
+    // (sector_desc='ECONOMICS' or null) are dropped.
+    const cropEntries = new Map<string, number>();
+    const livestockEntries = new Map<string, number>();
     commoditiesThisYear.forEach((r) => {
-      byCommodity.set(
-        r.commodity_desc,
-        (byCommodity.get(r.commodity_desc) || 0) + (r.sales_usd || 0),
-      );
+      const bucket =
+        r.sector_desc === 'CROPS'
+          ? cropEntries
+          : r.sector_desc === 'ANIMALS & PRODUCTS'
+          ? livestockEntries
+          : null;
+      if (!bucket) return;
+      bucket.set(r.commodity_desc, (bucket.get(r.commodity_desc) || 0) + (r.sales_usd || 0));
     });
 
-    const sorted = [...byCommodity.entries()].sort((a, b) => b[1] - a[1]);
-    const top6 = sorted.slice(0, 6);
-    const othersVal = sorted.slice(6).reduce((s, [, v]) => s + v, 0);
-    const revenueMix = [
-      ...top6.map(([commodity, sales]) => ({
+    const buildSector = (
+      entries: Map<string, number>,
+      sector: 'CROPS' | 'LIVESTOCK',
+    ) => {
+      const sorted = [...entries.entries()].sort((a, b) => b[1] - a[1]);
+      const top = sorted.slice(0, 5);
+      const othersVal = sorted.slice(5).reduce((s, [, v]) => s + v, 0);
+      const rows = top.map(([commodity, sales], idx) => ({
         commodity,
         sales,
-        color: COMMODITY_COLORS[commodity.toLowerCase()] || 'var(--text3)',
-      })),
-      ...(othersVal > 0
-        ? [{ commodity: 'Other', sales: othersVal, color: 'var(--muted)' }]
-        : []),
+        sector,
+        color: pickRevenueColor(commodity, sector, idx),
+      }));
+      if (othersVal > 0) {
+        rows.push({
+          commodity: 'Other',
+          sales: othersVal,
+          sector,
+          color: pickRevenueColor('Other', sector, rows.length),
+        });
+      }
+      return rows;
+    };
+
+    const revenueMix = [
+      ...buildSector(cropEntries, 'CROPS'),
+      ...buildSector(livestockEntries, 'LIVESTOCK'),
     ];
     const totalRevenue = revenueMix.reduce((s, r) => s + r.sales, 0);
 

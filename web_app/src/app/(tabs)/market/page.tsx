@@ -175,8 +175,9 @@ export default function MarketPage() {
 
         {/* Band C — Context row (3 cards) */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
-          {/* C.1 — WASDE */}
-          {wasde && (
+          {/* C.1 — WASDE (placeholder when the backend has no release
+              loaded — e.g. soybean rows weren't ingested) */}
+          {wasde ? (
             <WasdeCard
               releaseDate={wasde.release_date || 'N/A'}
               endingStocks={wasde.ending_stocks ?? null}
@@ -189,6 +190,25 @@ export default function MarketPage() {
               }
               commodity={commodity}
             />
+          ) : (
+            <div
+              className="p-5 rounded-[var(--radius-lg)] border flex-1"
+              style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}
+            >
+              <p
+                className="text-[11px] font-bold tracking-[0.1em] uppercase mb-3"
+                style={{ color: 'var(--section-heading)', fontFamily: 'var(--font-mono)' }}
+              >
+                Latest WASDE
+              </p>
+              <p className="text-[13px] mb-2" style={{ color: 'var(--text2)' }}>
+                No WASDE release loaded for{' '}
+                <span className="uppercase">{commodity}</span> yet.
+              </p>
+              <p className="text-[11px]" style={{ color: 'var(--text3)', fontFamily: 'var(--font-mono)' }}>
+                Run the USDA PSD ingest to backfill.
+              </p>
+            </div>
           )}
 
           {/* C.2 — Ratio dial (corn/soy) or Export Pace (wheat) */}

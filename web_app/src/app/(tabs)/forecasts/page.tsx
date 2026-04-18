@@ -40,15 +40,15 @@ export default function ForecastsPage() {
   const allLoading = corn.loading || soy.loading || wheat.loading;
   const anyError = corn.error || soy.error || wheat.error;
 
-  // Only national rows feed the accuracy chart — §5.3.D compares model
-  // forecasts against USDA national baselines, not state-by-state.
-  const onlyNational = (arr: AcreageAccuracyItem[] | undefined) =>
-    (arr || []).filter((a) => a.level === 'national' || !a.level);
-
+  // Pass every accuracy row to the panel. Nationals carry the headline
+  // model_vs_actual_pct when present; state rows are a fallback used to
+  // compute ∑ model / ∑ actual when the national percentage is null — the
+  // training pipeline persists per-state walk-forward predictions but
+  // doesn't always write the rollup. See AccuracyPanel.pivotAcreageByYear.
   const acreageAccuracy: AcreageAccuracyItem[] = [
-    ...onlyNational(corn.accuracy),
-    ...onlyNational(soy.accuracy),
-    ...onlyNational(wheat.accuracy),
+    ...(corn.accuracy || []),
+    ...(soy.accuracy || []),
+    ...(wheat.accuracy || []),
   ];
 
   const [yieldAccuracy, setYieldAccuracy] = useState<YieldAccuracyWeekItem[]>([]);
