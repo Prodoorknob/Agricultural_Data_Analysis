@@ -81,7 +81,10 @@ export default function OverviewPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const year = LATEST_NASS_YEAR;
+  // Year comes from the filter rail (?year=); fall back to the latest NASS
+  // vintage when the URL hasn't set one. Hardcoding LATEST_NASS_YEAR here
+  // was the cause of the year filter being inert on the Overview page.
+  const year = filters.year ?? LATEST_NASS_YEAR;
 
   // All rows for the current year — shared by hero / map / peer panel.
   const currentYearTotals = useMemo(
@@ -170,6 +173,7 @@ export default function OverviewPage() {
       return {
         stateName,
         stateCode,
+        year,
         totalSales: sales,
         salesRank: row?.rank_by_sales || 0,
         salesGrowthPct: Math.round(growth),
@@ -209,6 +213,7 @@ export default function OverviewPage() {
     return {
       stateName: 'United States',
       stateCode: null,
+      year,
       totalSales,
       salesRank: 0,
       salesGrowthPct: Math.round(growth),

@@ -4,12 +4,12 @@ import KpiCard from '@/components/shared/KpiCard';
 import CitationBlock from '@/components/shared/CitationBlock';
 import { formatCurrency, formatCompact } from '@/lib/format';
 import { generateCaption } from '@/lib/captionTemplates';
-import { LATEST_NASS_YEAR } from '@/lib/constants';
 import { US_STATES } from '@/utils/serviceData';
 
 interface HeroStripProps {
   stateName: string;
   stateCode: string | null;
+  year: number;
   totalSales: number;
   salesRank: number;
   salesGrowthPct: number;
@@ -26,6 +26,7 @@ interface HeroStripProps {
 export default function HeroStrip({
   stateName,
   stateCode,
+  year,
   totalSales,
   salesRank,
   salesGrowthPct,
@@ -39,7 +40,7 @@ export default function HeroStrip({
   commodityCount,
 }: HeroStripProps) {
   const displayName = stateCode ? (US_STATES[stateCode] || stateCode) : 'United States';
-  const compareYear = salesGrowthBaseYear ?? LATEST_NASS_YEAR - 5;
+  const compareYear = salesGrowthBaseYear ?? year - 5;
 
   // Rank 0 means "not applicable" (national view) — hide it from the caption
   // rather than ship "ranks #0" again.
@@ -51,7 +52,7 @@ export default function HeroStrip({
   const acresCaption = generateCaption('overview-hero-acres', {
     acresDeltaDirection: acresDelta >= 0 ? 'Up' : 'Down',
     acresDeltaAbs: formatCompact(Math.abs(acresDelta)),
-    priorYear: LATEST_NASS_YEAR - 1,
+    priorYear: year - 1,
     acresDeltaDriver,
   });
 
@@ -79,7 +80,7 @@ export default function HeroStrip({
             className="text-[12px] font-bold tracking-[0.1em] uppercase"
             style={{ color: 'var(--text3)', fontFamily: 'var(--font-mono)' }}
           >
-            {LATEST_NASS_YEAR}
+            {year}
           </span>
         )}
       </div>
@@ -111,7 +112,7 @@ export default function HeroStrip({
 
       <CitationBlock
         source="USDA NASS QuickStats"
-        vintage={`${LATEST_NASS_YEAR}`}
+        vintage={`${year}`}
         updated="Apr 2026"
       />
     </section>
