@@ -92,6 +92,52 @@ export default function OverviewPage() {
   // Hero strip data — draws from state_totals when a state is selected,
   // else sums national. Rank is computed from the sorted row.
   const heroData = useMemo(() => {
+    // Helper: pick the top CROP (sector_desc='CROPS') for a given (year, state-or-null)
+    // and the crop driving the largest absolute YoY change in planted acres.
+    // The "Top Crop" KPI and acres-delta caption must be crop-scoped — livestock
+    // (CATTLE/MILK/CHICKENS) lead by sales but have no planted area, so picking
+    // them yields the "driven mostly by CATTLE" non-sequitur the user flagged.
+    const cropTotalsFor = (yr: number, st: string | null) => {
+      const m = new Map<string, { sales: number; acres: number }>();
+      stateCommodityTotals
+        .filter(
+          (r) =>
+            r.year === yr &&
+            r.sector_desc === 'CROPS' &&
+            (!st || r.state_alpha === st),
+        )
+        .forEach((r) => {
+          const cur = m.get(r.commodity_desc) || { sales: 0, acres: 0 };
+          cur.sales += r.sales_usd || 0;
+          cur.acres += r.area_planted_acres || 0;
+          m.set(r.commodity_desc, cur);
+        });
+      return m;
+    };
+
+    const pickTopCrop = (totals: Map<string, { sales: number; acres: number }>) => {
+      let name = 'N/A';
+      let sales = 0;
+      for (const [c, v] of totals) {
+        if (v.sales > sales) { name = c; sales = v.sales; }
+      }
+      return { name, sales };
+    };
+
+    const pickAcresDriver = (
+      cur: Map<string, { sales: number; acres: number }>,
+      prev: Map<string, { sales: number; acres: number }>,
+      fallback: string,
+    ) => {
+      let name = fallback;
+      let absDelta = -1;
+      for (const [c, v] of cur) {
+        const d = Math.abs(v.acres - (prev.get(c)?.acres || 0));
+        if (d > absDelta) { name = c; absDelta = d; }
+      }
+      return name;
+    };
+
     if (stateCode) {
       const row = currentYearTotals.find((r) => r.state_alpha === stateCode);
       const priorRow = stateTotals.find(
@@ -107,13 +153,17 @@ export default function OverviewPage() {
       const priorAcres = priorAcreRow?.total_area_planted_acres || 0;
       const acresDelta = acres - priorAcres;
 
-      // Top crop + streak: same top-commodity 5 years running?
+      const cropsThisYear = cropTotalsFor(year, stateCode);
+      const cropsPriorYear = cropTotalsFor(year - 1, stateCode);
+      const topCropPick = pickTopCrop(cropsThisYear);
+      const driver = pickAcresDriver(cropsThisYear, cropsPriorYear, topCropPick.name);
+
+      // Top-crop streak: same top crop year-over-year (crop-scoped).
       let streak = 0;
       for (let i = 0; i < 6; i += 1) {
-        const y = stateTotals.find(
-          (r) => r.year === year - i && r.state_alpha === stateCode,
-        );
-        if (y && y.top_commodity === row?.top_commodity) streak += 1;
+        const y = year - i;
+        const top = pickTopCrop(cropTotalsFor(y, stateCode)).name;
+        if (top === topCropPick.name && top !== 'N/A') streak += 1;
         else break;
       }
 
@@ -126,9 +176,9 @@ export default function OverviewPage() {
         salesGrowthBaseYear: GROWTH_BASE_YEAR,
         totalAcresPlanted: acres,
         acresDelta,
-        acresDeltaDriver: row?.top_commodity || 'corn',
-        topCrop: row?.top_commodity || 'N/A',
-        topCropSales: row?.top_commodity_sales_usd || 0,
+        acresDeltaDriver: driver,
+        topCrop: topCropPick.name,
+        topCropSales: topCropPick.sales,
         topCropStreak: streak,
         commodityCount: row?.commodity_count || 0,
       };
@@ -148,19 +198,13 @@ export default function OverviewPage() {
       .filter((r) => r.year === year - 1)
       .reduce((s, r) => s + (r.total_area_planted_acres || 0), 0);
 
-    // National top crop — aggregate commodity sales across states.
-    const byCommodity = new Map<string, number>();
-    stateCommodityTotals
-      .filter((r) => r.year === year)
-      .forEach((r) => {
-        if (r.sales_usd) {
-          byCommodity.set(r.commodity_desc, (byCommodity.get(r.commodity_desc) || 0) + r.sales_usd);
-        }
-      });
-    let topCom = 'N/A', topComVal = 0;
-    for (const [c, v] of byCommodity) {
-      if (v > topComVal) { topCom = c; topComVal = v; }
-    }
+    const cropsThisYear = cropTotalsFor(year, null);
+    const cropsPriorYear = cropTotalsFor(year - 1, null);
+    const topCropPick = pickTopCrop(cropsThisYear);
+    const driver = pickAcresDriver(cropsThisYear, cropsPriorYear, topCropPick.name);
+
+    // commodity_count for national view — sum of distinct crops with sales.
+    const cropCount = cropsThisYear.size;
 
     return {
       stateName: 'United States',
@@ -171,11 +215,11 @@ export default function OverviewPage() {
       salesGrowthBaseYear: GROWTH_BASE_YEAR,
       totalAcresPlanted: totalAcres,
       acresDelta: totalAcres - priorAcres,
-      acresDeltaDriver: topCom,
-      topCrop: topCom,
-      topCropSales: topComVal,
+      acresDeltaDriver: driver,
+      topCrop: topCropPick.name,
+      topCropSales: topCropPick.sales,
       topCropStreak: 1,
-      commodityCount: byCommodity.size,
+      commodityCount: cropCount,
     };
   }, [currentYearTotals, stateTotals, stateCommodityTotals, stateCode, stateName, year]);
 
@@ -236,11 +280,30 @@ export default function OverviewPage() {
     ];
     const totalRevenue = revenueMix.reduce((s, r) => s + r.sales, 0);
 
-    // 25-year sparklines — top 5 commodities by current-year sales. Sum
-    // across states for national view, filter to single state otherwise.
+    // 25-year sparklines — top 5 CROPS by current-year planted area.
+    // Decoupled from revenueMix because livestock (CATTLE/MILK/CHICKENS) lead by
+    // sales but have no planted acres, so feeding them in produces flat-zero rows.
+    // Sum across states for national view, filter to single state otherwise.
     // Area_planted preferred; area_harvested fallback for commodities like
     // HAY that publish only harvested acres.
-    const topCommodities = top6.slice(0, 5).map(([c]) => c);
+    const cropAcresThisYear = new Map<string, number>();
+    stateCommodityTotals
+      .filter(
+        (r) =>
+          r.year === year &&
+          r.sector_desc === 'CROPS' &&
+          (!state || r.state_alpha === state),
+      )
+      .forEach((r) => {
+        const v = (r.area_planted_acres || 0) || (r.area_harvested_acres || 0);
+        if (v > 0) {
+          cropAcresThisYear.set(r.commodity_desc, (cropAcresThisYear.get(r.commodity_desc) || 0) + v);
+        }
+      });
+    const topCommodities = [...cropAcresThisYear.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([c]) => c);
     const sparklines = topCommodities.map((commodity) => {
       const values = Array.from({ length: 25 }, (_, i) => {
         const y = year - 24 + i;

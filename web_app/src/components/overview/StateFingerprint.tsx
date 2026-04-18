@@ -105,19 +105,21 @@ export default function StateFingerprint({
           {sparklines.slice(0, 5).map((item) => (
             <div key={item.commodity} className="flex items-center gap-3">
               <span
-                className="text-[11px] w-16 truncate"
+                className="text-[11px] w-16 shrink-0 truncate"
                 style={{ color: 'var(--text2)', fontFamily: 'var(--font-body)' }}
               >
                 {item.commodity}
               </span>
-              <Sparkline
-                data={item.values}
-                color={COMMODITY_COLORS[item.commodity.toLowerCase()] || 'var(--field)'}
-                width={60}
-                height={20}
-              />
+              <div className="flex-1 min-w-0">
+                <Sparkline
+                  data={item.values}
+                  color={COMMODITY_COLORS[item.commodity.toLowerCase()] || 'var(--field)'}
+                  width="100%"
+                  height={20}
+                />
+              </div>
               <span
-                className="text-[11px] font-medium ml-auto"
+                className="text-[11px] font-medium shrink-0"
                 style={{ color: 'var(--text)', fontFamily: 'var(--font-stat)' }}
               >
                 {formatCompact(item.latestValue)}

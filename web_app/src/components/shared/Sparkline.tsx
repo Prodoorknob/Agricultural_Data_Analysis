@@ -13,7 +13,7 @@ interface SparklineProps {
   years?: number[];
   color?: string;
   height?: number;
-  width?: number;
+  width?: number | string;
   /** Unit shown in tooltip (e.g. "head", "$"). Ignored when `years` is missing. */
   unit?: string;
 }
@@ -23,7 +23,7 @@ export default function Sparkline({
   years,
   color = 'var(--field)',
   height = 28,
-  width = 80,
+  width = '100%',
   unit,
 }: SparklineProps) {
   const points = data.map((v, i) => ({
