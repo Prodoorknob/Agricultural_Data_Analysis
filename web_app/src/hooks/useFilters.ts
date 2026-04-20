@@ -18,7 +18,7 @@ export interface UseFiltersReturn {
 
 function resolveTab(pathname: string): Tab {
   const segment = pathname.split('/').filter(Boolean)[0] || 'overview';
-  const valid: Tab[] = ['overview', 'market', 'forecasts', 'crops', 'land-economy', 'livestock'];
+  const valid: Tab[] = ['overview', 'market', 'forecasts', 'crops', 'land-economy', 'livestock', 'aquifer', 'about'];
   return valid.includes(segment as Tab) ? (segment as Tab) : 'overview';
 }
 
