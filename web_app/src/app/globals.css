@@ -121,6 +121,12 @@
     --map-7: #4A8B48;  --map-8: #3A7A3E;  --map-9: #2D6A4F;
     --map-10: #1B4332;
 
+    /* Depletion gradient — aquifer viz, dry→wet (10 steps) */
+    --dep-1: #5A1A14;  --dep-2: #8B2E1C;  --dep-3: #B8553A;
+    --dep-4: #C17644;  --dep-5: #D4A017;  --dep-6: #B8A878;
+    --dep-7: #8CAA6C;  --dep-8: #4A8B48;  --dep-9: #2D6A4F;
+    --dep-10: #1B4332;
+
     /* Shadows */
     --shadow-sm:  0 1px 3px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.03);
     --shadow-md:  0 4px 16px rgba(0, 0, 0, 0.06);
@@ -202,7 +208,25 @@
     --map-4: #356040;  --map-5: #40784C;  --map-6: #4A8B48;
     --map-7: #52A054;  --map-8: #52B760;  --map-9: #52B788;
     --map-10: #74D4A0;
+
+    /* Depletion gradient — dark variant (darker backdrop, columns self-illuminate) */
+    --dep-1: #3A0E0A;  --dep-2: #6B1F15;  --dep-3: #9C3625;
+    --dep-4: #C17644;  --dep-5: #D4A017;  --dep-6: #A8B878;
+    --dep-7: #74B05A;  --dep-8: #52A054;  --dep-9: #52B788;
+    --dep-10: #74D4A0;
   }
+
+/* ─── AquiferWatch utilities (shared with design bundle) ────── */
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text3);
+}
+.stat { font-family: var(--font-stat); }
+.mono { font-family: var(--font-mono); }
 
 /* Base styles */
 *, *::before, *::after { box-sizing: border-box; }
