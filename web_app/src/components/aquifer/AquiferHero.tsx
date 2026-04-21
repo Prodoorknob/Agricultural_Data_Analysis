@@ -15,8 +15,7 @@ export default function AquiferHero() {
             textWrap: 'balance',
           }}
         >
-          The Ogallala is draining.<br />
-          <em style={{ fontStyle: 'italic', fontWeight: 400, color: 'var(--field)' }}>Here is the receipt.</em>
+          The Ogallala is draining.
         </h1>
         <p style={{ maxWidth: 720, color: 'var(--text2)', fontSize: 15, lineHeight: 1.6 }}>
           A county-level accountability map of the aquifer that sustains{' '}
