@@ -1,7 +1,7 @@
 'use client';
 
 import type { CountyProps, Scenario } from './types';
-import { STATES, cropMix, depColor, effectiveDecline, fmt, thicknessAt } from './aquifer-math';
+import { STATES, SCENARIOS, cropMix, depColor, fmt, thicknessAt } from './aquifer-math';
 
 interface Props {
   county: CountyProps;
@@ -11,23 +11,31 @@ interface Props {
 }
 
 export default function CountyDrill({ county, year, scenario, onClose }: Props) {
-  const thkNow = thicknessAt(county, year, scenario);
-  const dclEff = effectiveDecline(county);
-  const hasModelBand = county.dclLo != null && county.dclHi != null && county.dsrc === 'model';
-
-  // Server-computed years-until-uneconomic with conformal band (preferred),
-  // else a local estimate from the current decline rate.
-  const yrsUi =
-    county.yrsU != null
-      ? county.yrsU
-      : dclEff < 0 && county.thk != null
-        ? Math.max(0, (Math.max(0, county.thk) - 9) / -dclEff)
-        : 999;
-  const yrsULo = county.yrsULo ?? null;
-  const yrsUHi = county.yrsUHi ?? null;
-
   const crops = cropMix(county);
   const totalWater = crops.reduce((s, c) => s + c.waterAF, 0);
+
+  // Compact thickness trajectory 1950 → 2100, BAU vs active scenario.
+  const curve: Array<{ y: number; t: number; tbau: number }> = [];
+  for (let y = 1950; y <= 2100; y += 2) {
+    curve.push({
+      y,
+      t: thicknessAt(county, y, scenario),
+      tbau: thicknessAt(county, y, SCENARIOS[0]),
+    });
+  }
+  const thkNow = thicknessAt(county, year, scenario);
+  const maxT = Math.max(...curve.map((d) => Math.max(d.t, d.tbau)), (county.thk ?? 0) * 1.1, 10);
+  const cw = 300, ch = 120;
+  const curvePath = (key: 't' | 'tbau') =>
+    curve
+      .map((d, i) => {
+        const x = (i / (curve.length - 1)) * cw;
+        const yv = ch - (Math.max(0, d[key]) / maxT) * ch;
+        return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${yv.toFixed(1)}`;
+      })
+      .join(' ');
+  const yearIdx = (year - 1950) / 2;
+  const yearX = (yearIdx / (curve.length - 1)) * cw;
 
   // Source-colored chip style based on thickness provenance.
   const srcTagStyle =
@@ -105,37 +113,50 @@ export default function CountyDrill({ county, year, scenario, onClose }: Props) 
         </div>
       </div>
 
-      <div style={{
-        display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8,
-        padding: 14, background: 'var(--surface2)', borderRadius: 'var(--radius-md)',
-      }}>
-        <div>
-          <div className="eyebrow">Saturated thickness</div>
-          <div className="stat" style={{ fontSize: 26, fontWeight: 800, lineHeight: 1, marginTop: 4, color: depColor(thkNow) }}>
-            {thkNow.toFixed(1)}<span style={{ fontSize: 11, color: 'var(--text3)', marginLeft: 3, fontWeight: 500 }}>m</span>
+      {/* Thickness trajectory — compact, replaces the KPI block that
+          now floats inside the map as an overlay. */}
+      <div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
+          <div className="eyebrow">Thickness trajectory · 1950 → 2100</div>
+          <div className="mono" style={{ fontSize: 9, color: 'var(--text3)', display: 'flex', gap: 10, alignItems: 'center' }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              <span style={{ display: 'inline-block', width: 10, height: 2, background: 'var(--text3)' }} />BAU
+            </span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              <span style={{ display: 'inline-block', width: 10, height: 2, background: 'var(--field)' }} />
+              {scenario.label.split(' ')[0]}
+            </span>
           </div>
         </div>
-        <div>
-          <div className="eyebrow">Annual decline</div>
-          <div className="stat" style={{ fontSize: 26, fontWeight: 800, lineHeight: 1, marginTop: 4, color: dclEff < -0.5 ? 'var(--negative)' : 'var(--text)' }}>
-            {dclEff > 0 ? '+' : ''}{dclEff.toFixed(2)}<span style={{ fontSize: 11, color: 'var(--text3)', marginLeft: 3, fontWeight: 500 }}>m/yr</span>
-          </div>
-          {hasModelBand && (
-            <div className="mono" style={{ fontSize: 9, color: 'var(--text3)', marginTop: 2 }}>
-              80% CI [{(county.dclLo as number).toFixed(2)}, {(county.dclHi as number).toFixed(2)}]
-            </div>
-          )}
-        </div>
-        <div>
-          <div className="eyebrow">Years-to-uneconomic</div>
-          <div className="stat" style={{ fontSize: 26, fontWeight: 800, lineHeight: 1, marginTop: 4, color: 'var(--text)' }}>
-            {yrsUi >= 999 ? '∞' : Math.round(yrsUi)}<span style={{ fontSize: 11, color: 'var(--text3)', marginLeft: 3, fontWeight: 500 }}>yr</span>
-          </div>
-          {yrsULo != null && yrsUHi != null && yrsULo !== yrsUHi && (
-            <div className="mono" style={{ fontSize: 9, color: 'var(--text3)', marginTop: 2 }}>
-              [{fmt.yr(yrsULo)}, {fmt.yr(yrsUHi)}]
-            </div>
-          )}
+        <div style={{ background: 'var(--surface2)', borderRadius: 'var(--radius-sm)', padding: 6 }}>
+          <svg viewBox={`0 0 ${cw} ${ch + 14}`} style={{ width: '100%' }}>
+            <path d={curvePath('tbau')} fill="none" stroke="var(--text3)" strokeWidth="1" strokeDasharray="3 3" />
+            <path d={curvePath('t')} fill="none" stroke="var(--field)" strokeWidth="2" />
+            <line
+              x1="0"
+              y1={ch - (9 / maxT) * ch}
+              x2={cw}
+              y2={ch - (9 / maxT) * ch}
+              stroke="var(--negative)"
+              strokeDasharray="2 2"
+              strokeWidth="0.8"
+              opacity="0.6"
+            />
+            <text x="2" y={ch - (9 / maxT) * ch - 2} fontSize="8" fontFamily="var(--font-mono)" fill="var(--negative)">
+              9 m uneconomic
+            </text>
+            <line x1={yearX} y1="0" x2={yearX} y2={ch} stroke="var(--text)" strokeWidth="1" />
+            <circle
+              cx={yearX}
+              cy={ch - (Math.max(0, thkNow) / maxT) * ch}
+              r="3"
+              fill="var(--field)"
+              stroke="var(--bg)"
+              strokeWidth="1.5"
+            />
+            <text x="2" y="10" fontSize="9" fontFamily="var(--font-mono)" fill="var(--text3)">{maxT.toFixed(0)}m</text>
+            <text x="2" y={ch - 2} fontSize="9" fontFamily="var(--font-mono)" fill="var(--text3)">0</text>
+          </svg>
         </div>
       </div>
 
@@ -253,8 +274,21 @@ export default function CountyDrill({ county, year, scenario, onClose }: Props) 
 function Econ({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <div style={{ fontSize: 10, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{label}</div>
-      <div className="mono" style={{ fontSize: 14, color: 'var(--text)', marginTop: 2, fontWeight: 700 }}>{value}</div>
+      <div
+        style={{
+          fontSize: 10,
+          color: 'var(--text3)',
+          textTransform: 'uppercase',
+          letterSpacing: '0.06em',
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          minHeight: 12,
+        }}
+      >
+        {label}
+      </div>
+      <div className="mono" style={{ fontSize: 14, color: 'var(--text)', marginTop: 3, fontWeight: 700 }}>{value}</div>
     </div>
   );
 }

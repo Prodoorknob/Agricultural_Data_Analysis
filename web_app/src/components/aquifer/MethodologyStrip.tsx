@@ -1,4 +1,5 @@
 export default function MethodologyStrip({ countyCount }: { countyCount: number }) {
+  // Collapsible references — added 2026-04-21.
   return (
     <section style={{
       background: 'var(--surface)',
@@ -35,8 +36,23 @@ export default function MethodologyStrip({ countyCount }: { countyCount: number 
           />
         </div>
 
-        <div style={{ marginTop: 40, paddingTop: 32, borderTop: '1px solid var(--border)' }}>
-          <div className="eyebrow" style={{ marginBottom: 16 }}>References · primary data</div>
+        <details style={{ marginTop: 40, paddingTop: 32, borderTop: '1px solid var(--border)' }}>
+          <summary
+            style={{
+              cursor: 'pointer',
+              listStyle: 'none',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              marginBottom: 16,
+              userSelect: 'none',
+            }}
+          >
+            <div className="eyebrow">References · primary data</div>
+            <span className="mono" style={{ fontSize: 10, color: 'var(--text3)', letterSpacing: '0.08em' }}>
+              click to expand ▾
+            </span>
+          </summary>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12, fontSize: 12, color: 'var(--text2)', lineHeight: 1.55 }}>
             <Ref
               href="https://pubs.usgs.gov/sir/2012/5177/"
@@ -120,7 +136,25 @@ export default function MethodologyStrip({ countyCount }: { countyCount: number 
             />
           </div>
 
-          <div className="eyebrow" style={{ marginTop: 32, marginBottom: 12 }}>References · modeling</div>
+        </details>
+
+        <details style={{ marginTop: 24 }}>
+          <summary
+            style={{
+              cursor: 'pointer',
+              listStyle: 'none',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              marginBottom: 12,
+              userSelect: 'none',
+            }}
+          >
+            <div className="eyebrow">References · modeling</div>
+            <span className="mono" style={{ fontSize: 10, color: 'var(--text3)', letterSpacing: '0.08em' }}>
+              click to expand ▾
+            </span>
+          </summary>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12, fontSize: 12, color: 'var(--text2)', lineHeight: 1.55 }}>
             <Ref
               href="https://doi.org/10.1088/1748-9326/ab1ff9"
@@ -143,7 +177,7 @@ export default function MethodologyStrip({ countyCount }: { countyCount: number 
               body="CatBoost: unbiased boosting with categorical features. Winning learner for NB02 (depth 5, 700 iterations, l2_leaf_reg 3.0) — beats per-county OLS, LightGBM, and XGBoost on 5-fold spatial CV."
             />
           </div>
-        </div>
+        </details>
 
         <div className="mono" style={{ display: 'flex', gap: 20, flexWrap: 'wrap', marginTop: 40, paddingTop: 24, borderTop: '1px solid var(--border)' }}>
           <Link href="https://usda-analysis-datasets.s3.amazonaws.com/aquiferwatch/web/baseline_counties.manifest.json">baseline manifest (live)</Link>

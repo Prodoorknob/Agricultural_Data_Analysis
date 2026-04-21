@@ -46,6 +46,24 @@ interface Props {
   hovered: string | null;
   onSelect: (fips: string | null) => void;
   onHover: (fips: string | null) => void;
+  /** When true and `bauScenario` is provided, county fills use a
+   *  red-neutral-green delta-vs-BAU ramp instead of absolute thickness. */
+  deltaMode?: boolean;
+  bauScenario?: Scenario;
+}
+
+/** Red → neutral → green ramp for scenario-vs-BAU thickness delta (m). */
+function deltaColor(d: number): string {
+  const clamped = Math.max(-1, Math.min(1, d / 15));
+  if (clamped < -0.02) {
+    const t = Math.min(1, Math.abs(clamped));
+    return `color-mix(in oklab, var(--negative) ${Math.round(t * 75)}%, var(--surface2))`;
+  }
+  if (clamped > 0.02) {
+    const t = Math.min(1, clamped);
+    return `color-mix(in oklab, var(--positive) ${Math.round(t * 75)}%, var(--surface2))`;
+  }
+  return 'var(--surface2)';
 }
 
 export default function CountyMap({
@@ -57,7 +75,10 @@ export default function CountyMap({
   hovered,
   onSelect,
   onHover,
+  deltaMode = false,
+  bauScenario,
 }: Props) {
+  const useDelta = deltaMode && bauScenario != null;
   /* Project every polygon once per geojson; keep paths + centroid. */
   const projected: ProjectedCounty[] = useMemo(() => {
     return geo.features.map((f: Feature<Geometry, CountyProps>) => {
@@ -134,6 +155,13 @@ export default function CountyMap({
   }, [geo]);
 
   const thkAtYear = useCallback((c: CountyProps) => thicknessAt(c, year, scenario), [year, scenario]);
+  const deltaAtYear = useCallback(
+    (c: CountyProps) => {
+      if (!useDelta || !bauScenario) return 0;
+      return thicknessAt(c, year, scenario) - thicknessAt(c, year, bauScenario);
+    },
+    [useDelta, bauScenario, year, scenario],
+  );
 
   const sortedForColumns =
     mode === 'columns' ? [...projected].sort((a, b) => a.cy - b.cy) : projected;
@@ -176,6 +204,9 @@ export default function CountyMap({
           <stop offset="60%" stopColor="#52B788" stopOpacity="0.9" />
           <stop offset="100%" stopColor="#E8F5EE" stopOpacity="1" />
         </linearGradient>
+        <filter id="lift-shadow" x="-30%" y="-30%" width="160%" height="160%">
+          <feDropShadow dx="0" dy="3" stdDeviation="3.5" floodColor="#000" floodOpacity="0.42" />
+        </filter>
       </defs>
 
       {/* Tilted base map (columns mode) */}
@@ -219,13 +250,14 @@ export default function CountyMap({
             }
             if (mode === 'choropleth') {
               const thk = thkAtYear(f.props);
+              const fillColor = useDelta ? deltaColor(deltaAtYear(f.props)) : depColor(thk);
               const isSel = selected === f.fips;
               const isHov = hovered === f.fips;
               return (
                 <path
                   key={f.fips}
                   d={pathD(f.paths)}
-                  fill={depColor(thk)}
+                  fill={fillColor}
                   stroke={isSel ? 'var(--text)' : isHov ? 'var(--text2)' : 'transparent'}
                   strokeWidth={isSel ? 1.8 : isHov ? 1.2 : 0}
                   style={{ cursor: 'pointer', transition: 'fill 400ms var(--ease-out)' }}
@@ -238,15 +270,25 @@ export default function CountyMap({
             const isHigh = f.props.dq === 'modeled_high';
             const isSel = selected === f.fips;
             const isHov = hovered === f.fips;
+            // In columns/bubbles mode, when delta overlay is active, tint
+            // the county fill by delta so the scenario story reads even
+            // through the spikes/dots on top.
+            const baseFill = useDelta
+              ? deltaColor(deltaAtYear(f.props))
+              : isSel
+                ? 'var(--field-tint)'
+                : isHigh
+                  ? 'var(--surface)'
+                  : 'var(--surface2)';
             return (
               <path
                 key={`${f.fips}-base`}
                 d={pathD(f.paths)}
-                fill={isSel ? 'var(--field-tint)' : isHigh ? 'var(--surface)' : 'var(--surface2)'}
+                fill={baseFill}
                 stroke={isSel ? 'var(--field)' : 'transparent'}
                 strokeWidth={isSel ? 1.2 : 0}
-                opacity={isSel ? 1 : isHov ? 0.9 : 0.75}
-                style={{ cursor: 'pointer' }}
+                opacity={isSel ? 1 : isHov ? 0.9 : useDelta ? 0.9 : 0.75}
+                style={{ cursor: 'pointer', transition: 'fill 400ms var(--ease-out)' }}
                 onMouseEnter={() => onHover(f.fips)}
                 onMouseLeave={() => onHover(null)}
                 onClick={() => onSelect(f.fips)}
@@ -384,6 +426,40 @@ export default function CountyMap({
           })}
         </g>
       )}
+
+      {/* Lifted selected county — render on top with drop shadow + slight
+          scale around its centroid, so the chosen county "pops out" of the
+          base layer without losing its geographic context. */}
+      {selected && (() => {
+        const sel = projected.find((f) => f.fips === selected);
+        if (!sel || !sel.props.onHpa) return null;
+        const tilted = mode === 'columns';
+        const baseTx = tilted
+          ? `translate(${W / 2} ${H * 0.62}) scale(1 0.6) translate(${-W / 2} ${-H * 0.62})`
+          : '';
+        const liftScale = 1.08;
+        const fillColor = useDelta
+          ? deltaColor(deltaAtYear(sel.props))
+          : mode === 'choropleth'
+            ? depColor(thkAtYear(sel.props))
+            : 'var(--field-tint)';
+        return (
+          <g transform={baseTx} pointerEvents="none">
+            <g
+              transform={`translate(${sel.cx} ${sel.cy}) scale(${liftScale}) translate(${-sel.cx} ${-sel.cy})`}
+              style={{ transition: 'transform 250ms var(--ease-out)' }}
+            >
+              <path
+                d={pathD(sel.paths)}
+                fill={fillColor}
+                stroke="var(--text)"
+                strokeWidth="1.8"
+                filter="url(#lift-shadow)"
+              />
+            </g>
+          </g>
+        );
+      })()}
 
       {/* State labels */}
       <g pointerEvents="none">
