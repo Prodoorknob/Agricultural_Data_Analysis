@@ -3,7 +3,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import AquiferHero from './AquiferHero';
 import CountyMap from './CountyMap';
-import TimeScrubber from './TimeScrubber';
+import MapTopBar from './MapTopBar';
+import VerticalTimeScrubber from './VerticalTimeScrubber';
+import CountyTrajectoryRow from './CountyTrajectoryRow';
+import CountyProvenancePanel from './CountyProvenancePanel';
 import ScenarioPanel from './ScenarioPanel';
 import CountyDrill from './CountyDrill';
 import Ranking from './Ranking';
@@ -12,12 +15,6 @@ import MethodologyStrip from './MethodologyStrip';
 import { useBaseline } from './useBaseline';
 import { SCENARIOS, aggregate, depColor, fmt, thicknessAt } from './aquifer-math';
 import type { MapMode, Scenario } from './types';
-
-const MODES: Array<{ k: MapMode; label: string; desc: string }> = [
-  { k: 'columns', label: 'Columns', desc: 'Height = thickness' },
-  { k: 'choropleth', label: 'Choropleth', desc: 'Color = thickness' },
-  { k: 'dots', label: 'Bubbles', desc: 'Size = pumping' },
-];
 
 const DEFAULT_CUSTOM: Scenario = {
   id: 'custom',
@@ -92,243 +89,220 @@ export default function OgallalaReport() {
         id="map-section"
         style={{
           margin: '32px 0 0',
-          display: 'grid',
-          gridTemplateColumns: '260px 1fr 340px',
-          gap: 16,
-          alignItems: 'stretch',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 14,
         }}
       >
-        {/* LEFT RAIL */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: '16px 18px' }}>
-            <div className="eyebrow">§ 01 Live view</div>
-            <div
-              className="stat"
-              style={{ fontSize: 64, fontWeight: 900, lineHeight: 1, color: 'var(--field)', letterSpacing: '-0.02em', margin: '6px 0 8px' }}
-            >
-              {year}
-            </div>
-            <div
-              className="mono"
-              style={{
-                fontSize: 10, letterSpacing: '0.12em', color: 'var(--text2)',
-                padding: '5px 8px', background: 'var(--surface2)', borderRadius: 4,
-                display: 'inline-block', border: '1px solid var(--border)',
-              }}
-            >
-              SCENARIO: {liveScenario.label.toUpperCase()}
-            </div>
-          </div>
+        {/* Toolbar above the map */}
+        <MapTopBar
+          agg={agg}
+          totalCounties={counties.length}
+          year={year}
+          mode={mode}
+          onMode={setMode}
+        />
 
-          <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: '14px 14px 16px' }}>
-            <div className="eyebrow" style={{ marginBottom: 10 }}>Visualization</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              {MODES.map((m) => {
-                const on = mode === m.k;
-                return (
-                  <button
-                    key={m.k}
-                    onClick={() => setMode(m.k)}
-                    style={{
-                      textAlign: 'left', padding: '10px 12px',
-                      borderRadius: 'var(--radius-md)',
-                      border: `1px solid ${on ? 'var(--field)' : 'transparent'}`,
-                      background: on ? 'var(--field-tint)' : 'transparent',
-                      color: on ? 'var(--text)' : 'var(--text2)',
-                      transition: 'all 150ms var(--ease-out)',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    <div style={{ fontSize: 13, fontWeight: 600 }}>{m.label}</div>
-                    <div className="mono" style={{ fontSize: 10, color: 'var(--text3)', letterSpacing: '0.06em', marginTop: 2 }}>{m.desc}</div>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: 14 }}>
-            <div className="eyebrow">Saturated thickness (m)</div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 2, margin: '10px 0 8px' }}>
-              {[
-                { c: 'var(--dep-1)', l: '<5' },
-                { c: 'var(--dep-3)', l: '10' },
-                { c: 'var(--dep-5)', l: '25' },
-                { c: 'var(--dep-7)', l: '55' },
-                { c: 'var(--dep-9)', l: '100' },
-                { c: 'var(--dep-10)', l: '150+' },
-              ].map((x, i) => (
-                <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
-                  <div style={{ width: '100%', height: 16, borderRadius: 2, background: x.c }} />
-                  <div className="mono" style={{ fontSize: 9, color: 'var(--text3)' }}>{x.l}</div>
-                </div>
-              ))}
-            </div>
-            <div className="mono" style={{ fontSize: 9, color: 'var(--text3)', display: 'flex', flexDirection: 'column', gap: 4, marginTop: 8 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: 'var(--field)' }} />
-                <span>well-measured (WIZARD · NGWMN · TWDB · NE DNR)</span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: 'var(--harvest)' }} />
-                <span>USGS McGuire raster (SIR 2012-5177 / 5291)</span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: 'var(--surface2)', opacity: 0.5, border: '1px solid var(--border)' }} />
-                <span>off-aquifer (not part of HPA footprint)</span>
-              </div>
-            </div>
-          </div>
-
-          {agg && counties.length > 0 && (
-            <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: 14 }}>
-              <div className="eyebrow">Region aggregate · {year}</div>
-              <KpiRow
-                label="Mean thickness"
-                value={agg.countOnHpa ? (agg.totalThk / agg.countOnHpa).toFixed(1) : '—'}
-                unit="m"
-              />
-              <KpiRow
-                label="Depleted counties"
-                value={`${agg.countDepleted} / ${agg.countOnHpa}`}
-                valueColor={agg.countDepleted > 50 ? 'var(--negative)' : 'var(--text)'}
-              />
-              <KpiRow label="Pumping" value={fmt.af(agg.totalPmp)} unit="" />
-              <KpiRow label="CO₂ footprint" value={agg.totalCO2.toFixed(1)} unit="Mt/yr" />
-              <div className="mono" style={{ fontSize: 9, color: 'var(--text3)', marginTop: 8, letterSpacing: '0.06em' }}>
-                {agg.countOnHpa} of {counties.length} counties on HPA footprint
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* MAP STAGE */}
+        {/* Slider | Map | Drill */}
         <div
           style={{
-            position: 'relative',
-            background:
-              'radial-gradient(ellipse at 50% 50%, oklch(0.98 0.008 150) 0%, oklch(0.92 0.01 150) 90%)',
-            border: '1px solid var(--border2)',
-            borderRadius: 'var(--radius-lg)',
-            overflow: 'hidden',
-            minHeight: 640,
+            display: 'grid',
+            gridTemplateColumns: '110px 1fr 340px',
+            gap: 14,
+            alignItems: 'stretch',
           }}
         >
-          {!geo && (
-            <div style={{ padding: 40, color: 'var(--text3)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>
-              loading 606 HPA counties…
-            </div>
-          )}
-          {geo && (
-            <CountyMap
-              geo={geo}
+          {counties.length > 0 ? (
+            <VerticalTimeScrubber
               year={year}
+              onYear={setYear}
+              playing={playing}
+              onPlay={() => setPlaying((p) => !p)}
+              counties={counties}
               scenario={liveScenario}
-              mode={mode}
-              selected={selected}
-              hovered={hovered}
-              onSelect={onSelectFips}
-              onHover={setHovered}
             />
-          )}
-          {/* Floating hover tooltip */}
-          {(() => {
-            if (!hovered) return null;
-            const c = counties.find((x) => x.fips === hovered);
-            if (!c || !c.onHpa) return null;
-            const t = thicknessAt(c, year, liveScenario);
-            const dclShown = c.dclP ?? c.dcl;
-            const hasBand = c.dclLo != null && c.dclHi != null;
-            const sourceLabel =
-              c.tsrc === 'wells'    ? 'Measured · WIZARD/NGWMN/TWDB/NE DNR' :
-              c.tsrc === 'raster'   ? 'USGS McGuire raster (SIR 2012-5177)' :
-              c.tsrc === 'fallback' ? 'HPA-median fallback' :
-                                      '—';
-            return (
-              <div
-                style={{
-                  position: 'absolute', top: 16, right: 16,
-                  background: 'var(--surface)',
-                  border: '1px solid var(--border2)',
-                  borderRadius: 'var(--radius-md)',
-                  padding: '12px 14px', minWidth: 220,
-                  boxShadow: 'var(--shadow-lg)',
-                  pointerEvents: 'none',
-                }}
-              >
-                <div style={{ fontWeight: 700, fontSize: 14 }}>
-                  {c.name} <span className="mono" style={{ color: 'var(--text3)', marginLeft: 6 }}>{c.state}</span>
-                </div>
-                <div className="stat" style={{ fontSize: 32, fontWeight: 800, margin: '4px 0 8px', color: depColor(t) }}>
-                  {t.toFixed(1)} m
-                </div>
-                <TTRow label="decline" value={dclShown != null ? `${dclShown.toFixed(2)} m/yr` : '—'} />
-                {hasBand && c.dsrc === 'model' && (
-                  <TTRow
-                    label="80% band"
-                    value={`[${(c.dclLo as number).toFixed(2)}, ${(c.dclHi as number).toFixed(2)}]`}
-                  />
-                )}
-                <TTRow label="years→uneconomic" value={fmt.yr(c.yrsU)} />
-                <TTRow label="pumping" value={fmt.af(c.pmp)} />
-                <TTRow label="irr. acres" value={fmt.int(c.acres)} />
-                <div
-                  className="mono"
-                  style={{ marginTop: 6, paddingTop: 6, borderTop: '1px solid var(--border)', fontSize: 9, color: 'var(--text3)', letterSpacing: '0.08em', lineHeight: 1.5 }}
-                >
-                  {sourceLabel}
-                  {c.dsrc === 'model' && <span style={{ color: 'var(--field)' }}> · NB02 CatBoost pred</span>}
-                </div>
-              </div>
-            );
-          })()}
-        </div>
-
-        {/* RIGHT RAIL — drill-down */}
-        <div>
-          {selectedC ? (
-            <CountyDrill county={selectedC} year={year} scenario={liveScenario} onClose={() => setSelected(null)} />
           ) : (
             <div
               style={{
                 background: 'var(--surface)',
                 border: '1px solid var(--border)',
                 borderRadius: 'var(--radius-lg)',
-                padding: 20,
-                display: 'flex', flexDirection: 'column', gap: 16,
-                justifyContent: 'center', textAlign: 'center', alignItems: 'center',
-                height: '100%',
+              }}
+            />
+          )}
+
+          {/* MAP STAGE */}
+          <div
+            style={{
+              position: 'relative',
+              background:
+                'radial-gradient(ellipse at 50% 50%, oklch(0.98 0.008 150) 0%, oklch(0.92 0.01 150) 90%)',
+              border: '1px solid var(--border2)',
+              borderRadius: 'var(--radius-lg)',
+              overflow: 'hidden',
+              minHeight: 640,
+            }}
+          >
+            {/* Year badge — floats inside the map */}
+            <div
+              style={{
+                position: 'absolute',
+                top: 14,
+                left: 14,
+                zIndex: 2,
+                background: 'rgba(255,255,255,0.88)',
+                backdropFilter: 'blur(8px)',
+                WebkitBackdropFilter: 'blur(8px)',
+                border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-md)',
+                padding: '10px 14px',
+                pointerEvents: 'none',
+                boxShadow: 'var(--shadow-sm)',
               }}
             >
-              <div className="eyebrow">§ 01b County drill-down</div>
-              <div className="stat" style={{ fontSize: 28, fontWeight: 800, color: 'var(--text)', marginTop: 8 }}>
-                Pick a county
+              <div className="eyebrow">§ 01 Live view</div>
+              <div
+                className="stat"
+                style={{
+                  fontSize: 42,
+                  fontWeight: 900,
+                  lineHeight: 1,
+                  color: 'var(--field)',
+                  letterSpacing: '-0.02em',
+                  margin: '4px 0 6px',
+                  fontVariantNumeric: 'tabular-nums',
+                }}
+              >
+                {year}
               </div>
-              <div style={{ fontSize: 12, color: 'var(--text2)', maxWidth: 260, margin: '6px auto' }}>
-                Click any county on the map — or a row in the leaderboard below — to see its thickness trajectory,
-                crop-mix attribution, and data provenance.
-              </div>
-              <div className="mono" style={{ fontSize: 10, color: 'var(--text3)', marginTop: 14, letterSpacing: '0.06em' }}>
-                <span style={{ display: 'inline-block', width: 18, height: 18, borderRadius: 4, background: 'var(--surface2)', marginRight: 6, textAlign: 'center', lineHeight: '18px', border: '1px solid var(--border)', color: 'var(--text2)' }}>?</span>
-                Try <em style={{ fontStyle: 'normal', color: 'var(--text)', fontWeight: 600 }}>Sheridan KS</em> or <em style={{ fontStyle: 'normal', color: 'var(--text)', fontWeight: 600 }}>Dallam TX</em>
+              <div
+                className="mono"
+                style={{
+                  fontSize: 10,
+                  letterSpacing: '0.12em',
+                  color: 'var(--text2)',
+                  padding: '3px 6px',
+                  background: 'var(--surface2)',
+                  borderRadius: 4,
+                  display: 'inline-block',
+                  border: '1px solid var(--border)',
+                }}
+              >
+                SCENARIO: {liveScenario.label.toUpperCase()}
               </div>
             </div>
-          )}
-        </div>
-      </section>
 
-      {/* SCRUBBER */}
-      <section style={{ margin: '16px 0 0' }}>
-        {counties.length > 0 && (
-          <TimeScrubber
-            year={year}
-            onYear={setYear}
-            playing={playing}
-            onPlay={() => setPlaying((p) => !p)}
-            counties={counties}
-            scenario={liveScenario}
-          />
+            {!geo && (
+              <div style={{ padding: 40, color: 'var(--text3)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>
+                loading 606 HPA counties…
+              </div>
+            )}
+            {geo && (
+              <CountyMap
+                geo={geo}
+                year={year}
+                scenario={liveScenario}
+                mode={mode}
+                selected={selected}
+                hovered={hovered}
+                onSelect={onSelectFips}
+                onHover={setHovered}
+              />
+            )}
+
+            {/* Floating hover tooltip */}
+            {(() => {
+              if (!hovered) return null;
+              const c = counties.find((x) => x.fips === hovered);
+              if (!c || !c.onHpa) return null;
+              const t = thicknessAt(c, year, liveScenario);
+              const dclShown = c.dclP ?? c.dcl;
+              const hasBand = c.dclLo != null && c.dclHi != null;
+              const sourceLabel =
+                c.tsrc === 'wells'    ? 'Measured · WIZARD/NGWMN/TWDB/NE DNR' :
+                c.tsrc === 'raster'   ? 'USGS McGuire raster (SIR 2012-5177)' :
+                c.tsrc === 'fallback' ? 'HPA-median fallback' :
+                                        '—';
+              return (
+                <div
+                  style={{
+                    position: 'absolute', top: 16, right: 16,
+                    background: 'var(--surface)',
+                    border: '1px solid var(--border2)',
+                    borderRadius: 'var(--radius-md)',
+                    padding: '12px 14px', minWidth: 220,
+                    boxShadow: 'var(--shadow-lg)',
+                    pointerEvents: 'none',
+                    zIndex: 3,
+                  }}
+                >
+                  <div style={{ fontWeight: 700, fontSize: 14 }}>
+                    {c.name} <span className="mono" style={{ color: 'var(--text3)', marginLeft: 6 }}>{c.state}</span>
+                  </div>
+                  <div className="stat" style={{ fontSize: 32, fontWeight: 800, margin: '4px 0 8px', color: depColor(t) }}>
+                    {t.toFixed(1)} m
+                  </div>
+                  <TTRow label="decline" value={dclShown != null ? `${dclShown.toFixed(2)} m/yr` : '—'} />
+                  {hasBand && c.dsrc === 'model' && (
+                    <TTRow
+                      label="80% band"
+                      value={`[${(c.dclLo as number).toFixed(2)}, ${(c.dclHi as number).toFixed(2)}]`}
+                    />
+                  )}
+                  <TTRow label="years→uneconomic" value={fmt.yr(c.yrsU)} />
+                  <TTRow label="pumping" value={fmt.af(c.pmp)} />
+                  <TTRow label="irr. acres" value={fmt.int(c.acres)} />
+                  <div
+                    className="mono"
+                    style={{ marginTop: 6, paddingTop: 6, borderTop: '1px solid var(--border)', fontSize: 9, color: 'var(--text3)', letterSpacing: '0.08em', lineHeight: 1.5 }}
+                  >
+                    {sourceLabel}
+                    {c.dsrc === 'model' && <span style={{ color: 'var(--field)' }}> · NB02 CatBoost pred</span>}
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+
+          {/* RIGHT RAIL — drill-down */}
+          <div>
+            {selectedC ? (
+              <CountyDrill county={selectedC} year={year} scenario={liveScenario} onClose={() => setSelected(null)} />
+            ) : (
+              <div
+                style={{
+                  background: 'var(--surface)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 'var(--radius-lg)',
+                  padding: 20,
+                  display: 'flex', flexDirection: 'column', gap: 16,
+                  justifyContent: 'center', textAlign: 'center', alignItems: 'center',
+                  height: '100%',
+                }}
+              >
+                <div className="eyebrow">§ 01b County drill-down</div>
+                <div className="stat" style={{ fontSize: 24, fontWeight: 800, color: 'var(--text)', marginTop: 8 }}>
+                  Pick a county
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--text2)', maxWidth: 260, margin: '6px auto' }}>
+                  Click any county on the map — or a row in the leaderboard below — to see its thickness trajectory,
+                  crop-mix attribution, and data provenance.
+                </div>
+                <div className="mono" style={{ fontSize: 10, color: 'var(--text3)', marginTop: 10, letterSpacing: '0.06em' }}>
+                  Try <em style={{ fontStyle: 'normal', color: 'var(--text)', fontWeight: 600 }}>Sheridan KS</em> or <em style={{ fontStyle: 'normal', color: 'var(--text)', fontWeight: 600 }}>Dallam TX</em>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Below-map: trajectory + irrigated-acres row (full width, county-specific) */}
+        {selectedC && (
+          <CountyTrajectoryRow county={selectedC} year={year} scenario={liveScenario} />
         )}
+
+        {/* Below-map: provenance (full width, county-specific) */}
+        {selectedC && <CountyProvenancePanel county={selectedC} />}
       </section>
 
       {/* SCENARIO ENGINE + RANKING */}
@@ -359,28 +333,6 @@ export default function OgallalaReport() {
 
       {/* METHODOLOGY */}
       <MethodologyStrip countyCount={counties.length} />
-    </div>
-  );
-}
-
-function KpiRow({
-  label,
-  value,
-  unit,
-  valueColor,
-}: {
-  label: string;
-  value: string;
-  unit?: string;
-  valueColor?: string;
-}) {
-  return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
-      <div style={{ fontSize: 12, color: 'var(--text2)' }}>{label}</div>
-      <div className="stat" style={{ fontSize: 22, fontWeight: 800, color: valueColor ?? 'var(--text)' }}>
-        {value}
-        {unit && <span style={{ fontSize: 11, color: 'var(--text3)', marginLeft: 3 }}>{unit}</span>}
-      </div>
     </div>
   );
 }
