@@ -40,6 +40,18 @@ export interface CountyProps {
   yrsUHi: number | null;
   // Data quality tier (spec §4).
   dq: 'modeled_high' | 'modeled_low' | 'no_data';
+  // Climate (NOAA nClimDiv: 1991–2020 normal + 2019–2023 recent).
+  pnorm: number | null;   // precip_normal_mm_yr
+  prec: number | null;    // precip_recent_mm_yr
+  panom: number | null;   // precip_anomaly_pct
+  // Pumping economics (EIA industrial electricity × per-county kWh/AF).
+  ekwh: number | null;    // electricity_cents_per_kwh
+  pcost: number | null;   // pumping_cost_usd_per_af
+  // Irrigation method mix (IWMS 2018 Table 28 per-state shares).
+  mPivot: number;         // irr_center_pivot
+  mFlood: number;         // irr_flood
+  mDrip: number;          // irr_drip
+  mDry: number;           // irr_dryland
   // Projected centroid in lon/lat for label / spike placement.
   cx: number;
   cy: number;

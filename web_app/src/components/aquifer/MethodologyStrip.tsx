@@ -19,9 +19,9 @@ export default function MethodologyStrip({ countyCount }: { countyCount: number 
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 40, marginTop: 32 }}>
           <Col
-            num="17"
+            num="21"
             label="Data sources"
-            body="17 upstream feeds → 31 parquets. USGS HPA boundary + McGuire rasters (SIR 2012-5177 saturated thickness 2009, SIR 2012-5291 water-level change predev→2011), USGS NWIS wells & water-level history, National Ground-Water Monitoring Network (NGWMN), KGS WIZARD / WIMAS / HPA bedrock, TX TWDB Groundwater Database, NE DNR Statewide Well Registry, USDA NASS Census 2022, USDA NASS IWMS 2023, USDA ERS cost + returns, EPA eGRID 2022, US Census TIGER/Line 2022."
+            body="21 upstream feeds → 34 parquets. USGS HPA boundary + McGuire rasters (SIR 2012-5177 thickness 2009, SIR 2012-5291 wlc predev→2011, SIR 2023-5143 wlc predev→2019 + 2017–19 biennium), USGS NWIS wells & water-level history, NGWMN, KGS WIZARD / WIMAS / HPA bedrock, TX TWDB Groundwater Database, NE DNR Statewide Well Registry + 2021 Groundwater Management Summary (23-NRD allocation rules), USDA NASS Census 2022, USDA NASS IWMS 2018 (Table 28 method mix), USDA ERS cost + returns, EPA eGRID 2022, EIA State Electricity Profiles (industrial retail prices), NOAA NCEI nClimDiv per-county precipitation (1895–present), US Census TIGER/Line 2022."
           />
           <Col
             num="4"
@@ -46,7 +46,27 @@ export default function MethodologyStrip({ countyCount }: { countyCount: number 
             <Ref
               href="https://pubs.usgs.gov/sir/2012/5291/"
               label="McGuire, V.L., 2013"
-              body="Water-Level and Storage Changes in the High Plains Aquifer, Predevelopment to 2011 and 2009–11. USGS Scientific Investigations Report 2012–5291."
+              body="Water-Level and Storage Changes in the High Plains Aquifer, Predevelopment to 2011 and 2009–11. USGS Scientific Investigations Report 2012–5291. (Legacy — kept for audit.)"
+            />
+            <Ref
+              href="https://pubs.usgs.gov/publication/sir20235143/full"
+              label="McGuire, V.L., & Strauch, K.R., 2024"
+              body="Water-Level and Recoverable Water in Storage Changes, High Plains Aquifer, Predevelopment to 2019 and 2017 to 2019. USGS Scientific Investigations Report 2023–5143. Primary source for our per-county decline rate (69-year horizon)."
+            />
+            <Ref
+              href="https://www.ncei.noaa.gov/pub/data/cirs/climdiv/"
+              label="NOAA NCEI, 2024"
+              body="nClimDiv Per-County Monthly Precipitation Dataset (1895–present). Annual 1991–2020 normals plus 2019–2023 recent window anomaly percentage per county — the climate context that frames the aquifer story."
+            />
+            <Ref
+              href="https://www.eia.gov/electricity/state/"
+              label="U.S. EIA, 2024"
+              body="State Electricity Profiles — industrial-sector retail price in cents/kWh by state (annual 2024). Combined with per-county kWh/AF pumping intensity to derive a real-dollar pumping cost per acre-foot."
+            />
+            <Ref
+              href="https://dnr.nebraska.gov/groundwater/groundwater-management"
+              label="Nebraska DNR, 2021"
+              body="Groundwater Management Summary (annual report). Source of our manually-curated 8-NRD allocation-rule table: base allocations, carryforward caps, moratoria, Compact-Call hard caps, NCORPE streamflow-augmentation co-ownership."
             />
             <Ref
               href="https://cida.usgs.gov/ngwmn/"

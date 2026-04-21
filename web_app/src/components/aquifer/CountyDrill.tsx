@@ -230,6 +230,63 @@ export default function CountyDrill({ county, year, scenario, onClose }: Props) 
           <Econ label="Pumping" value={fmt.af(county.pmp)} />
           <Econ label="Ag value" value={fmt.usd(county.agv)} />
           <Econ label="$ per acre-foot" value={county.pmp ? '$' + Math.round(county.agv / county.pmp).toLocaleString() : '—'} />
+          {county.pcost != null && (
+            <>
+              <Econ
+                label="Pumping cost"
+                value={`$${county.pcost.toFixed(2)}/AF`}
+              />
+              <Econ
+                label="Net $ per AF"
+                value={
+                  county.pmp
+                    ? '$' +
+                      Math.max(0, Math.round(county.agv / county.pmp - county.pcost)).toLocaleString()
+                    : '—'
+                }
+              />
+            </>
+          )}
+        </div>
+        {county.pcost != null && (
+          <div className="mono" style={{ fontSize: 9, color: 'var(--text3)', marginTop: 6, lineHeight: 1.5 }}>
+            electricity {county.ekwh?.toFixed(1)}¢/kWh (EIA state profile) × {county.kwh.toFixed(0)} kWh/AF pumping intensity
+          </div>
+        )}
+      </div>
+
+      {/* Climate — NOAA nClimDiv 1991-2020 normal vs 2019-2023 recent */}
+      {county.pnorm != null && (
+        <div>
+          <div className="eyebrow">Climate · NOAA nClimDiv</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, padding: 12, background: 'var(--surface2)', borderRadius: 'var(--radius-sm)', marginTop: 8 }}>
+            <Econ label="30-yr normal" value={`${county.pnorm.toFixed(0)} mm/yr`} />
+            <Econ label="Recent 5-yr" value={county.prec != null ? `${county.prec.toFixed(0)} mm/yr` : '—'} />
+            <Econ
+              label="Anomaly"
+              value={county.panom != null ? `${county.panom > 0 ? '+' : ''}${county.panom.toFixed(1)}%` : '—'}
+            />
+          </div>
+          <div className="mono" style={{ fontSize: 9, color: 'var(--text3)', marginTop: 6, lineHeight: 1.5 }}>
+            Normal window 1991–2020; recent window 2019–2023 (NOAA NCEI Climate Division dataset, per-county).
+          </div>
+        </div>
+      )}
+
+      {/* Irrigation method mix — IWMS 2018 per-state shares */}
+      <div>
+        <div className="eyebrow">Irrigation method mix · IWMS 2018 (state avg)</div>
+        <div style={{ display: 'flex', height: 18, borderRadius: 4, overflow: 'hidden', background: 'var(--surface2)', marginTop: 8, marginBottom: 6 }}>
+          <div title={`Center pivot ${(county.mPivot * 100).toFixed(0)}%`} style={{ width: `${county.mPivot * 100}%`, background: 'var(--field)' }} />
+          <div title={`Flood / gravity ${(county.mFlood * 100).toFixed(0)}%`} style={{ width: `${county.mFlood * 100}%`, background: 'var(--harvest)' }} />
+          <div title={`Drip / micro ${(county.mDrip * 100).toFixed(0)}%`} style={{ width: `${county.mDrip * 100}%`, background: 'var(--sky)' }} />
+          <div title={`Dryland ${(county.mDry * 100).toFixed(0)}%`} style={{ width: `${county.mDry * 100}%`, background: 'var(--border2)' }} />
+        </div>
+        <div className="mono" style={{ fontSize: 9, color: 'var(--text3)', display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <span>● pivot {(county.mPivot * 100).toFixed(0)}%</span>
+          <span>● flood {(county.mFlood * 100).toFixed(0)}%</span>
+          <span>● drip {(county.mDrip * 100).toFixed(0)}%</span>
+          <span>● dryland {(county.mDry * 100).toFixed(0)}%</span>
         </div>
       </div>
 
@@ -240,9 +297,11 @@ export default function CountyDrill({ county, year, scenario, onClose }: Props) 
           <Chip on={county.tsrc === 'raster'}>USGS McGuire SIR 2012-5177</Chip>
           <Chip on={county.dsrc === 'model'}>NB02 CatBoost + conformal</Chip>
           <Chip on>NASS Census 2022</Chip>
-          <Chip on>IWMS 2023</Chip>
-          <Chip on>ERS budgets</Chip>
+          <Chip on>NASS IWMS 2018 · Table 28</Chip>
+          <Chip on>ERS budgets 2024</Chip>
           <Chip on>eGRID 2022</Chip>
+          <Chip on>NOAA nClimDiv (1895–2024)</Chip>
+          <Chip on>EIA State Electricity Profiles</Chip>
         </div>
         <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 8, lineHeight: 1.55 }}>
           {county.tsrc === 'wells' && 'Thickness + decline derived from monitoring wells (WIZARD / NGWMN / TWDB / NE DNR).'}

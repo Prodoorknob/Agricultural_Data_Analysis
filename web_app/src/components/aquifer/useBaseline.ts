@@ -39,6 +39,15 @@ interface RawProps {
   years_until_uneconomic_hi: number | null;
   model_id: string | null;
   coverage_target: number | null;
+  precip_normal_mm_yr: number | null;
+  precip_recent_mm_yr: number | null;
+  precip_anomaly_pct: number | null;
+  electricity_cents_per_kwh: number | null;
+  pumping_cost_usd_per_af: number | null;
+  irr_center_pivot: number | null;
+  irr_flood: number | null;
+  irr_drip: number | null;
+  irr_dryland: number | null;
   pumping_af_yr: number | null;
   pumping_af_yr_usgs2015: number | null;
   irrigated_acres_total: number | null;
@@ -136,6 +145,15 @@ function adapt(raw: RawProps, geom: Geometry): CountyProps {
     yrsULo: nullable(raw.years_until_uneconomic_lo),
     yrsUHi: nullable(raw.years_until_uneconomic_hi),
     dq: raw.data_quality,
+    pnorm: nullable(raw.precip_normal_mm_yr),
+    prec: nullable(raw.precip_recent_mm_yr),
+    panom: nullable(raw.precip_anomaly_pct),
+    ekwh: nullable(raw.electricity_cents_per_kwh),
+    pcost: nullable(raw.pumping_cost_usd_per_af),
+    mPivot: num(raw.irr_center_pivot, 0.85),
+    mFlood: num(raw.irr_flood, 0.05),
+    mDrip: num(raw.irr_drip, 0.05),
+    mDry: num(raw.irr_dryland, 0.05),
     cx,
     cy,
   };
