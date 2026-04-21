@@ -19,9 +19,9 @@ export default function MethodologyStrip({ countyCount }: { countyCount: number 
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 40, marginTop: 32 }}>
           <Col
-            num="21"
+            num="22"
             label="Data sources"
-            body="21 upstream feeds → 34 parquets. USGS HPA boundary + McGuire rasters (SIR 2012-5177 thickness 2009, SIR 2012-5291 wlc predev→2011, SIR 2023-5143 wlc predev→2019 + 2017–19 biennium), USGS NWIS wells & water-level history, NGWMN, KGS WIZARD / WIMAS / HPA bedrock, TX TWDB Groundwater Database, NE DNR Statewide Well Registry + 2021 Groundwater Management Summary (23-NRD allocation rules), USDA NASS Census 2022, USDA NASS IWMS 2018 (Table 28 method mix), USDA ERS cost + returns, EPA eGRID 2022, EIA State Electricity Profiles (industrial retail prices), NOAA NCEI nClimDiv per-county precipitation (1895–present), US Census TIGER/Line 2022."
+            body="22 upstream feeds → 35 parquets. USGS HPA boundary + McGuire rasters (SIR 2012-5177 thickness 2009, SIR 2012-5291 wlc predev→2011, SIR 2023-5143 wlc predev→2019 + 2017–19 biennium), USGS NWIS wells & water-level history, NGWMN, KGS WIZARD / WIMAS / HPA bedrock, TX TWDB Groundwater Database, NE DNR Statewide Well Registry + 2021 Groundwater Management Summary (23-NRD allocation rules), USDA NASS Census 2022, USDA NASS IWMS 2018 (Table 28 method mix), USDA ERS cost + returns, EPA eGRID 2022, EIA State Electricity Profiles (industrial retail prices), NOAA NCEI nClimDiv per-county precipitation (1895–present), Deines et al. 2019 AIM-HPA (annual Landsat irrigation classification, 1984–2017), US Census TIGER/Line 2022."
           />
           <Col
             num="4"
@@ -67,6 +67,11 @@ export default function MethodologyStrip({ countyCount }: { countyCount: number 
               href="https://dnr.nebraska.gov/groundwater/groundwater-management"
               label="Nebraska DNR, 2021"
               body="Groundwater Management Summary (annual report). Source of our manually-curated 8-NRD allocation-rule table: base allocations, carryforward caps, moratoria, Compact-Call hard caps, NCORPE streamflow-augmentation co-ownership."
+            />
+            <Ref
+              href="https://www.hydroshare.org/resource/a371fd69d41b4232806d81e17fe4efcb/"
+              label="Deines, J.M., et al., 2019"
+              body="Annual Irrigation Maps — High Plains Aquifer (AIM-HPA). 30 m binary Landsat classification, 1984–2017, 34 annual rasters. RSE 233: 111400. Per-county zonal sums drive the 'Irrigated acres' trajectory in every drill-down."
             />
             <Ref
               href="https://cida.usgs.gov/ngwmn/"

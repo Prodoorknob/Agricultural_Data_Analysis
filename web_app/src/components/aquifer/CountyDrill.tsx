@@ -2,6 +2,7 @@
 
 import type { CountyProps, Scenario } from './types';
 import { STATES, cropMix, depColor, effectiveDecline, fmt, thicknessAt, SCENARIOS } from './aquifer-math';
+import { useIrrigationHistory } from './useIrrigationHistory';
 
 interface Props {
   county: CountyProps;
@@ -14,6 +15,8 @@ export default function CountyDrill({ county, year, scenario, onClose }: Props) 
   const thkNow = thicknessAt(county, year, scenario);
   const dclEff = effectiveDecline(county);
   const hasModelBand = county.dclLo != null && county.dclHi != null && county.dsrc === 'model';
+  const { data: irrHist } = useIrrigationHistory();
+  const irrSeries = irrHist?.counties[county.fips] ?? null;
 
   // Server-computed years-until-uneconomic with conformal band (preferred),
   // else a local estimate from the current decline rate.
@@ -182,6 +185,58 @@ export default function CountyDrill({ county, year, scenario, onClose }: Props) 
         </div>
       </div>
 
+      {irrSeries && irrSeries.length > 3 && (() => {
+        // Deines et al. 2019 AIM-HPA annual irrigated acres 1984-2017.
+        const minY = irrSeries[0][0];
+        const maxY = irrSeries[irrSeries.length - 1][0];
+        const vals = irrSeries.map((p) => p[1]);
+        const maxAc = Math.max(...vals, 1);
+        const first = vals[0];
+        const last = vals[vals.length - 1];
+        const changePct = first > 0 ? ((last - first) / first) * 100 : 0;
+        const cw = 380, ch = 70;
+        const xOf = (yr: number) => ((yr - minY) / (maxY - minY)) * cw;
+        const yOf = (ac: number) => ch - (ac / maxAc) * ch;
+        const path = irrSeries
+          .map(([y, ac], i) => `${i === 0 ? 'M' : 'L'}${xOf(y).toFixed(1)},${yOf(ac).toFixed(1)}`)
+          .join(' ');
+        const areaPath =
+          `M0,${ch} L${irrSeries.map(([y, ac]) => `${xOf(y).toFixed(1)},${yOf(ac).toFixed(1)}`).join(' L')} L${cw},${ch} Z`;
+        return (
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
+              <div className="eyebrow">Irrigated acres · Deines 2019 ({minY}–{maxY})</div>
+              <div className="mono" style={{
+                fontSize: 10,
+                color: changePct > 5 ? 'var(--field)' : changePct < -5 ? 'var(--negative)' : 'var(--text3)',
+                fontWeight: 700,
+              }}>
+                {changePct >= 0 ? '+' : ''}{changePct.toFixed(0)}% vs. {minY}
+              </div>
+            </div>
+            <div style={{ background: 'var(--surface2)', borderRadius: 'var(--radius-sm)', padding: 6 }}>
+              <svg viewBox={`0 0 ${cw} ${ch + 14}`} style={{ width: '100%' }}>
+                <path d={areaPath} fill="var(--harvest-tint)" opacity="0.55" />
+                <path d={path} fill="none" stroke="var(--harvest)" strokeWidth="1.5" />
+                <text x="2" y="10" fontSize="9" fontFamily="var(--font-mono)" fill="var(--text3)">
+                  {(maxAc / 1000).toFixed(0)}k ac
+                </text>
+                <text x="2" y={ch - 2} fontSize="9" fontFamily="var(--font-mono)" fill="var(--text3)">0</text>
+                <text x={cw - 30} y={ch + 12} fontSize="9" fontFamily="var(--font-mono)" fill="var(--text3)">
+                  {maxY}
+                </text>
+                <text x="2" y={ch + 12} fontSize="9" fontFamily="var(--font-mono)" fill="var(--text3)">
+                  {minY}
+                </text>
+              </svg>
+            </div>
+            <div className="mono" style={{ fontSize: 9, color: 'var(--text3)', marginTop: 4, lineHeight: 1.5 }}>
+              Annual Landsat-derived irrigated area, 30 m binary classification. Source: Deines et al. 2019 RSE 233: 111400.
+            </div>
+          </div>
+        );
+      })()}
+
       <div>
         <div className="eyebrow">Who&apos;s drawing the water · {year <= 2024 ? 'measured' : 'baseline crop mix'}</div>
         {crops.length === 0 ? (
@@ -302,6 +357,7 @@ export default function CountyDrill({ county, year, scenario, onClose }: Props) 
           <Chip on>eGRID 2022</Chip>
           <Chip on>NOAA nClimDiv (1895–2024)</Chip>
           <Chip on>EIA State Electricity Profiles</Chip>
+          <Chip on={!!irrSeries}>Deines 2019 AIM-HPA (1984–2017)</Chip>
         </div>
         <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 8, lineHeight: 1.55 }}>
           {county.tsrc === 'wells' && 'Thickness + decline derived from monitoring wells (WIZARD / NGWMN / TWDB / NE DNR).'}
