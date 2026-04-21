@@ -36,12 +36,13 @@ export default function TimeScrubber({ year, onYear, playing, onPlay, counties, 
     document.addEventListener('mouseup', onUp);
   };
 
-  // Sparkline of regional mean thickness over time
+  // Sparkline of regional mean thickness over time — on-HPA counties only.
+  const onHpa = counties.filter((c) => c.onHpa && c.thk != null);
   const sparkData: Array<{ y: number; v: number }> = [];
   for (let y = 1950; y <= 2100; y += 5) {
     let sum = 0;
-    for (const c of counties) sum += Math.max(0, thicknessAt(c, y, scenario));
-    sparkData.push({ y, v: counties.length ? sum / counties.length : 0 });
+    for (const c of onHpa) sum += Math.max(0, thicknessAt(c, y, scenario));
+    sparkData.push({ y, v: onHpa.length ? sum / onHpa.length : 0 });
   }
   const maxV = Math.max(...sparkData.map((d) => d.v), 1);
   const sparkW = 720, sparkH = 34;
@@ -51,7 +52,7 @@ export default function TimeScrubber({ year, onYear, playing, onPlay, counties, 
     year < 1960 ? 'Pre-center-pivot era — aquifer near pristine baseline' :
     year < 1980 ? 'Center-pivot irrigation spreads across the High Plains' :
     year < 2000 ? 'Peak pumping decades — extraction outpaces recharge 10×' :
-    year <= 2024 ? 'Measured present — 248 counties ground-truthed' :
+    year <= 2024 ? `Measured present — ${onHpa.length} HPA counties ground-truthed` :
     year <= 2050 ? 'Projected · scenario-driven' :
                    'Long-horizon projection · uncertainty grows';
 

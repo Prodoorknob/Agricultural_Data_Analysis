@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import type { CountyProps, Scenario } from './types';
-import { depColor, fmt, thicknessAt } from './aquifer-math';
+import { depColor, effectiveDecline, fmt, thicknessAt } from './aquifer-math';
 
 type Tab = 'dry' | 'fast' | 'pump';
 
@@ -17,13 +17,16 @@ interface Props {
 export default function Ranking({ counties, scenario, year, selected, onSelect }: Props) {
   const [tab, setTab] = useState<Tab>('dry');
 
+  // Leaderboards only make sense for HPA counties — off-aquifer rows have
+  // null thickness and shouldn't pad "closest to zero" etc.
+  const onHpa = counties.filter((c) => c.onHpa && c.thk != null);
   let sorted: Array<{ c: CountyProps; v: number }>;
   if (tab === 'dry') {
-    sorted = counties.map((c) => ({ c, v: thicknessAt(c, year, scenario) })).sort((a, b) => a.v - b.v).slice(0, 10);
+    sorted = onHpa.map((c) => ({ c, v: thicknessAt(c, year, scenario) })).sort((a, b) => a.v - b.v).slice(0, 10);
   } else if (tab === 'fast') {
-    sorted = counties.map((c) => ({ c, v: c.dcl })).sort((a, b) => a.v - b.v).slice(0, 10);
+    sorted = onHpa.map((c) => ({ c, v: effectiveDecline(c) })).sort((a, b) => a.v - b.v).slice(0, 10);
   } else {
-    sorted = counties.map((c) => ({ c, v: c.pmp || 0 })).sort((a, b) => b.v - a.v).slice(0, 10);
+    sorted = onHpa.map((c) => ({ c, v: c.pmp || 0 })).sort((a, b) => b.v - a.v).slice(0, 10);
   }
   const maxV = Math.max(...sorted.map((s) => Math.abs(s.v)), 1);
 
@@ -96,7 +99,7 @@ export default function Ranking({ counties, scenario, year, selected, onSelect }
               <div>
                 <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{c.name}</div>
                 <div className="mono" style={{ fontSize: 9, color: 'var(--text3)', letterSpacing: '0.08em' }}>
-                  {c.state} · {c.dq === 'modeled_high' ? 'measured' : 'modeled'}
+                  {c.state} · {c.tsrc === 'wells' ? 'measured' : c.tsrc === 'raster' ? 'USGS raster' : 'modeled'}
                 </div>
               </div>
               <div>

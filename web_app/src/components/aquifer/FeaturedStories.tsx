@@ -109,8 +109,12 @@ export default function FeaturedStories({ counties, onSelect }: Props) {
                 display: 'flex', gap: 12, alignItems: 'center', marginTop: 8,
                 paddingTop: 14, borderTop: '1px solid var(--border)', flexWrap: 'wrap',
               }}>
-                <Mini label="thk" value={`${s.c.thk.toFixed(0)}m`} />
-                <Mini label="decl" value={s.c.dcl.toFixed(2)} valueColor={s.c.dcl < -0.3 ? 'var(--negative)' : 'var(--text)'} />
+                <Mini label="thk" value={s.c.thk != null ? `${s.c.thk.toFixed(0)}m` : '—'} />
+                <Mini
+                  label="decl"
+                  value={(s.c.dclP ?? s.c.dcl) != null ? ((s.c.dclP ?? s.c.dcl) as number).toFixed(2) : '—'}
+                  valueColor={((s.c.dclP ?? s.c.dcl) ?? 0) < -0.3 ? 'var(--negative)' : 'var(--text)'}
+                />
                 <Mini label="pmp" value={fmt.af(s.c.pmp)} />
                 <span className="mono" style={{ fontSize: 10, color: s.color, marginLeft: 'auto', letterSpacing: '0.12em', fontWeight: 700 }}>OPEN →</span>
               </div>

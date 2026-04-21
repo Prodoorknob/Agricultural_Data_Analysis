@@ -6,8 +6,13 @@ import type { CountyCollection, CountyProps } from './types';
 
 /**
  * Public GeoJSON built by aquifer-watch/scripts/build_web_geojson.py.
- * 606 HPA counties, ~0.74 MB, simplified at 0.005 deg Douglas-Peucker.
- * Re-published on every ingest refresh; safe to fetch from the client.
+ * 606 counties, ~1.0 MB, simplified at 0.005° Douglas-Peucker.
+ *
+ * As of 2026-04-21 the payload carries USGS McGuire raster thickness fills,
+ * HPA footprint overlap per county, NB02 model predictions + 80% conformal
+ * bands on decline, and a server-computed `years_until_uneconomic`. Off-HPA
+ * counties carry `data_quality === "no_data"` and have null thickness — the
+ * client must NOT render them as regular aquifer counties (dim/gray instead).
  */
 export const BASELINE_URL =
   'https://usda-analysis-datasets.s3.amazonaws.com/aquiferwatch/web/baseline_counties.geojson';
@@ -19,9 +24,23 @@ interface RawProps {
   county_name: string;
   saturated_thickness_m: number | null;
   annual_decline_m: number | null;
-  annual_decline_m_pred: number | null;
   recharge_mm_yr: number | null;
+  hpa_overlap_pct: number | null;
+  overlap_area_km2: number | null;
+  county_area_km2: number | null;
+  thickness_source: 'wells' | 'raster' | 'fallback' | 'none' | null;
+  annual_decline_m_pred: number | null;
+  decline_lo_m: number | null;
+  decline_hi_m: number | null;
+  thickness_pred_next_m: number | null;
+  decline_source: 'model' | 'heuristic' | null;
+  years_until_uneconomic: number | null;
+  years_until_uneconomic_lo: number | null;
+  years_until_uneconomic_hi: number | null;
+  model_id: string | null;
+  coverage_target: number | null;
   pumping_af_yr: number | null;
+  pumping_af_yr_usgs2015: number | null;
   irrigated_acres_total: number | null;
   acres_corn: number | null;
   acres_soybeans: number | null;
@@ -32,7 +51,8 @@ interface RawProps {
   ag_value_usd: number | null;
   kwh_per_af_pumped: number | null;
   grid_intensity_kg_per_kwh: number | null;
-  data_quality: 'modeled_high' | 'modeled_low';
+  n_wells: number | null;
+  data_quality: 'modeled_high' | 'modeled_low' | 'no_data';
 }
 
 /** Polygon / MultiPolygon area-weighted centroid (lon/lat). */
@@ -58,7 +78,6 @@ function centroid(geom: Geometry): [number, number] {
     }
   }
   if (area === 0) {
-    // degenerate fallback: mean of first ring
     const r = rings[0];
     const mx = r.reduce((s, p) => s + p[0], 0) / r.length;
     const my = r.reduce((s, p) => s + p[1], 0) / r.length;
@@ -72,22 +91,28 @@ function num(v: number | null | undefined, fallback: number): number {
   return v != null && Number.isFinite(v) ? v : fallback;
 }
 
+function nullable(v: number | null | undefined): number | null {
+  return v != null && Number.isFinite(v) ? v : null;
+}
+
 /**
  * Adapt parquet-backed long-form fields to the design's short-form schema.
- * Falls back to HPA-median thickness (30 m) and a conservative decline
- * (-0.3 m/yr) when a county is modeled_low with nulls — keeps the map
- * renderable while the Tier-2 GBDT imputation is still pending.
+ *
+ * Key invariant: off-HPA counties (thickness_source === 'none' or
+ * hpa_overlap_pct === 0) keep `thk/dcl/yrsU` as null. The map dims them;
+ * aggregations skip them. No 30m halo.
  */
 function adapt(raw: RawProps, geom: Geometry): CountyProps {
   const [cx, cy] = centroid(geom);
-  const dcl = raw.annual_decline_m ?? raw.annual_decline_m_pred ?? -0.3;
+  const hpa = num(raw.hpa_overlap_pct, 0);
+  const onHpa = hpa > 0;
   return {
     fips: raw.fips,
     state: raw.state,
     name: raw.county_name,
-    thk: num(raw.saturated_thickness_m, 30),
-    dcl: num(dcl, -0.3),
-    rch: num(raw.recharge_mm_yr, 20),
+    thk: nullable(raw.saturated_thickness_m),
+    dcl: nullable(raw.annual_decline_m),
+    rch: nullable(raw.recharge_mm_yr),
     pmp: num(raw.pumping_af_yr, 0),
     acres: num(raw.irrigated_acres_total, 0),
     corn: num(raw.acres_corn, 0),
@@ -99,6 +124,17 @@ function adapt(raw: RawProps, geom: Geometry): CountyProps {
     agv: num(raw.ag_value_usd, 0),
     kwh: num(raw.kwh_per_af_pumped, 220),
     co2i: num(raw.grid_intensity_kg_per_kwh, 0.4),
+    hpa,
+    onHpa,
+    tsrc: raw.thickness_source ?? 'none',
+    dclP: nullable(raw.annual_decline_m_pred),
+    dclLo: nullable(raw.decline_lo_m),
+    dclHi: nullable(raw.decline_hi_m),
+    thkP: nullable(raw.thickness_pred_next_m),
+    dsrc: raw.decline_source,
+    yrsU: nullable(raw.years_until_uneconomic),
+    yrsULo: nullable(raw.years_until_uneconomic_lo),
+    yrsUHi: nullable(raw.years_until_uneconomic_hi),
     dq: raw.data_quality,
     cx,
     cy,

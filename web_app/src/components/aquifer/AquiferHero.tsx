@@ -2,7 +2,7 @@ export default function AquiferHero() {
   return (
     <section style={{ position: 'relative', padding: '56px 0 40px', overflow: 'hidden' }}>
       <div>
-        <div className="eyebrow">High Plains Aquifer · 8 states · 606 counties</div>
+        <div className="eyebrow">High Plains Aquifer · 8 states · 227 counties on footprint</div>
         <h1
           className="stat"
           style={{
@@ -21,8 +21,9 @@ export default function AquiferHero() {
         <p style={{ maxWidth: 720, color: 'var(--text2)', fontSize: 16, lineHeight: 1.6 }}>
           A county-level accountability map of the aquifer that sustains{' '}
           <strong style={{ color: 'var(--text)', fontWeight: 700 }}>$35 billion</strong>{' '}
-          in annual agricultural production across the High Plains. Real measurements from 202 of 606 counties,
-          physics-first depletion math, and a scenario engine that makes the trade-offs of inaction visible.
+          in annual agricultural production across the High Plains. Thickness + decline from 208 measurement-backed counties,
+          plus 19 more sampled from USGS McGuire&apos;s published rasters (SIR 2012-5177 / 5291). NB02 CatBoost forecaster with
+          conformal 80% bands on 89 counties. Every number traces to a source.
         </p>
         <div
           style={{
@@ -32,9 +33,9 @@ export default function AquiferHero() {
             borderBottom: '1px solid var(--border2)',
           }}
         >
-          <Kpi eyebrow="Counties measured" value="202" suffix="/606" desc="33% ground-truthed thickness + decline" />
+          <Kpi eyebrow="Counties on footprint" value="227" suffix="/606" desc="208 well-measured + 19 USGS raster; 379 HPA-state but off-aquifer" />
           <Kpi eyebrow="Pumping estimate" value="9.5" suffix="M AF/yr" desc="0.52× USGS 2015 · conservative" />
-          <Kpi eyebrow="Fastest decline" value="−0.97" suffix="m/yr" desc="worst county, over the past decade" valueColor="var(--negative)" />
+          <Kpi eyebrow="NB02 spatial-CV R²" value="0.93" suffix="" desc="CatBoost, 90-county TWDB+WIZARD panel" valueColor="var(--field)" />
           <Kpi eyebrow="Simulation horizon" value="1950—2100" suffix="" desc="annual · per county · 6 scenarios" last />
         </div>
       </div>

@@ -59,7 +59,9 @@ export default function OgallalaReport() {
     return () => window.clearInterval(iv);
   }, [playing]);
 
-  const selectedC = selected ? counties.find((c) => c.fips === selected) ?? null : null;
+  // Only on-HPA counties are drill-targetable — off-aquifer rows have null
+  // thickness and aren't part of the Ogallala narrative.
+  const selectedC = selected ? counties.find((c) => c.fips === selected && c.onHpa) ?? null : null;
 
   const agg = useMemo(
     () => (counties.length ? aggregate(counties, liveScenario, year) : null),
@@ -162,23 +164,40 @@ export default function OgallalaReport() {
                 </div>
               ))}
             </div>
-            <div className="mono" style={{ fontSize: 9, color: 'var(--text3)', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
-              <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', marginRight: 4, background: 'rgba(255,255,255,0.5)', border: '1.5px solid var(--text)' }} />
-              measured · <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', marginRight: 4, background: 'transparent', border: '1px dashed var(--text3)' }} />modeled fallback
+            <div className="mono" style={{ fontSize: 9, color: 'var(--text3)', display: 'flex', flexDirection: 'column', gap: 4, marginTop: 8 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: 'var(--field)' }} />
+                <span>well-measured (WIZARD · NGWMN · TWDB · NE DNR)</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: 'var(--harvest)' }} />
+                <span>USGS McGuire raster (SIR 2012-5177 / 5291)</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: 'var(--surface2)', opacity: 0.5, border: '1px solid var(--border)' }} />
+                <span>off-aquifer (not part of HPA footprint)</span>
+              </div>
             </div>
           </div>
 
           {agg && counties.length > 0 && (
             <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: 14 }}>
               <div className="eyebrow">Region aggregate · {year}</div>
-              <KpiRow label="Mean thickness" value={(agg.totalThk / counties.length).toFixed(1)} unit="m" />
+              <KpiRow
+                label="Mean thickness"
+                value={agg.countOnHpa ? (agg.totalThk / agg.countOnHpa).toFixed(1) : '—'}
+                unit="m"
+              />
               <KpiRow
                 label="Depleted counties"
-                value={agg.countDepleted.toString()}
+                value={`${agg.countDepleted} / ${agg.countOnHpa}`}
                 valueColor={agg.countDepleted > 50 ? 'var(--negative)' : 'var(--text)'}
               />
               <KpiRow label="Pumping" value={fmt.af(agg.totalPmp)} unit="" />
               <KpiRow label="CO₂ footprint" value={agg.totalCO2.toFixed(1)} unit="Mt/yr" />
+              <div className="mono" style={{ fontSize: 9, color: 'var(--text3)', marginTop: 8, letterSpacing: '0.06em' }}>
+                {agg.countOnHpa} of {counties.length} counties on HPA footprint
+              </div>
             </div>
           )}
         </div>
@@ -216,8 +235,15 @@ export default function OgallalaReport() {
           {(() => {
             if (!hovered) return null;
             const c = counties.find((x) => x.fips === hovered);
-            if (!c) return null;
+            if (!c || !c.onHpa) return null;
             const t = thicknessAt(c, year, liveScenario);
+            const dclShown = c.dclP ?? c.dcl;
+            const hasBand = c.dclLo != null && c.dclHi != null;
+            const sourceLabel =
+              c.tsrc === 'wells'    ? 'Measured · WIZARD/NGWMN/TWDB/NE DNR' :
+              c.tsrc === 'raster'   ? 'USGS McGuire raster (SIR 2012-5177)' :
+              c.tsrc === 'fallback' ? 'HPA-median fallback' :
+                                      '—';
             return (
               <div
                 style={{
@@ -225,7 +251,7 @@ export default function OgallalaReport() {
                   background: 'var(--surface)',
                   border: '1px solid var(--border2)',
                   borderRadius: 'var(--radius-md)',
-                  padding: '12px 14px', minWidth: 200,
+                  padding: '12px 14px', minWidth: 220,
                   boxShadow: 'var(--shadow-lg)',
                   pointerEvents: 'none',
                 }}
@@ -236,14 +262,22 @@ export default function OgallalaReport() {
                 <div className="stat" style={{ fontSize: 32, fontWeight: 800, margin: '4px 0 8px', color: depColor(t) }}>
                   {t.toFixed(1)} m
                 </div>
-                <TTRow label="decline" value={`${c.dcl.toFixed(2)} m/yr`} />
+                <TTRow label="decline" value={dclShown != null ? `${dclShown.toFixed(2)} m/yr` : '—'} />
+                {hasBand && c.dsrc === 'model' && (
+                  <TTRow
+                    label="80% band"
+                    value={`[${(c.dclLo as number).toFixed(2)}, ${(c.dclHi as number).toFixed(2)}]`}
+                  />
+                )}
+                <TTRow label="years→uneconomic" value={fmt.yr(c.yrsU)} />
                 <TTRow label="pumping" value={fmt.af(c.pmp)} />
                 <TTRow label="irr. acres" value={fmt.int(c.acres)} />
                 <div
                   className="mono"
-                  style={{ marginTop: 6, paddingTop: 6, borderTop: '1px solid var(--border)', fontSize: 9, color: 'var(--text3)', letterSpacing: '0.1em' }}
+                  style={{ marginTop: 6, paddingTop: 6, borderTop: '1px solid var(--border)', fontSize: 9, color: 'var(--text3)', letterSpacing: '0.08em', lineHeight: 1.5 }}
                 >
-                  {c.dq === 'modeled_high' ? '● measured' : '○ modeled'}
+                  {sourceLabel}
+                  {c.dsrc === 'model' && <span style={{ color: 'var(--field)' }}> · NB02 CatBoost pred</span>}
                 </div>
               </div>
             );

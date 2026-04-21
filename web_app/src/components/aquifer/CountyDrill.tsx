@@ -1,7 +1,7 @@
 'use client';
 
 import type { CountyProps, Scenario } from './types';
-import { STATES, cropMix, depColor, fmt, thicknessAt, SCENARIOS } from './aquifer-math';
+import { STATES, cropMix, depColor, effectiveDecline, fmt, thicknessAt, SCENARIOS } from './aquifer-math';
 
 interface Props {
   county: CountyProps;
@@ -12,9 +12,20 @@ interface Props {
 
 export default function CountyDrill({ county, year, scenario, onClose }: Props) {
   const thkNow = thicknessAt(county, year, scenario);
-  const yrsLeft = county.dcl < 0
-    ? Math.max(0, (Math.max(0, thkNow) - 5) / (-county.dcl * (1 + scenario.pumpDelta)))
-    : 999;
+  const dclEff = effectiveDecline(county);
+  const hasModelBand = county.dclLo != null && county.dclHi != null && county.dsrc === 'model';
+
+  // Server-computed years-until-uneconomic with conformal band (preferred),
+  // else a local estimate from the current decline rate.
+  const yrsUi =
+    county.yrsU != null
+      ? county.yrsU
+      : dclEff < 0 && county.thk != null
+        ? Math.max(0, (Math.max(0, county.thk) - 9) / -dclEff)
+        : 999;
+  const yrsULo = county.yrsULo ?? null;
+  const yrsUHi = county.yrsUHi ?? null;
+
   const crops = cropMix(county);
   const totalWater = crops.reduce((s, c) => s + c.waterAF, 0);
 
@@ -26,7 +37,7 @@ export default function CountyDrill({ county, year, scenario, onClose }: Props) 
       tbau: thicknessAt(county, y, SCENARIOS[0]),
     });
   }
-  const maxT = Math.max(...curve.map((d) => Math.max(d.t, d.tbau)), county.thk * 1.1);
+  const maxT = Math.max(...curve.map((d) => Math.max(d.t, d.tbau)), (county.thk ?? 0) * 1.1, 10);
   const cw = 380, ch = 110;
   const curvePath = (key: 't' | 'tbau') =>
     curve
@@ -39,9 +50,16 @@ export default function CountyDrill({ county, year, scenario, onClose }: Props) 
   const yearIdx = (year - 1950) / 2;
   const yearX = (yearIdx / (curve.length - 1)) * cw;
 
-  const dqTagStyle = county.dq === 'modeled_high'
-    ? { background: 'var(--field-tint)', color: 'var(--field)', border: '1px solid var(--field)' }
-    : { background: 'var(--harvest-tint)', color: 'var(--harvest)', border: '1px solid var(--harvest)' };
+  // Source-colored chip style based on thickness provenance.
+  const srcTagStyle =
+    county.tsrc === 'wells'    ? { background: 'var(--field-tint)',   color: 'var(--field)',   border: '1px solid var(--field)' } :
+    county.tsrc === 'raster'   ? { background: 'var(--harvest-tint)', color: 'var(--harvest)', border: '1px solid var(--harvest)' } :
+                                 { background: 'var(--surface2)',     color: 'var(--text3)',   border: '1px solid var(--border)' };
+  const srcLabel =
+    county.tsrc === 'wells'    ? 'Measured' :
+    county.tsrc === 'raster'   ? 'USGS raster' :
+    county.tsrc === 'fallback' ? 'Fallback' :
+                                 'No data';
 
   return (
     <div style={{
@@ -69,17 +87,42 @@ export default function CountyDrill({ county, year, scenario, onClose }: Props) 
         <div className="stat" style={{ fontSize: 32, fontWeight: 800, lineHeight: 1, margin: '6px 0', letterSpacing: '-0.01em', color: 'var(--text)' }}>
           {county.name}
         </div>
-        <div
-          className="mono"
-          style={{
-            display: 'inline-flex', alignItems: 'center', gap: 6,
-            fontSize: 10, padding: '3px 8px', borderRadius: 3, letterSpacing: '0.1em',
-            textTransform: 'uppercase',
-            ...dqTagStyle,
-          }}
-        >
-          <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'currentColor' }} />
-          {county.dq === 'modeled_high' ? 'Measured' : 'Modeled'}
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 2 }}>
+          <div
+            className="mono"
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              fontSize: 10, padding: '3px 8px', borderRadius: 3, letterSpacing: '0.1em',
+              textTransform: 'uppercase',
+              ...srcTagStyle,
+            }}
+          >
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'currentColor' }} />
+            {srcLabel}
+          </div>
+          {county.dsrc === 'model' && (
+            <div
+              className="mono"
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                fontSize: 10, padding: '3px 8px', borderRadius: 3, letterSpacing: '0.1em',
+                textTransform: 'uppercase',
+                background: 'var(--field-tint)', color: 'var(--field)', border: '1px solid var(--field)',
+              }}
+            >
+              NB02 · CatBoost
+            </div>
+          )}
+          <div
+            className="mono"
+            style={{
+              display: 'inline-flex', alignItems: 'center',
+              fontSize: 10, padding: '3px 8px', borderRadius: 3, letterSpacing: '0.1em',
+              color: 'var(--text3)', border: '1px solid var(--border)',
+            }}
+          >
+            HPA overlap {(county.hpa * 100).toFixed(0)}%
+          </div>
         </div>
       </div>
 
@@ -95,15 +138,25 @@ export default function CountyDrill({ county, year, scenario, onClose }: Props) 
         </div>
         <div>
           <div className="eyebrow">Annual decline</div>
-          <div className="stat" style={{ fontSize: 26, fontWeight: 800, lineHeight: 1, marginTop: 4, color: county.dcl < -0.5 ? 'var(--negative)' : 'var(--text)' }}>
-            {county.dcl > 0 ? '+' : ''}{county.dcl.toFixed(2)}<span style={{ fontSize: 11, color: 'var(--text3)', marginLeft: 3, fontWeight: 500 }}>m/yr</span>
+          <div className="stat" style={{ fontSize: 26, fontWeight: 800, lineHeight: 1, marginTop: 4, color: dclEff < -0.5 ? 'var(--negative)' : 'var(--text)' }}>
+            {dclEff > 0 ? '+' : ''}{dclEff.toFixed(2)}<span style={{ fontSize: 11, color: 'var(--text3)', marginLeft: 3, fontWeight: 500 }}>m/yr</span>
           </div>
+          {hasModelBand && (
+            <div className="mono" style={{ fontSize: 9, color: 'var(--text3)', marginTop: 2 }}>
+              80% CI [{(county.dclLo as number).toFixed(2)}, {(county.dclHi as number).toFixed(2)}]
+            </div>
+          )}
         </div>
         <div>
           <div className="eyebrow">Years-to-uneconomic</div>
           <div className="stat" style={{ fontSize: 26, fontWeight: 800, lineHeight: 1, marginTop: 4, color: 'var(--text)' }}>
-            {yrsLeft >= 999 ? '∞' : Math.round(yrsLeft)}<span style={{ fontSize: 11, color: 'var(--text3)', marginLeft: 3, fontWeight: 500 }}>yr</span>
+            {yrsUi >= 999 ? '∞' : Math.round(yrsUi)}<span style={{ fontSize: 11, color: 'var(--text3)', marginLeft: 3, fontWeight: 500 }}>yr</span>
           </div>
+          {yrsULo != null && yrsUHi != null && yrsULo !== yrsUHi && (
+            <div className="mono" style={{ fontSize: 9, color: 'var(--text3)', marginTop: 2 }}>
+              [{fmt.yr(yrsULo)}, {fmt.yr(yrsUHi)}]
+            </div>
+          )}
         </div>
       </div>
 
@@ -119,8 +172,8 @@ export default function CountyDrill({ county, year, scenario, onClose }: Props) 
           <svg viewBox={`0 0 ${cw} ${ch + 14}`} style={{ width: '100%' }}>
             <path d={curvePath('tbau')} fill="none" stroke="var(--text3)" strokeWidth="1" strokeDasharray="3 3" />
             <path d={curvePath('t')} fill="none" stroke="var(--field)" strokeWidth="2" />
-            <line x1="0" y1={ch - (5 / maxT) * ch} x2={cw} y2={ch - (5 / maxT) * ch} stroke="var(--negative)" strokeDasharray="2 2" strokeWidth="0.8" opacity="0.6" />
-            <text x="2" y={ch - (5 / maxT) * ch - 2} fontSize="8" fontFamily="var(--font-mono)" fill="var(--negative)">uneconomic (5 m)</text>
+            <line x1="0" y1={ch - (9 / maxT) * ch} x2={cw} y2={ch - (9 / maxT) * ch} stroke="var(--negative)" strokeDasharray="2 2" strokeWidth="0.8" opacity="0.6" />
+            <text x="2" y={ch - (9 / maxT) * ch - 2} fontSize="8" fontFamily="var(--font-mono)" fill="var(--negative)">uneconomic (9 m · Deines 2019)</text>
             <line x1={yearX} y1="0" x2={yearX} y2={ch} stroke="var(--text)" strokeWidth="1" />
             <circle cx={yearX} cy={ch - (Math.max(0, thkNow) / maxT) * ch} r="3" fill="var(--field)" stroke="var(--bg)" strokeWidth="1.5" />
             <text x="2" y="10" fontSize="9" fontFamily="var(--font-mono)" fill="var(--text3)">{maxT.toFixed(0)}m</text>
@@ -183,16 +236,23 @@ export default function CountyDrill({ county, year, scenario, onClose }: Props) 
       <div style={{ paddingTop: 12, borderTop: '1px dashed var(--border2)' }}>
         <div className="eyebrow" style={{ marginBottom: 8 }}>Provenance</div>
         <div className="mono" style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-          <Chip on={county.dq === 'modeled_high'}>Measurements</Chip>
+          <Chip on={county.tsrc === 'wells'}>WIZARD / NGWMN / TWDB / NE DNR</Chip>
+          <Chip on={county.tsrc === 'raster'}>USGS McGuire SIR 2012-5177</Chip>
+          <Chip on={county.dsrc === 'model'}>NB02 CatBoost + conformal</Chip>
           <Chip on>NASS Census 2022</Chip>
           <Chip on>IWMS 2023</Chip>
           <Chip on>ERS budgets</Chip>
           <Chip on>eGRID 2022</Chip>
         </div>
-        <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 8, lineHeight: 1.5 }}>
-          {county.dq === 'modeled_high'
-            ? 'Thickness + decline derived from WIZARD/NGWMN/TWDB/NE DEE monitoring wells.'
-            : 'HPA-median fallback applied. GBDT imputation pending (Tier 2).'}
+        <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 8, lineHeight: 1.55 }}>
+          {county.tsrc === 'wells' && 'Thickness + decline derived from monitoring wells (WIZARD / NGWMN / TWDB / NE DNR).'}
+          {county.tsrc === 'raster' && 'Thickness sampled from the USGS McGuire HPA raster (SIR 2012-5177, 2009); decline from the water-level-change raster (SIR 2012-5291, predev→2011 / 61 yrs).'}
+          {county.tsrc === 'fallback' && 'HPA-median fallback applied (thickness 30 m, decline −0.3 m/yr). Rare — occurs only when no well or raster source reaches the county.'}
+          {county.dsrc === 'model' && (
+            <>
+              <br />Next-year thickness forecast from NB02 (CatBoost, spatial-CV R² ≈ 0.93 on the TWDB + KGS WIZARD panel). 80% conformal bands via Romano et al. 2019 (CQR).
+            </>
+          )}
         </div>
       </div>
     </div>

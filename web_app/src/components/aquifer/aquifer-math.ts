@@ -69,16 +69,28 @@ export function depColor(thickness: number): string {
 }
 
 /**
+ * Prefer the NB02 model's decline prediction where available; fall back to
+ * the heuristic (WIZARD/TWDB/raster-derived) slope otherwise. This keeps the
+ * scenario math working even for counties outside the NB02 training panel.
+ */
+export function effectiveDecline(c: CountyProps): number {
+  if (c.dclP != null && Number.isFinite(c.dclP)) return c.dclP;
+  if (c.dcl != null && Number.isFinite(c.dcl)) return c.dcl;
+  return 0;
+}
+
+/**
  * Deterministic thickness model: linear back-projection from the 2024
  * baseline, optionally modified forward by a scenario's pumping delta
- * and threshold rule.
+ * and threshold rule. Returns 0 for counties with no thickness (off-HPA).
  */
 export function thicknessAt(c: CountyProps, year: number, scenario: Scenario): number {
   const baseline2024 = c.thk;
-  const declinePerYr = c.dcl;
+  if (baseline2024 == null) return 0; // off-HPA / no_data → no curve
+  const declinePerYr = effectiveDecline(c);
   const pumpMult = 1 + scenario.pumpDelta;
   let dec = declinePerYr * pumpMult;
-  if (scenario.threshold != null && c.thk < scenario.threshold) dec = 0;
+  if (scenario.threshold != null && baseline2024 < scenario.threshold) dec = 0;
 
   if (year <= 2024) {
     return baseline2024 - declinePerYr * (year - 2024);
@@ -86,16 +98,24 @@ export function thicknessAt(c: CountyProps, year: number, scenario: Scenario): n
   return baseline2024 + dec * (year - 2024);
 }
 
+/**
+ * Region-level aggregate. **Only counties with `onHpa` contribute** — off-HPA
+ * counties are part of the HPA-state geography but sit outside the aquifer
+ * footprint, so they shouldn't pad the mean thickness or depletion counts.
+ */
 export function aggregate(counties: CountyProps[], scenario: Scenario, year = 2050): Aggregate {
   let totalThk = 0;
   let totalPmp = 0;
   let totalAg = 0;
   let totalAcres = 0;
   let countDepleted = 0;
+  let countOnHpa = 0;
   let totalCO2 = 0;
   const pumpMult = 1 + scenario.pumpDelta;
 
   for (const c of counties) {
+    if (!c.onHpa) continue;
+    countOnHpa++;
     const thkNow = thicknessAt(c, year, scenario);
     if (thkNow < 5) countDepleted++;
     totalThk += Math.max(0, thkNow);
@@ -112,7 +132,7 @@ export function aggregate(counties: CountyProps[], scenario: Scenario, year = 20
     totalAcres += c.acres;
     totalCO2 += (pmp * (c.kwh || 220) * (c.co2i || 0.4)) / 1e9;
   }
-  return { totalThk, totalPmp, totalAg, totalAcres, countDepleted, totalCO2 };
+  return { totalThk, totalPmp, totalAg, totalAcres, countDepleted, totalCO2, countOnHpa };
 }
 
 export interface CropRow extends Crop {
@@ -153,7 +173,8 @@ export const fmt = {
   pct(n: number): string {
     return (n * 100).toFixed(0) + '%';
   },
-  yr(n: number): string {
+  yr(n: number | null | undefined): string {
+    if (n == null || !Number.isFinite(n)) return '—';
     return n >= 999 ? '∞' : Math.round(n) + ' yr';
   },
   usd(n: number | null | undefined): string {

@@ -100,7 +100,11 @@ export default function CountyMap({
     return d;
   }, [geo]);
 
-  /* HPA exterior outline: edges that appear exactly once. */
+  /* HPA exterior outline: dissolve the on-aquifer counties into a single
+     polygon and extract its boundary. "Boundary" = edges that appear an
+     odd number of times across aquifer-county polygons (the even ones are
+     internal). Uses hpa_overlap_pct > 0 counties only — without this the
+     "outline" is really just the HPA-state outline. */
   const hpaOutlineD = useMemo(() => {
     const edges = new Map<string, { count: number; pts: [Position, Position] }>();
     const key = (a: Position, b: Position) => {
@@ -109,6 +113,7 @@ export default function CountyMap({
       return ka < kb ? `${ka}|${kb}` : `${kb}|${ka}`;
     };
     for (const f of geo.features) {
+      if (!f.properties.onHpa) continue;
       for (const ring of ringsOf(f.geometry)) {
         for (let i = 0; i < ring.length - 1; i++) {
           const k = key(ring[i], ring[i + 1]);
@@ -120,7 +125,7 @@ export default function CountyMap({
     }
     let d = '';
     for (const e of edges.values()) {
-      if (e.count !== 1) continue;
+      if (e.count % 2 === 0) continue;
       const [ax, ay] = project(e.pts[0][0] as number, e.pts[0][1] as number, W, H);
       const [bx, by] = project(e.pts[1][0] as number, e.pts[1][1] as number, W, H);
       d += `M${ax.toFixed(1)},${ay.toFixed(1)}L${bx.toFixed(1)},${by.toFixed(1)}`;
@@ -194,9 +199,24 @@ export default function CountyMap({
           })}
         </g>
 
-        {/* County fills */}
+        {/* County fills — off-HPA counties render as flat gray tiles with
+            no interaction, so the choropleth story stays on the aquifer. */}
         <g>
           {projected.map((f) => {
+            const off = !f.props.onHpa;
+            if (off) {
+              return (
+                <path
+                  key={`${f.fips}-off`}
+                  d={pathD(f.paths)}
+                  fill="var(--surface2)"
+                  opacity={0.35}
+                  stroke="transparent"
+                  strokeWidth={0}
+                  style={{ pointerEvents: 'none' }}
+                />
+              );
+            }
             if (mode === 'choropleth') {
               const thk = thkAtYear(f.props);
               const isSel = selected === f.fips;
@@ -270,6 +290,7 @@ export default function CountyMap({
       {mode === 'columns' && (
         <g>
           {sortedForColumns.map((f) => {
+            if (!f.props.onHpa) return null;
             const thk = Math.max(0, thkAtYear(f.props));
             const severity = Math.max(0, Math.min(1, 1 - thk / 60));
             const decline = f.props.dcl || 0;
@@ -339,6 +360,7 @@ export default function CountyMap({
       {mode === 'dots' && (
         <g>
           {projected.map((f) => {
+            if (!f.props.onHpa) return null;
             const thk = thkAtYear(f.props);
             const r = Math.max(1.5, Math.sqrt((f.props.pmp || 0) / 1500));
             const isSel = selected === f.fips;
