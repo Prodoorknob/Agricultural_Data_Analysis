@@ -1,0 +1,707 @@
+{
+  "version": 1,
+  "created": "2026-04-19T00:06:28.887709+00:00",
+  "entries": [
+    {
+      "state": "OR",
+      "commodity": "BARLEY",
+      "year": 2025,
+      "reason": "PENDING_PUBLICATION",
+      "detail": "recheck_after=2026-10-15",
+      "classified_at": "2026-04-19T22:27:24.696988+00:00",
+      "classified_in_round": 1,
+      "recheck_after": "2026-10-15"
+    },
+    {
+      "state": "SD",
+      "commodity": "BARLEY",
+      "year": 2025,
+      "reason": "PENDING_PUBLICATION",
+      "detail": "recheck_after=2026-10-15",
+      "classified_at": "2026-04-19T22:27:24.706709+00:00",
+      "classified_in_round": 1,
+      "recheck_after": "2026-10-15"
+    },
+    {
+      "state": "IA",
+      "commodity": "CORN",
+      "year": 2025,
+      "reason": "PENDING_PUBLICATION",
+      "detail": "recheck_after=2026-10-15",
+      "classified_at": "2026-04-19T22:27:24.714009+00:00",
+      "classified_in_round": 1,
+      "recheck_after": "2026-10-15"
+    },
+    {
+      "state": "IL",
+      "commodity": "CORN",
+      "year": 2025,
+      "reason": "PENDING_PUBLICATION",
+      "detail": "recheck_after=2026-10-15",
+      "classified_at": "2026-04-19T22:27:24.714009+00:00",
+      "classified_in_round": 1,
+      "recheck_after": "2026-10-15"
+    },
+    {
+      "state": "IN",
+      "commodity": "CORN",
+      "year": 2025,
+      "reason": "PENDING_PUBLICATION",
+      "detail": "recheck_after=2026-10-15",
+      "classified_at": "2026-04-19T22:27:24.714009+00:00",
+      "classified_in_round": 1,
+      "recheck_after": "2026-10-15"
+    },
+    {
+      "state": "KS",
+      "commodity": "CORN",
+      "year": 2025,
+      "reason": "PENDING_PUBLICATION",
+      "detail": "recheck_after=2026-10-15",
+      "classified_at": "2026-04-19T22:27:24.714009+00:00",
+      "classified_in_round": 1,
+      "recheck_after": "2026-10-15"
+    },
+    {
+      "state": "MN",
+      "commodity": "CORN",
+      "year": 2025,
+      "reason": "PENDING_PUBLICATION",
+      "detail": "recheck_after=2026-10-15",
+      "classified_at": "2026-04-19T22:27:24.714009+00:00",
+      "classified_in_round": 1,
+      "recheck_after": "2026-10-15"
+    },
+    {
+      "state": "MO",
+      "commodity": "CORN",
+      "year": 2025,
+      "reason": "PENDING_PUBLICATION",
+      "detail": "recheck_after=2026-10-15",
+      "classified_at": "2026-04-19T22:27:24.714009+00:00",
+      "classified_in_round": 1,
+      "recheck_after": "2026-10-15"
+    },
+    {
+      "state": "NE",
+      "commodity": "CORN",
+      "year": 2025,
+      "reason": "PENDING_PUBLICATION",
+      "detail": "recheck_after=2026-10-15",
+      "classified_at": "2026-04-19T22:27:24.714009+00:00",
+      "classified_in_round": 1,
+      "recheck_after": "2026-10-15"
+    },
+    {
+      "state": "OH",
+      "commodity": "CORN",
+      "year": 2025,
+      "reason": "PENDING_PUBLICATION",
+      "detail": "recheck_after=2026-10-15",
+      "classified_at": "2026-04-19T22:27:24.714009+00:00",
+      "classified_in_round": 1,
+      "recheck_after": "2026-10-15"
+    },
+    {
+      "state": "SD",
+      "commodity": "CORN",
+      "year": 2025,
+      "reason": "PENDING_PUBLICATION",
+      "detail": "recheck_after=2026-10-15",
+      "classified_at": "2026-04-19T22:27:24.714009+00:00",
+      "classified_in_round": 1,
+      "recheck_after": "2026-10-15"
+    },
+    {
+      "state": "WI",
+      "commodity": "CORN",
+      "year": 2025,
+      "reason": "PENDING_PUBLICATION",
+      "detail": "recheck_after=2026-10-15",
+      "classified_at": "2026-04-19T22:27:24.714009+00:00",
+      "classified_in_round": 1,
+      "recheck_after": "2026-10-15"
+    },
+    {
+      "state": "CA",
+      "commodity": "HAY",
+      "year": 2025,
+      "reason": "PENDING_PUBLICATION",
+      "detail": "recheck_after=2026-10-15",
+      "classified_at": "2026-04-19T22:27:24.735018+00:00",
+      "classified_in_round": 1,
+      "recheck_after": "2026-10-15"
+    },
+    {
+      "state": "ID",
+      "commodity": "HAY",
+      "year": 2025,
+      "reason": "PENDING_PUBLICATION",
+      "detail": "recheck_after=2026-10-15",
+      "classified_at": "2026-04-19T22:27:24.735018+00:00",
+      "classified_in_round": 1,
+      "recheck_after": "2026-10-15"
+    },
+    {
+      "state": "KS",
+      "commodity": "HAY",
+      "year": 2025,
+      "reason": "PENDING_PUBLICATION",
+      "detail": "recheck_after=2026-10-15",
+      "classified_at": "2026-04-19T22:27:24.748020+00:00",
+      "classified_in_round": 1,
+      "recheck_after": "2026-10-15"
+    },
+    {
+      "state": "MN",
+      "commodity": "HAY",
+      "year": 2025,
+      "reason": "PENDING_PUBLICATION",
+      "detail": "recheck_after=2026-10-15",
+      "classified_at": "2026-04-19T22:27:24.748020+00:00",
+      "classified_in_round": 1,
+      "recheck_after": "2026-10-15"
+    },
+    {
+      "state": "MO",
+      "commodity": "HAY",
+      "year": 2025,
+      "reason": "PENDING_PUBLICATION",
+      "detail": "recheck_after=2026-10-15",
+      "classified_at": "2026-04-19T22:27:24.748020+00:00",
+      "classified_in_round": 1,
+      "recheck_after": "2026-10-15"
+    },
+    {
+      "state": "MT",
+      "commodity": "HAY",
+      "year": 2025,
+      "reason": "PENDING_PUBLICATION",
+      "detail": "recheck_after=2026-10-15",
+      "classified_at": "2026-04-19T22:27:24.748020+00:00",
+      "classified_in_round": 1,
+      "recheck_after": "2026-10-15"
+    },
+    {
+      "state": "NE",
+      "commodity": "HAY",
+      "year": 2025,
+      "reason": "PENDING_PUBLICATION",
+      "detail": "recheck_after=2026-10-15",
+      "classified_at": "2026-04-19T22:27:24.759426+00:00",
+      "classified_in_round": 1,
+      "recheck_after": "2026-10-15"
+    },
+    {
+      "state": "NY",
+      "commodity": "HAY",
+      "year": 2025,
+      "reason": "PENDING_PUBLICATION",
+      "detail": "recheck_after=2026-10-15",
+      "classified_at": "2026-04-19T22:27:24.765327+00:00",
+      "classified_in_round": 1,
+      "recheck_after": "2026-10-15"
+    },
+    {
+      "state": "OK",
+      "commodity": "HAY",
+      "year": 2025,
+      "reason": "PENDING_PUBLICATION",
+      "detail": "recheck_after=2026-10-15",
+      "classified_at": "2026-04-19T22:27:24.772327+00:00",
+      "classified_in_round": 1,
+      "recheck_after": "2026-10-15"
+    },
+    {
+      "state": "SD",
+      "commodity": "HAY",
+      "year": 2025,
+      "reason": "PENDING_PUBLICATION",
+      "detail": "recheck_after=2026-10-15",
+      "classified_at": "2026-04-19T22:27:24.772327+00:00",
+      "classified_in_round": 1,
+      "recheck_after": "2026-10-15"
+    },
+    {
+      "state": "TX",
+      "commodity": "HAY",
+      "year": 2025,
+      "reason": "PENDING_PUBLICATION",
+      "detail": "recheck_after=2026-10-15",
+      "classified_at": "2026-04-19T22:27:24.789342+00:00",
+      "classified_in_round": 1,
+      "recheck_after": "2026-10-15"
+    },
+    {
+      "state": "WI",
+      "commodity": "HAY",
+      "year": 2025,
+      "reason": "PENDING_PUBLICATION",
+      "detail": "recheck_after=2026-10-15",
+      "classified_at": "2026-04-19T22:27:24.796345+00:00",
+      "classified_in_round": 1,
+      "recheck_after": "2026-10-15"
+    },
+    {
+      "state": "AR",
+      "commodity": "RICE",
+      "year": 2025,
+      "reason": "PENDING_PUBLICATION",
+      "detail": "recheck_after=2026-10-15",
+      "classified_at": "2026-04-19T22:27:24.817345+00:00",
+      "classified_in_round": 1,
+      "recheck_after": "2026-10-15"
+    },
+    {
+      "state": "CA",
+      "commodity": "RICE",
+      "year": 2025,
+      "reason": "PENDING_PUBLICATION",
+      "detail": "recheck_after=2026-10-15",
+      "classified_at": "2026-04-19T22:27:24.817345+00:00",
+      "classified_in_round": 1,
+      "recheck_after": "2026-10-15"
+    },
+    {
+      "state": "LA",
+      "commodity": "RICE",
+      "year": 2025,
+      "reason": "PENDING_PUBLICATION",
+      "detail": "recheck_after=2026-10-15",
+      "classified_at": "2026-04-19T22:27:24.817345+00:00",
+      "classified_in_round": 1,
+      "recheck_after": "2026-10-15"
+    },
+    {
+      "state": "MO",
+      "commodity": "RICE",
+      "year": 2025,
+      "reason": "PENDING_PUBLICATION",
+      "detail": "recheck_after=2026-10-15",
+      "classified_at": "2026-04-19T22:27:24.817345+00:00",
+      "classified_in_round": 1,
+      "recheck_after": "2026-10-15"
+    },
+    {
+      "state": "MS",
+      "commodity": "RICE",
+      "year": 2025,
+      "reason": "PENDING_PUBLICATION",
+      "detail": "recheck_after=2026-10-15",
+      "classified_at": "2026-04-19T22:27:24.817345+00:00",
+      "classified_in_round": 1,
+      "recheck_after": "2026-10-15"
+    },
+    {
+      "state": "TX",
+      "commodity": "RICE",
+      "year": 2025,
+      "reason": "PENDING_PUBLICATION",
+      "detail": "recheck_after=2026-10-15",
+      "classified_at": "2026-04-19T22:27:24.817345+00:00",
+      "classified_in_round": 1,
+      "recheck_after": "2026-10-15"
+    },
+    {
+      "state": "AR",
+      "commodity": "SORGHUM",
+      "year": 2025,
+      "reason": "PENDING_PUBLICATION",
+      "detail": "recheck_after=2026-10-15",
+      "classified_at": "2026-04-19T22:27:24.822848+00:00",
+      "classified_in_round": 1,
+      "recheck_after": "2026-10-15"
+    },
+    {
+      "state": "CO",
+      "commodity": "SORGHUM",
+      "year": 2025,
+      "reason": "PENDING_PUBLICATION",
+      "detail": "recheck_after=2026-10-15",
+      "classified_at": "2026-04-19T22:27:24.822848+00:00",
+      "classified_in_round": 1,
+      "recheck_after": "2026-10-15"
+    },
+    {
+      "state": "KS",
+      "commodity": "SORGHUM",
+      "year": 2025,
+      "reason": "PENDING_PUBLICATION",
+      "detail": "recheck_after=2026-10-15",
+      "classified_at": "2026-04-19T22:27:24.822848+00:00",
+      "classified_in_round": 1,
+      "recheck_after": "2026-10-15"
+    },
+    {
+      "state": "LA",
+      "commodity": "SORGHUM",
+      "year": 2025,
+      "reason": "PENDING_PUBLICATION",
+      "detail": "recheck_after=2026-10-15",
+      "classified_at": "2026-04-19T22:27:24.827348+00:00",
+      "classified_in_round": 1,
+      "recheck_after": "2026-10-15"
+    },
+    {
+      "state": "MO",
+      "commodity": "SORGHUM",
+      "year": 2025,
+      "reason": "PENDING_PUBLICATION",
+      "detail": "recheck_after=2026-10-15",
+      "classified_at": "2026-04-19T22:27:24.827348+00:00",
+      "classified_in_round": 1,
+      "recheck_after": "2026-10-15"
+    },
+    {
+      "state": "NE",
+      "commodity": "SORGHUM",
+      "year": 2025,
+      "reason": "PENDING_PUBLICATION",
+      "detail": "recheck_after=2026-10-15",
+      "classified_at": "2026-04-19T22:27:24.827348+00:00",
+      "classified_in_round": 1,
+      "recheck_after": "2026-10-15"
+    },
+    {
+      "state": "NM",
+      "commodity": "SORGHUM",
+      "year": 2025,
+      "reason": "PENDING_PUBLICATION",
+      "detail": "recheck_after=2026-10-15",
+      "classified_at": "2026-04-19T22:27:24.830345+00:00",
+      "classified_in_round": 1,
+      "recheck_after": "2026-10-15"
+    },
+    {
+      "state": "OK",
+      "commodity": "SORGHUM",
+      "year": 2025,
+      "reason": "PENDING_PUBLICATION",
+      "detail": "recheck_after=2026-10-15",
+      "classified_at": "2026-04-19T22:27:24.830345+00:00",
+      "classified_in_round": 1,
+      "recheck_after": "2026-10-15"
+    },
+    {
+      "state": "TN",
+      "commodity": "SORGHUM",
+      "year": 2025,
+      "reason": "PENDING_PUBLICATION",
+      "detail": "recheck_after=2026-10-15",
+      "classified_at": "2026-04-19T22:27:24.836345+00:00",
+      "classified_in_round": 1,
+      "recheck_after": "2026-10-15"
+    },
+    {
+      "state": "TX",
+      "commodity": "SORGHUM",
+      "year": 2025,
+      "reason": "PENDING_PUBLICATION",
+      "detail": "recheck_after=2026-10-15",
+      "classified_at": "2026-04-19T22:27:24.836345+00:00",
+      "classified_in_round": 1,
+      "recheck_after": "2026-10-15"
+    },
+    {
+      "state": "IA",
+      "commodity": "SOYBEANS",
+      "year": 2025,
+      "reason": "PENDING_PUBLICATION",
+      "detail": "recheck_after=2026-10-15",
+      "classified_at": "2026-04-19T22:27:24.836345+00:00",
+      "classified_in_round": 1,
+      "recheck_after": "2026-10-15"
+    },
+    {
+      "state": "IL",
+      "commodity": "SOYBEANS",
+      "year": 2025,
+      "reason": "PENDING_PUBLICATION",
+      "detail": "recheck_after=2026-10-15",
+      "classified_at": "2026-04-19T22:27:24.836345+00:00",
+      "classified_in_round": 1,
+      "recheck_after": "2026-10-15"
+    },
+    {
+      "state": "IN",
+      "commodity": "SOYBEANS",
+      "year": 2025,
+      "reason": "PENDING_PUBLICATION",
+      "detail": "recheck_after=2026-10-15",
+      "classified_at": "2026-04-19T22:27:24.836345+00:00",
+      "classified_in_round": 1,
+      "recheck_after": "2026-10-15"
+    },
+    {
+      "state": "KS",
+      "commodity": "SOYBEANS",
+      "year": 2025,
+      "reason": "PENDING_PUBLICATION",
+      "detail": "recheck_after=2026-10-15",
+      "classified_at": "2026-04-19T22:27:24.836345+00:00",
+      "classified_in_round": 1,
+      "recheck_after": "2026-10-15"
+    },
+    {
+      "state": "MN",
+      "commodity": "SOYBEANS",
+      "year": 2025,
+      "reason": "PENDING_PUBLICATION",
+      "detail": "recheck_after=2026-10-15",
+      "classified_at": "2026-04-19T22:27:24.836345+00:00",
+      "classified_in_round": 1,
+      "recheck_after": "2026-10-15"
+    },
+    {
+      "state": "MO",
+      "commodity": "SOYBEANS",
+      "year": 2025,
+      "reason": "PENDING_PUBLICATION",
+      "detail": "recheck_after=2026-10-15",
+      "classified_at": "2026-04-19T22:27:24.836345+00:00",
+      "classified_in_round": 1,
+      "recheck_after": "2026-10-15"
+    },
+    {
+      "state": "ND",
+      "commodity": "SOYBEANS",
+      "year": 2025,
+      "reason": "PENDING_PUBLICATION",
+      "detail": "recheck_after=2026-10-15",
+      "classified_at": "2026-04-19T22:27:24.836345+00:00",
+      "classified_in_round": 1,
+      "recheck_after": "2026-10-15"
+    },
+    {
+      "state": "NE",
+      "commodity": "SOYBEANS",
+      "year": 2025,
+      "reason": "PENDING_PUBLICATION",
+      "detail": "recheck_after=2026-10-15",
+      "classified_at": "2026-04-19T22:27:24.836345+00:00",
+      "classified_in_round": 1,
+      "recheck_after": "2026-10-15"
+    },
+    {
+      "state": "OH",
+      "commodity": "SOYBEANS",
+      "year": 2025,
+      "reason": "PENDING_PUBLICATION",
+      "detail": "recheck_after=2026-10-15",
+      "classified_at": "2026-04-19T22:27:24.836345+00:00",
+      "classified_in_round": 1,
+      "recheck_after": "2026-10-15"
+    },
+    {
+      "state": "SD",
+      "commodity": "SOYBEANS",
+      "year": 2025,
+      "reason": "PENDING_PUBLICATION",
+      "detail": "recheck_after=2026-10-15",
+      "classified_at": "2026-04-19T22:27:24.836345+00:00",
+      "classified_in_round": 1,
+      "recheck_after": "2026-10-15"
+    },
+    {
+      "state": "ID",
+      "commodity": "SPRING WHEAT, (EXCL DURUM)",
+      "year": 2025,
+      "reason": "PENDING_PUBLICATION",
+      "detail": "recheck_after=2026-10-15",
+      "classified_at": "2026-04-19T22:27:24.836345+00:00",
+      "classified_in_round": 1,
+      "recheck_after": "2026-10-15"
+    },
+    {
+      "state": "MN",
+      "commodity": "SPRING WHEAT, (EXCL DURUM)",
+      "year": 2025,
+      "reason": "PENDING_PUBLICATION",
+      "detail": "recheck_after=2026-10-15",
+      "classified_at": "2026-04-19T22:27:24.836345+00:00",
+      "classified_in_round": 1,
+      "recheck_after": "2026-10-15"
+    },
+    {
+      "state": "MT",
+      "commodity": "SPRING WHEAT, (EXCL DURUM)",
+      "year": 2025,
+      "reason": "PENDING_PUBLICATION",
+      "detail": "recheck_after=2026-10-15",
+      "classified_at": "2026-04-19T22:27:24.836345+00:00",
+      "classified_in_round": 1,
+      "recheck_after": "2026-10-15"
+    },
+    {
+      "state": "ND",
+      "commodity": "SPRING WHEAT, (EXCL DURUM)",
+      "year": 2025,
+      "reason": "PENDING_PUBLICATION",
+      "detail": "recheck_after=2026-10-15",
+      "classified_at": "2026-04-19T22:27:24.836345+00:00",
+      "classified_in_round": 1,
+      "recheck_after": "2026-10-15"
+    },
+    {
+      "state": "SD",
+      "commodity": "SPRING WHEAT, (EXCL DURUM)",
+      "year": 2025,
+      "reason": "PENDING_PUBLICATION",
+      "detail": "recheck_after=2026-10-15",
+      "classified_at": "2026-04-19T22:27:24.836345+00:00",
+      "classified_in_round": 1,
+      "recheck_after": "2026-10-15"
+    },
+    {
+      "state": "CO",
+      "commodity": "SUNFLOWER",
+      "year": 2025,
+      "reason": "PENDING_PUBLICATION",
+      "detail": "recheck_after=2026-10-15",
+      "classified_at": "2026-04-19T22:27:24.836345+00:00",
+      "classified_in_round": 1,
+      "recheck_after": "2026-10-15"
+    },
+    {
+      "state": "KS",
+      "commodity": "SUNFLOWER",
+      "year": 2025,
+      "reason": "PENDING_PUBLICATION",
+      "detail": "recheck_after=2026-10-15",
+      "classified_at": "2026-04-19T22:27:24.836345+00:00",
+      "classified_in_round": 1,
+      "recheck_after": "2026-10-15"
+    },
+    {
+      "state": "NE",
+      "commodity": "SUNFLOWER",
+      "year": 2025,
+      "reason": "PENDING_PUBLICATION",
+      "detail": "recheck_after=2026-10-15",
+      "classified_at": "2026-04-19T22:27:24.836345+00:00",
+      "classified_in_round": 1,
+      "recheck_after": "2026-10-15"
+    },
+    {
+      "state": "SD",
+      "commodity": "SUNFLOWER",
+      "year": 2025,
+      "reason": "PENDING_PUBLICATION",
+      "detail": "recheck_after=2026-10-15",
+      "classified_at": "2026-04-19T22:27:24.836345+00:00",
+      "classified_in_round": 1,
+      "recheck_after": "2026-10-15"
+    },
+    {
+      "state": "TX",
+      "commodity": "SUNFLOWER",
+      "year": 2025,
+      "reason": "PENDING_PUBLICATION",
+      "detail": "recheck_after=2026-10-15",
+      "classified_at": "2026-04-19T22:27:24.836345+00:00",
+      "classified_in_round": 1,
+      "recheck_after": "2026-10-15"
+    },
+    {
+      "state": "CO",
+      "commodity": "WINTER WHEAT",
+      "year": 2025,
+      "reason": "PENDING_PUBLICATION",
+      "detail": "recheck_after=2026-10-15",
+      "classified_at": "2026-04-19T22:27:24.836844+00:00",
+      "classified_in_round": 1,
+      "recheck_after": "2026-10-15"
+    },
+    {
+      "state": "ID",
+      "commodity": "WINTER WHEAT",
+      "year": 2025,
+      "reason": "PENDING_PUBLICATION",
+      "detail": "recheck_after=2026-10-15",
+      "classified_at": "2026-04-19T22:27:24.836844+00:00",
+      "classified_in_round": 1,
+      "recheck_after": "2026-10-15"
+    },
+    {
+      "state": "KS",
+      "commodity": "WINTER WHEAT",
+      "year": 2025,
+      "reason": "PENDING_PUBLICATION",
+      "detail": "recheck_after=2026-10-15",
+      "classified_at": "2026-04-19T22:27:24.836844+00:00",
+      "classified_in_round": 1,
+      "recheck_after": "2026-10-15"
+    },
+    {
+      "state": "MO",
+      "commodity": "WINTER WHEAT",
+      "year": 2025,
+      "reason": "PENDING_PUBLICATION",
+      "detail": "recheck_after=2026-10-15",
+      "classified_at": "2026-04-19T22:27:24.836844+00:00",
+      "classified_in_round": 1,
+      "recheck_after": "2026-10-15"
+    },
+    {
+      "state": "MT",
+      "commodity": "WINTER WHEAT",
+      "year": 2025,
+      "reason": "PENDING_PUBLICATION",
+      "detail": "recheck_after=2026-10-15",
+      "classified_at": "2026-04-19T22:27:24.836844+00:00",
+      "classified_in_round": 1,
+      "recheck_after": "2026-10-15"
+    },
+    {
+      "state": "NE",
+      "commodity": "WINTER WHEAT",
+      "year": 2025,
+      "reason": "PENDING_PUBLICATION",
+      "detail": "recheck_after=2026-10-15",
+      "classified_at": "2026-04-19T22:27:24.836844+00:00",
+      "classified_in_round": 1,
+      "recheck_after": "2026-10-15"
+    },
+    {
+      "state": "OK",
+      "commodity": "WINTER WHEAT",
+      "year": 2025,
+      "reason": "PENDING_PUBLICATION",
+      "detail": "recheck_after=2026-10-15",
+      "classified_at": "2026-04-19T22:27:24.836844+00:00",
+      "classified_in_round": 1,
+      "recheck_after": "2026-10-15"
+    },
+    {
+      "state": "OR",
+      "commodity": "WINTER WHEAT",
+      "year": 2025,
+      "reason": "PENDING_PUBLICATION",
+      "detail": "recheck_after=2026-10-15",
+      "classified_at": "2026-04-19T22:27:24.836844+00:00",
+      "classified_in_round": 1,
+      "recheck_after": "2026-10-15"
+    },
+    {
+      "state": "TX",
+      "commodity": "WINTER WHEAT",
+      "year": 2025,
+      "reason": "PENDING_PUBLICATION",
+      "detail": "recheck_after=2026-10-15",
+      "classified_at": "2026-04-19T22:27:24.836844+00:00",
+      "classified_in_round": 1,
+      "recheck_after": "2026-10-15"
+    },
+    {
+      "state": "WA",
+      "commodity": "WINTER WHEAT",
+      "year": 2025,
+      "reason": "PENDING_PUBLICATION",
+      "detail": "recheck_after=2026-10-15",
+      "classified_at": "2026-04-19T22:27:24.836844+00:00",
+      "classified_in_round": 1,
+      "recheck_after": "2026-10-15"
+    }
+  ],
+  "updated": "2026-04-20T01:56:56.779071+00:00"
+}

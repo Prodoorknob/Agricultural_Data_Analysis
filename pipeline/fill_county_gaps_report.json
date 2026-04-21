@@ -1,0 +1,63 @@
+{
+  "finished_at": "2026-04-20T01:56:57.080736+00:00",
+  "ideal_triples": 2875,
+  "baseline": {
+    "rows": 938844,
+    "counties": 3102,
+    "pairs": 247,
+    "triples": 2730
+  },
+  "final": {
+    "rows": 1932343,
+    "counties": 3105,
+    "pairs": 277,
+    "triples": 4748
+  },
+  "delta": {
+    "rows": 993499,
+    "counties": 3,
+    "pairs": 30,
+    "triples": 2018
+  },
+  "coverage_pct": 165.15,
+  "rounds": [
+    {
+      "round": 1,
+      "gaps_at_start": 1702,
+      "states_attempted": 32,
+      "states_done": 31,
+      "states_failed": [
+        "WY"
+      ],
+      "residual": 642,
+      "delta_rows": 993499,
+      "classification": {
+        "NOT_GROWN": 0,
+        "NASS_SUPPRESSION": 0,
+        "PENDING_PUBLICATION": 70,
+        "UNCLASSIFIED": 572
+      },
+      "new_allowlist_entries": 70
+    },
+    {
+      "round": 2,
+      "gaps_at_start": 572,
+      "states_attempted": 26,
+      "states_done": 25,
+      "states_failed": [
+        "WY"
+      ],
+      "residual": 572,
+      "delta_rows": 0,
+      "classification": {
+        "NOT_GROWN": 0,
+        "NASS_SUPPRESSION": 0,
+        "PENDING_PUBLICATION": 0,
+        "UNCLASSIFIED": 572
+      },
+      "new_allowlist_entries": 0
+    }
+  ],
+  "allowlist_entries_total": 70,
+  "state_filter": null
+}

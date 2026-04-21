@@ -178,6 +178,10 @@ COUNTY_COMMODITIES = [
     "HAY",
     "RICE",
     "SUNFLOWER",
+    # Generic WHEAT rollup — NASS publishes this at county level for states
+    # where the winter/spring split isn't reported (CA, NY, MI, AZ, etc).
+    # Added 2026-04-18 per county-coverage audit.
+    "WHEAT",
 ]
 
 # Stat categories available at county resolution in annual NASS surveys.
@@ -206,6 +210,7 @@ CENSUS_AG_YEARS = {2002, 2007, 2012, 2017, 2022}
 COUNTY_SKIP_STATES: dict[str, set[str]] = {
     # AK, HI, DC: no meaningful commercial crop production at county level
     "CORN":                    {"AK", "HI", "DC"},
+    "WHEAT":                   {"AK", "HI", "DC"},
     "SOYBEANS":                {"AK", "HI", "DC", "NV", "AZ", "NM", "UT", "WY", "MT", "ID",
                                 "OR", "WA", "ME", "NH", "VT", "MA", "RI", "CT"},
     "WINTER WHEAT":            {"AK", "HI", "DC"},
