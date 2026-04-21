@@ -314,3 +314,52 @@ a:focus-visible {
     min-width: 44px;
   }
 }
+
+/* ─── Crops tab: inverted-L layout (float-based) ─────────────
+   map floats top-left; panel is a BFC packing to the right; peers clears left
+   and spans full width once past the map's bottom; method band clears both. */
+.crops-invL-wrap::after { content: ''; display: block; clear: both; }
+.crops-invL-wrap .card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 16px 18px;
+  margin-bottom: 16px;
+}
+.crops-mapcard {
+  float: left;
+  width: 30%;
+  margin: 0 16px 16px 0;
+  display: flex;
+  flex-direction: column;
+}
+.crops-panelcard { display: flow-root; }
+.crops-peerscard { clear: left; }
+.crops-methcard  { clear: both; }
+
+/* Provenance chips used in the method band */
+.crops-invL-wrap .pchip {
+  padding: 4px 10px;
+  border: 1px solid var(--border2);
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text2);
+  background: var(--surface2);
+}
+.crops-invL-wrap .pchip--faint { color: var(--text3); border-color: var(--border); }
+.crops-invL-wrap code {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--field);
+  background: var(--surface2);
+  padding: 1px 5px;
+  border-radius: 3px;
+  margin: 0 2px;
+}
+
+@media (max-width: 720px) {
+  .crops-mapcard { float: none; width: 100%; margin: 0 0 16px 0; }
+  .crops-panelcard, .crops-peerscard { clear: both; }
+  .crops-methcard > div { grid-template-columns: 1fr !important; }
+}

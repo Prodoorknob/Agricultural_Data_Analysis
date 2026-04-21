@@ -27,14 +27,31 @@ export function cleanValue(val: any): number {
 }
 
 /**
- * Enhanced Filter: Source + Totals + Valid Data
- * Accepts SURVEY, CENSUS (for revenue), and DERIVED (pipeline-computed metrics).
- * Dedup priority: SURVEY > CENSUS > DERIVED
+ * Enhanced Filter: Source + Totals + Valid Data + Period Canonicalization
+ *
+ * NASS publishes the same (state, year, commodity, stat) fact several times —
+ * once per `reference_period_desc` (YEAR, YEAR - JUN ACREAGE, YEAR - MAR
+ * ACREAGE, YEAR - NOV FORECAST, …) and sometimes once per `source_desc`
+ * (SURVEY annual + CENSUS every 5 years). Naive summing inflates acreage/
+ * production/sales by 4–6× in non-census years and ~2× in 2022/2017/2012.
+ *
+ * Canonical rules enforced here:
+ *  1. Exclude `YEAR - *` variants (interim acreage reports + monthly forecasts).
+ *     Keep YEAR, WEEK #XX (progress/condition), month names (livestock/price),
+ *     MARKETING YEAR, and raw quarterly tokens.
+ *  2. Dedup SURVEY/CENSUS/DERIVED overlap keyed on
+ *     (state, year, commodity, stat, unit, reference_period, class_desc,
+ *      prodn_practice, util_practice, short_desc) — reference_period is now
+ *     part of the key so Census-year SURVEY and CENSUS rows don't both land
+ *     in the output.
+ *  3. Priority SURVEY > CENSUS > DERIVED inside each dedup bucket.
  */
+const FORECAST_PERIOD_RE = /^YEAR - /;
+
 export function filterData(data: any[]): any[] {
     if (!data || data.length === 0) return [];
 
-    // Step 1: Apply non-source filters (totals, domain)
+    // Step 1: Apply non-source filters (totals, domain, reference period)
     const basicFiltered = data.filter(d =>
         // Source: Survey, Derived (pipeline-computed), Farm Operations, or Census revenue
         (!d.source_desc || d.source_desc === 'SURVEY' || d.source_desc === 'DERIVED' ||
@@ -47,14 +64,32 @@ export function filterData(data: any[]): any[] {
         !d.commodity_desc?.includes('ALL CLASSES') &&
 
         // Remove Domain Totals — keep only domain=TOTAL for aggregates
-        (d.domain_desc === 'TOTAL' || !d.domain_desc)
+        (d.domain_desc === 'TOTAL' || !d.domain_desc) &&
+
+        // Drop interim / forecast reference periods that otherwise 4–6× inflate
+        // AREA PLANTED / AREA HARVESTED / PRODUCTION / YIELD aggregates.
+        !(typeof d.reference_period_desc === 'string' &&
+          FORECAST_PERIOD_RE.test(d.reference_period_desc))
     );
 
-    // Step 2: Deduplicate Census/Survey/Derived overlap
-    // Priority: SURVEY > CENSUS > DERIVED
+    // Step 2: Deduplicate Census/Survey/Derived overlap.
+    // Include reference_period_desc + class_desc + prodn/util practice + short_desc
+    // so Census and Survey collapse per fact, and biotech/utility sub-types
+    // don't fight for the same bucket.
     const keyMap = new Map<string, any[]>();
     basicFiltered.forEach(d => {
-        const key = `${d.state_alpha || ''}|${d.year || ''}|${d.commodity_desc || ''}|${d.statisticcat_desc || ''}|${d.unit_desc || ''}`;
+        const key = [
+            d.state_alpha || '',
+            d.year || '',
+            d.commodity_desc || '',
+            d.statisticcat_desc || '',
+            d.unit_desc || '',
+            d.reference_period_desc || '',
+            d.class_desc || '',
+            d.prodn_practice_desc || '',
+            d.util_practice_desc || '',
+            d.short_desc || '',
+        ].join('|');
         if (!keyMap.has(key)) keyMap.set(key, []);
         keyMap.get(key)!.push(d);
     });
@@ -64,13 +99,10 @@ export function filterData(data: any[]): any[] {
         const hasSurvey = rows.some(r => r.source_desc === 'SURVEY');
         const hasCensus = rows.some(r => r.source_desc === 'CENSUS');
         if (hasSurvey) {
-            // SURVEY is highest priority
             result.push(...rows.filter(r => r.source_desc === 'SURVEY'));
         } else if (hasCensus) {
-            // CENSUS is second priority
             result.push(...rows.filter(r => r.source_desc === 'CENSUS'));
         } else {
-            // DERIVED or other fallback
             result.push(...rows);
         }
     });
@@ -405,7 +437,16 @@ export function getAreaPlantedForCommodity(data: any[], commodity: string) {
  * Returns a unified dataset for the "story" view of a single commodity.
  * Merges yield, production, area harvested, area planted, and revenue into
  * one array keyed by year. Also detects anomaly dip years for yield.
+ *
+ * State-level NASS rows are canonical-per-metric (one value, not a partition),
+ * so we use `max` not `sum` when collapsing within a year. `sum` silently
+ * inflates area/production numbers when sub-type rows leak through (biotech
+ * PCT BY TYPE under the same statisticcat, grain vs silage splits, etc.).
+ * `max` picks the top-line rollup and tolerates near-duplicate rows.
  */
+const ACRE_UNITS = new Set(['ACRES']);
+const BU_UNITS = new Set(['BU', 'CWT', 'LB', 'TONS', 'BOXES', 'BARRELS']);
+
 export function getCommodityStory(data: any[], commodity: string) {
     const cropsData = filterData(data).filter(d =>
         d.commodity_desc === commodity && d.sector_desc === 'CROPS'
@@ -415,22 +456,38 @@ export function getCommodityStory(data: any[], commodity: string) {
     const mergedMap = new Map<number, any>();
 
     yearGroups.forEach((rows, year) => {
-        const production = d3.sum(
-            rows.filter(r => r.statisticcat_desc === 'PRODUCTION'),
-            r => cleanValue(r.value_num || r.Value)
+        // Production: pick the dominant production unit for this commodity
+        // (usually BU for grains, LB for cotton, TONS for hay). Filter to that
+        // unit and take max so biotech-pct rows never sneak in.
+        const prodRows = rows.filter(r =>
+            r.statisticcat_desc === 'PRODUCTION' &&
+            BU_UNITS.has(String(r.unit_desc || '').toUpperCase())
         );
-        const yieldVal = d3.mean(
-            rows.filter(r => r.statisticcat_desc === 'YIELD'),
-            r => cleanValue(r.value_num || r.Value)
-        ) || 0;
-        const areaHarvested = d3.sum(
-            rows.filter(r => r.statisticcat_desc === 'AREA HARVESTED'),
-            r => cleanValue(r.value_num || r.Value)
+        const production = d3.max(prodRows, r => cleanValue(r.value_num || r.Value)) || 0;
+
+        // Yield: average across utility slices is meaningless (bu/ac ≠ tons/ac).
+        // Prefer the primary utility (GRAIN for corn, LINT for cotton, etc.) —
+        // the row whose short_desc doesn't split into sub-types. In practice,
+        // taking the max drops the occasional PCT sub-type because its value
+        // is a % (≤100) and the real yield is 150+. Still, gate by unit to be
+        // safe — exclude any row whose unit contains "PCT".
+        const yieldRows = rows.filter(r =>
+            r.statisticcat_desc === 'YIELD' &&
+            !String(r.unit_desc || '').toUpperCase().includes('PCT')
         );
-        const areaPlanted = d3.sum(
-            rows.filter(r => r.statisticcat_desc === 'AREA PLANTED'),
-            r => cleanValue(r.value_num || r.Value)
+        const yieldVal = d3.max(yieldRows, r => cleanValue(r.value_num || r.Value)) || 0;
+
+        const areaHarvestedRows = rows.filter(r =>
+            r.statisticcat_desc === 'AREA HARVESTED' &&
+            ACRE_UNITS.has(String(r.unit_desc || '').toUpperCase())
         );
+        const areaHarvested = d3.max(areaHarvestedRows, r => cleanValue(r.value_num || r.Value)) || 0;
+
+        const areaPlantedRows = rows.filter(r =>
+            r.statisticcat_desc === 'AREA PLANTED' &&
+            ACRE_UNITS.has(String(r.unit_desc || '').toUpperCase())
+        );
+        const areaPlanted = d3.max(areaPlantedRows, r => cleanValue(r.value_num || r.Value)) || 0;
         // Revenue: use only $ SALES, take max per year to get the aggregate total
         const salesRows = rows.filter(r =>
             r.statisticcat_desc === 'SALES' &&

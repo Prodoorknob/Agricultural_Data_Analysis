@@ -1,8 +1,9 @@
 {
-    "last_run": "2026-04-09T23:12:26.571861+00:00",
+    "last_run": "2026-04-20T01:56:40.195772+00:00",
     "last_success": "2026-04-10T02:52:52.102290+00:00",
     "record_counts": {
-        "county_fetch_total": 871595
+        "county_fetch_total": 3774667
     },
-    "version": 1
+    "version": 1,
+    "last_ingest_complete": "2026-04-20T01:56:39.695326+00:00"
 }

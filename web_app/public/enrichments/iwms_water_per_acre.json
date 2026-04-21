@@ -1,0 +1,1091 @@
+{
+  "dataset": "iwms_water_per_acre",
+  "year": 2023,
+  "rows": [
+    {
+      "state": "AL",
+      "state_name": "ALABAMA",
+      "crop": "corn",
+      "year": 2023,
+      "acre_feet_per_acre": 0.5
+    },
+    {
+      "state": "AL",
+      "state_name": "ALABAMA",
+      "crop": "soybeans",
+      "year": 2023,
+      "acre_feet_per_acre": 0.4
+    },
+    {
+      "state": "AL",
+      "state_name": "ALABAMA",
+      "crop": "cotton",
+      "year": 2023,
+      "acre_feet_per_acre": 0.4
+    },
+    {
+      "state": "AZ",
+      "state_name": "ARIZONA",
+      "crop": "corn",
+      "year": 2023,
+      "acre_feet_per_acre": 2.6
+    },
+    {
+      "state": "AZ",
+      "state_name": "ARIZONA",
+      "crop": "corn",
+      "year": 2023,
+      "acre_feet_per_acre": 4.5
+    },
+    {
+      "state": "AZ",
+      "state_name": "ARIZONA",
+      "crop": "corn",
+      "year": 2023,
+      "acre_feet_per_acre": 3.1
+    },
+    {
+      "state": "AZ",
+      "state_name": "ARIZONA",
+      "crop": "corn",
+      "year": 2023,
+      "acre_feet_per_acre": 4.1
+    },
+    {
+      "state": "AZ",
+      "state_name": "ARIZONA",
+      "crop": "wheat",
+      "year": 2023,
+      "acre_feet_per_acre": 3.7
+    },
+    {
+      "state": "AZ",
+      "state_name": "ARIZONA",
+      "crop": "wheat",
+      "year": 2023,
+      "acre_feet_per_acre": 2.6
+    },
+    {
+      "state": "AZ",
+      "state_name": "ARIZONA",
+      "crop": "wheat",
+      "year": 2023,
+      "acre_feet_per_acre": 3.4
+    },
+    {
+      "state": "AZ",
+      "state_name": "ARIZONA",
+      "crop": "cotton",
+      "year": 2023,
+      "acre_feet_per_acre": 4.2
+    },
+    {
+      "state": "AZ",
+      "state_name": "ARIZONA",
+      "crop": "cotton",
+      "year": 2023,
+      "acre_feet_per_acre": 4.4
+    },
+    {
+      "state": "AZ",
+      "state_name": "ARIZONA",
+      "crop": "cotton",
+      "year": 2023,
+      "acre_feet_per_acre": 4.2
+    },
+    {
+      "state": "AR",
+      "state_name": "ARKANSAS",
+      "crop": "corn",
+      "year": 2023,
+      "acre_feet_per_acre": 1.0
+    },
+    {
+      "state": "AR",
+      "state_name": "ARKANSAS",
+      "crop": "corn",
+      "year": 2023,
+      "acre_feet_per_acre": 0.6
+    },
+    {
+      "state": "AR",
+      "state_name": "ARKANSAS",
+      "crop": "corn",
+      "year": 2023,
+      "acre_feet_per_acre": 1.0
+    },
+    {
+      "state": "AR",
+      "state_name": "ARKANSAS",
+      "crop": "corn",
+      "year": 2023,
+      "acre_feet_per_acre": 0.8
+    },
+    {
+      "state": "AR",
+      "state_name": "ARKANSAS",
+      "crop": "corn",
+      "year": 2023,
+      "acre_feet_per_acre": 0.3
+    },
+    {
+      "state": "AR",
+      "state_name": "ARKANSAS",
+      "crop": "corn",
+      "year": 2023,
+      "acre_feet_per_acre": 0.3
+    },
+    {
+      "state": "AR",
+      "state_name": "ARKANSAS",
+      "crop": "soybeans",
+      "year": 2023,
+      "acre_feet_per_acre": 0.8
+    },
+    {
+      "state": "AR",
+      "state_name": "ARKANSAS",
+      "crop": "soybeans",
+      "year": 2023,
+      "acre_feet_per_acre": 0.7
+    },
+    {
+      "state": "AR",
+      "state_name": "ARKANSAS",
+      "crop": "soybeans",
+      "year": 2023,
+      "acre_feet_per_acre": 0.8
+    },
+    {
+      "state": "AR",
+      "state_name": "ARKANSAS",
+      "crop": "sorghum",
+      "year": 2023,
+      "acre_feet_per_acre": 0.7
+    },
+    {
+      "state": "AR",
+      "state_name": "ARKANSAS",
+      "crop": "sorghum",
+      "year": 2023,
+      "acre_feet_per_acre": 0.7
+    },
+    {
+      "state": "AR",
+      "state_name": "ARKANSAS",
+      "crop": "sorghum",
+      "year": 2023,
+      "acre_feet_per_acre": 0.7
+    },
+    {
+      "state": "AR",
+      "state_name": "ARKANSAS",
+      "crop": "wheat",
+      "year": 2023,
+      "acre_feet_per_acre": 0.6
+    },
+    {
+      "state": "AR",
+      "state_name": "ARKANSAS",
+      "crop": "wheat",
+      "year": 2023,
+      "acre_feet_per_acre": 0.6
+    },
+    {
+      "state": "AR",
+      "state_name": "ARKANSAS",
+      "crop": "cotton",
+      "year": 2023,
+      "acre_feet_per_acre": 0.9
+    },
+    {
+      "state": "AR",
+      "state_name": "ARKANSAS",
+      "crop": "cotton",
+      "year": 2023,
+      "acre_feet_per_acre": 0.7
+    },
+    {
+      "state": "AR",
+      "state_name": "ARKANSAS",
+      "crop": "cotton",
+      "year": 2023,
+      "acre_feet_per_acre": 0.9
+    },
+    {
+      "state": "AR",
+      "state_name": "ARKANSAS",
+      "crop": "rice",
+      "year": 2023,
+      "acre_feet_per_acre": 2.0
+    },
+    {
+      "state": "AR",
+      "state_name": "ARKANSAS",
+      "crop": "rice",
+      "year": 2023,
+      "acre_feet_per_acre": 2.0
+    },
+    {
+      "state": "CA",
+      "state_name": "CALIFORNIA",
+      "crop": "corn",
+      "year": 2023,
+      "acre_feet_per_acre": 2.9
+    },
+    {
+      "state": "CA",
+      "state_name": "CALIFORNIA",
+      "crop": "corn",
+      "year": 2023,
+      "acre_feet_per_acre": 3.0
+    },
+    {
+      "state": "CA",
+      "state_name": "CALIFORNIA",
+      "crop": "corn",
+      "year": 2023,
+      "acre_feet_per_acre": 2.9
+    },
+    {
+      "state": "CA",
+      "state_name": "CALIFORNIA",
+      "crop": "corn",
+      "year": 2023,
+      "acre_feet_per_acre": 3.1
+    },
+    {
+      "state": "CA",
+      "state_name": "CALIFORNIA",
+      "crop": "corn",
+      "year": 2023,
+      "acre_feet_per_acre": 3.1
+    },
+    {
+      "state": "CA",
+      "state_name": "CALIFORNIA",
+      "crop": "corn",
+      "year": 2023,
+      "acre_feet_per_acre": 3.1
+    },
+    {
+      "state": "CA",
+      "state_name": "CALIFORNIA",
+      "crop": "sorghum",
+      "year": 2023,
+      "acre_feet_per_acre": 2.6
+    },
+    {
+      "state": "CA",
+      "state_name": "CALIFORNIA",
+      "crop": "sorghum",
+      "year": 2023,
+      "acre_feet_per_acre": 2.6
+    },
+    {
+      "state": "CA",
+      "state_name": "CALIFORNIA",
+      "crop": "wheat",
+      "year": 2023,
+      "acre_feet_per_acre": 2.2
+    },
+    {
+      "state": "CA",
+      "state_name": "CALIFORNIA",
+      "crop": "wheat",
+      "year": 2023,
+      "acre_feet_per_acre": 2.0
+    },
+    {
+      "state": "CA",
+      "state_name": "CALIFORNIA",
+      "crop": "wheat",
+      "year": 2023,
+      "acre_feet_per_acre": 2.2
+    },
+    {
+      "state": "CA",
+      "state_name": "CALIFORNIA",
+      "crop": "cotton",
+      "year": 2023,
+      "acre_feet_per_acre": 3.1
+    },
+    {
+      "state": "CA",
+      "state_name": "CALIFORNIA",
+      "crop": "cotton",
+      "year": 2023,
+      "acre_feet_per_acre": 2.0
+    },
+    {
+      "state": "CA",
+      "state_name": "CALIFORNIA",
+      "crop": "cotton",
+      "year": 2023,
+      "acre_feet_per_acre": 2.8
+    },
+    {
+      "state": "CA",
+      "state_name": "CALIFORNIA",
+      "crop": "rice",
+      "year": 2023,
+      "acre_feet_per_acre": 4.5
+    },
+    {
+      "state": "CA",
+      "state_name": "CALIFORNIA",
+      "crop": "rice",
+      "year": 2023,
+      "acre_feet_per_acre": 3.0
+    },
+    {
+      "state": "CA",
+      "state_name": "CALIFORNIA",
+      "crop": "rice",
+      "year": 2023,
+      "acre_feet_per_acre": 4.5
+    },
+    {
+      "state": "CO",
+      "state_name": "COLORADO",
+      "crop": "corn",
+      "year": 2023,
+      "acre_feet_per_acre": 2.6
+    },
+    {
+      "state": "CO",
+      "state_name": "COLORADO",
+      "crop": "corn",
+      "year": 2023,
+      "acre_feet_per_acre": 1.4
+    },
+    {
+      "state": "CO",
+      "state_name": "COLORADO",
+      "crop": "corn",
+      "year": 2023,
+      "acre_feet_per_acre": 1.5
+    },
+    {
+      "state": "CO",
+      "state_name": "COLORADO",
+      "crop": "corn",
+      "year": 2023,
+      "acre_feet_per_acre": 2.0
+    },
+    {
+      "state": "CO",
+      "state_name": "COLORADO",
+      "crop": "corn",
+      "year": 2023,
+      "acre_feet_per_acre": 1.6
+    },
+    {
+      "state": "CO",
+      "state_name": "COLORADO",
+      "crop": "corn",
+      "year": 2023,
+      "acre_feet_per_acre": 1.7
+    },
+    {
+      "state": "CO",
+      "state_name": "COLORADO",
+      "crop": "soybeans",
+      "year": 2023,
+      "acre_feet_per_acre": 1.2
+    },
+    {
+      "state": "CO",
+      "state_name": "COLORADO",
+      "crop": "soybeans",
+      "year": 2023,
+      "acre_feet_per_acre": 1.2
+    },
+    {
+      "state": "CO",
+      "state_name": "COLORADO",
+      "crop": "sorghum",
+      "year": 2023,
+      "acre_feet_per_acre": 2.1
+    },
+    {
+      "state": "CO",
+      "state_name": "COLORADO",
+      "crop": "sorghum",
+      "year": 2023,
+      "acre_feet_per_acre": 0.8
+    },
+    {
+      "state": "CO",
+      "state_name": "COLORADO",
+      "crop": "sorghum",
+      "year": 2023,
+      "acre_feet_per_acre": 1.2
+    },
+    {
+      "state": "CO",
+      "state_name": "COLORADO",
+      "crop": "wheat",
+      "year": 2023,
+      "acre_feet_per_acre": 2.0
+    },
+    {
+      "state": "CO",
+      "state_name": "COLORADO",
+      "crop": "wheat",
+      "year": 2023,
+      "acre_feet_per_acre": 1.0
+    },
+    {
+      "state": "CO",
+      "state_name": "COLORADO",
+      "crop": "wheat",
+      "year": 2023,
+      "acre_feet_per_acre": 1.1
+    },
+    {
+      "state": "HI",
+      "state_name": "HAWAII",
+      "crop": "corn",
+      "year": 2023,
+      "acre_feet_per_acre": 1.7
+    },
+    {
+      "state": "HI",
+      "state_name": "HAWAII",
+      "crop": "corn",
+      "year": 2023,
+      "acre_feet_per_acre": 1.7
+    },
+    {
+      "state": "HI",
+      "state_name": "HAWAII",
+      "crop": "soybeans",
+      "year": 2023,
+      "acre_feet_per_acre": 1.4
+    },
+    {
+      "state": "HI",
+      "state_name": "HAWAII",
+      "crop": "soybeans",
+      "year": 2023,
+      "acre_feet_per_acre": 1.4
+    },
+    {
+      "state": "ID",
+      "state_name": "IDAHO",
+      "crop": "corn",
+      "year": 2023,
+      "acre_feet_per_acre": 2.1
+    },
+    {
+      "state": "ID",
+      "state_name": "IDAHO",
+      "crop": "corn",
+      "year": 2023,
+      "acre_feet_per_acre": 2.3
+    },
+    {
+      "state": "ID",
+      "state_name": "IDAHO",
+      "crop": "corn",
+      "year": 2023,
+      "acre_feet_per_acre": 2.2
+    },
+    {
+      "state": "ID",
+      "state_name": "IDAHO",
+      "crop": "corn",
+      "year": 2023,
+      "acre_feet_per_acre": 2.0
+    },
+    {
+      "state": "ID",
+      "state_name": "IDAHO",
+      "crop": "corn",
+      "year": 2023,
+      "acre_feet_per_acre": 2.0
+    },
+    {
+      "state": "ID",
+      "state_name": "IDAHO",
+      "crop": "corn",
+      "year": 2023,
+      "acre_feet_per_acre": 2.0
+    },
+    {
+      "state": "KS",
+      "state_name": "KANSAS",
+      "crop": "soybeans",
+      "year": 2023,
+      "acre_feet_per_acre": 0.9
+    },
+    {
+      "state": "KS",
+      "state_name": "KANSAS",
+      "crop": "soybeans",
+      "year": 2023,
+      "acre_feet_per_acre": 1.0
+    },
+    {
+      "state": "KS",
+      "state_name": "KANSAS",
+      "crop": "soybeans",
+      "year": 2023,
+      "acre_feet_per_acre": 1.0
+    },
+    {
+      "state": "KS",
+      "state_name": "KANSAS",
+      "crop": "sorghum",
+      "year": 2023,
+      "acre_feet_per_acre": 0.3
+    },
+    {
+      "state": "KS",
+      "state_name": "KANSAS",
+      "crop": "sorghum",
+      "year": 2023,
+      "acre_feet_per_acre": 0.9
+    },
+    {
+      "state": "KS",
+      "state_name": "KANSAS",
+      "crop": "sorghum",
+      "year": 2023,
+      "acre_feet_per_acre": 0.9
+    },
+    {
+      "state": "KS",
+      "state_name": "KANSAS",
+      "crop": "wheat",
+      "year": 2023,
+      "acre_feet_per_acre": 0.5
+    },
+    {
+      "state": "KS",
+      "state_name": "KANSAS",
+      "crop": "wheat",
+      "year": 2023,
+      "acre_feet_per_acre": 0.8
+    },
+    {
+      "state": "KS",
+      "state_name": "KANSAS",
+      "crop": "wheat",
+      "year": 2023,
+      "acre_feet_per_acre": 0.8
+    },
+    {
+      "state": "KS",
+      "state_name": "KANSAS",
+      "crop": "cotton",
+      "year": 2023,
+      "acre_feet_per_acre": 0.6
+    },
+    {
+      "state": "KS",
+      "state_name": "KANSAS",
+      "crop": "cotton",
+      "year": 2023,
+      "acre_feet_per_acre": 0.6
+    },
+    {
+      "state": "KY",
+      "state_name": "KENTUCKY",
+      "crop": "soybeans",
+      "year": 2023,
+      "acre_feet_per_acre": 0.4
+    },
+    {
+      "state": "KY",
+      "state_name": "KENTUCKY",
+      "crop": "soybeans",
+      "year": 2023,
+      "acre_feet_per_acre": 0.4
+    },
+    {
+      "state": "MT",
+      "state_name": "MONTANA",
+      "crop": "wheat",
+      "year": 2023,
+      "acre_feet_per_acre": 0.8
+    },
+    {
+      "state": "MT",
+      "state_name": "MONTANA",
+      "crop": "wheat",
+      "year": 2023,
+      "acre_feet_per_acre": 0.8
+    },
+    {
+      "state": "MT",
+      "state_name": "MONTANA",
+      "crop": "wheat",
+      "year": 2023,
+      "acre_feet_per_acre": 0.8
+    },
+    {
+      "state": "NE",
+      "state_name": "NEBRASKA",
+      "crop": "corn",
+      "year": 2023,
+      "acre_feet_per_acre": 1.1
+    },
+    {
+      "state": "NE",
+      "state_name": "NEBRASKA",
+      "crop": "corn",
+      "year": 2023,
+      "acre_feet_per_acre": 1.0
+    },
+    {
+      "state": "NE",
+      "state_name": "NEBRASKA",
+      "crop": "corn",
+      "year": 2023,
+      "acre_feet_per_acre": 1.0
+    },
+    {
+      "state": "NE",
+      "state_name": "NEBRASKA",
+      "crop": "corn",
+      "year": 2023,
+      "acre_feet_per_acre": 1.1
+    },
+    {
+      "state": "NE",
+      "state_name": "NEBRASKA",
+      "crop": "corn",
+      "year": 2023,
+      "acre_feet_per_acre": 0.9
+    },
+    {
+      "state": "NE",
+      "state_name": "NEBRASKA",
+      "crop": "corn",
+      "year": 2023,
+      "acre_feet_per_acre": 0.9
+    },
+    {
+      "state": "NE",
+      "state_name": "NEBRASKA",
+      "crop": "soybeans",
+      "year": 2023,
+      "acre_feet_per_acre": 1.0
+    },
+    {
+      "state": "NE",
+      "state_name": "NEBRASKA",
+      "crop": "soybeans",
+      "year": 2023,
+      "acre_feet_per_acre": 0.8
+    },
+    {
+      "state": "NE",
+      "state_name": "NEBRASKA",
+      "crop": "soybeans",
+      "year": 2023,
+      "acre_feet_per_acre": 0.8
+    },
+    {
+      "state": "NM",
+      "state_name": "NEW MEXICO",
+      "crop": "corn",
+      "year": 2023,
+      "acre_feet_per_acre": 1.0
+    },
+    {
+      "state": "NM",
+      "state_name": "NEW MEXICO",
+      "crop": "corn",
+      "year": 2023,
+      "acre_feet_per_acre": 1.5
+    },
+    {
+      "state": "NM",
+      "state_name": "NEW MEXICO",
+      "crop": "corn",
+      "year": 2023,
+      "acre_feet_per_acre": 1.4
+    },
+    {
+      "state": "NM",
+      "state_name": "NEW MEXICO",
+      "crop": "corn",
+      "year": 2023,
+      "acre_feet_per_acre": 1.7
+    },
+    {
+      "state": "NM",
+      "state_name": "NEW MEXICO",
+      "crop": "corn",
+      "year": 2023,
+      "acre_feet_per_acre": 1.4
+    },
+    {
+      "state": "NM",
+      "state_name": "NEW MEXICO",
+      "crop": "corn",
+      "year": 2023,
+      "acre_feet_per_acre": 1.4
+    },
+    {
+      "state": "NM",
+      "state_name": "NEW MEXICO",
+      "crop": "sorghum",
+      "year": 2023,
+      "acre_feet_per_acre": 2.8
+    },
+    {
+      "state": "NM",
+      "state_name": "NEW MEXICO",
+      "crop": "sorghum",
+      "year": 2023,
+      "acre_feet_per_acre": 1.5
+    },
+    {
+      "state": "NM",
+      "state_name": "NEW MEXICO",
+      "crop": "sorghum",
+      "year": 2023,
+      "acre_feet_per_acre": 1.6
+    },
+    {
+      "state": "NM",
+      "state_name": "NEW MEXICO",
+      "crop": "wheat",
+      "year": 2023,
+      "acre_feet_per_acre": 1.4
+    },
+    {
+      "state": "NM",
+      "state_name": "NEW MEXICO",
+      "crop": "wheat",
+      "year": 2023,
+      "acre_feet_per_acre": 1.0
+    },
+    {
+      "state": "NM",
+      "state_name": "NEW MEXICO",
+      "crop": "wheat",
+      "year": 2023,
+      "acre_feet_per_acre": 1.3
+    },
+    {
+      "state": "NM",
+      "state_name": "NEW MEXICO",
+      "crop": "cotton",
+      "year": 2023,
+      "acre_feet_per_acre": 2.0
+    },
+    {
+      "state": "NM",
+      "state_name": "NEW MEXICO",
+      "crop": "cotton",
+      "year": 2023,
+      "acre_feet_per_acre": 1.5
+    },
+    {
+      "state": "NM",
+      "state_name": "NEW MEXICO",
+      "crop": "cotton",
+      "year": 2023,
+      "acre_feet_per_acre": 1.7
+    },
+    {
+      "state": "OK",
+      "state_name": "OKLAHOMA",
+      "crop": "wheat",
+      "year": 2023,
+      "acre_feet_per_acre": 1.1
+    },
+    {
+      "state": "OK",
+      "state_name": "OKLAHOMA",
+      "crop": "wheat",
+      "year": 2023,
+      "acre_feet_per_acre": 1.2
+    },
+    {
+      "state": "OK",
+      "state_name": "OKLAHOMA",
+      "crop": "wheat",
+      "year": 2023,
+      "acre_feet_per_acre": 1.2
+    },
+    {
+      "state": "OK",
+      "state_name": "OKLAHOMA",
+      "crop": "cotton",
+      "year": 2023,
+      "acre_feet_per_acre": 2.0
+    },
+    {
+      "state": "OK",
+      "state_name": "OKLAHOMA",
+      "crop": "cotton",
+      "year": 2023,
+      "acre_feet_per_acre": 0.9
+    },
+    {
+      "state": "OK",
+      "state_name": "OKLAHOMA",
+      "crop": "cotton",
+      "year": 2023,
+      "acre_feet_per_acre": 0.9
+    },
+    {
+      "state": "OR",
+      "state_name": "OREGON",
+      "crop": "corn",
+      "year": 2023,
+      "acre_feet_per_acre": 3.3
+    },
+    {
+      "state": "OR",
+      "state_name": "OREGON",
+      "crop": "corn",
+      "year": 2023,
+      "acre_feet_per_acre": 2.6
+    },
+    {
+      "state": "OR",
+      "state_name": "OREGON",
+      "crop": "corn",
+      "year": 2023,
+      "acre_feet_per_acre": 2.6
+    },
+    {
+      "state": "OR",
+      "state_name": "OREGON",
+      "crop": "corn",
+      "year": 2023,
+      "acre_feet_per_acre": 2.8
+    },
+    {
+      "state": "OR",
+      "state_name": "OREGON",
+      "crop": "corn",
+      "year": 2023,
+      "acre_feet_per_acre": 2.2
+    },
+    {
+      "state": "OR",
+      "state_name": "OREGON",
+      "crop": "corn",
+      "year": 2023,
+      "acre_feet_per_acre": 2.2
+    },
+    {
+      "state": "OR",
+      "state_name": "OREGON",
+      "crop": "wheat",
+      "year": 2023,
+      "acre_feet_per_acre": 2.3
+    },
+    {
+      "state": "OR",
+      "state_name": "OREGON",
+      "crop": "wheat",
+      "year": 2023,
+      "acre_feet_per_acre": 1.4
+    },
+    {
+      "state": "OR",
+      "state_name": "OREGON",
+      "crop": "wheat",
+      "year": 2023,
+      "acre_feet_per_acre": 1.5
+    },
+    {
+      "state": "SC",
+      "state_name": "SOUTH CAROLINA",
+      "crop": "cotton",
+      "year": 2023,
+      "acre_feet_per_acre": 0.5
+    },
+    {
+      "state": "SC",
+      "state_name": "SOUTH CAROLINA",
+      "crop": "cotton",
+      "year": 2023,
+      "acre_feet_per_acre": 0.5
+    },
+    {
+      "state": "SD",
+      "state_name": "SOUTH DAKOTA",
+      "crop": "corn",
+      "year": 2023,
+      "acre_feet_per_acre": 0.7
+    },
+    {
+      "state": "SD",
+      "state_name": "SOUTH DAKOTA",
+      "crop": "corn",
+      "year": 2023,
+      "acre_feet_per_acre": 0.7
+    },
+    {
+      "state": "SD",
+      "state_name": "SOUTH DAKOTA",
+      "crop": "corn",
+      "year": 2023,
+      "acre_feet_per_acre": 0.8
+    },
+    {
+      "state": "SD",
+      "state_name": "SOUTH DAKOTA",
+      "crop": "corn",
+      "year": 2023,
+      "acre_feet_per_acre": 0.8
+    },
+    {
+      "state": "SD",
+      "state_name": "SOUTH DAKOTA",
+      "crop": "soybeans",
+      "year": 2023,
+      "acre_feet_per_acre": 0.6
+    },
+    {
+      "state": "SD",
+      "state_name": "SOUTH DAKOTA",
+      "crop": "soybeans",
+      "year": 2023,
+      "acre_feet_per_acre": 0.6
+    },
+    {
+      "state": "SD",
+      "state_name": "SOUTH DAKOTA",
+      "crop": "wheat",
+      "year": 2023,
+      "acre_feet_per_acre": 2.1
+    },
+    {
+      "state": "TN",
+      "state_name": "TENNESSEE",
+      "crop": "soybeans",
+      "year": 2023,
+      "acre_feet_per_acre": 0.3
+    },
+    {
+      "state": "TN",
+      "state_name": "TENNESSEE",
+      "crop": "soybeans",
+      "year": 2023,
+      "acre_feet_per_acre": 0.3
+    },
+    {
+      "state": "VA",
+      "state_name": "VIRGINIA",
+      "crop": "corn",
+      "year": 2023,
+      "acre_feet_per_acre": 0.5
+    },
+    {
+      "state": "VA",
+      "state_name": "VIRGINIA",
+      "crop": "corn",
+      "year": 2023,
+      "acre_feet_per_acre": 0.5
+    },
+    {
+      "state": "VA",
+      "state_name": "VIRGINIA",
+      "crop": "corn",
+      "year": 2023,
+      "acre_feet_per_acre": 0.5
+    },
+    {
+      "state": "VA",
+      "state_name": "VIRGINIA",
+      "crop": "corn",
+      "year": 2023,
+      "acre_feet_per_acre": 0.5
+    },
+    {
+      "state": "VA",
+      "state_name": "VIRGINIA",
+      "crop": "soybeans",
+      "year": 2023,
+      "acre_feet_per_acre": 0.4
+    },
+    {
+      "state": "VA",
+      "state_name": "VIRGINIA",
+      "crop": "soybeans",
+      "year": 2023,
+      "acre_feet_per_acre": 0.4
+    },
+    {
+      "state": "VA",
+      "state_name": "VIRGINIA",
+      "crop": "wheat",
+      "year": 2023,
+      "acre_feet_per_acre": 0.1
+    },
+    {
+      "state": "VA",
+      "state_name": "VIRGINIA",
+      "crop": "wheat",
+      "year": 2023,
+      "acre_feet_per_acre": 0.1
+    },
+    {
+      "state": "VA",
+      "state_name": "VIRGINIA",
+      "crop": "cotton",
+      "year": 2023,
+      "acre_feet_per_acre": 0.5
+    },
+    {
+      "state": "VA",
+      "state_name": "VIRGINIA",
+      "crop": "cotton",
+      "year": 2023,
+      "acre_feet_per_acre": 0.5
+    },
+    {
+      "state": "WA",
+      "state_name": "WASHINGTON",
+      "crop": "corn",
+      "year": 2023,
+      "acre_feet_per_acre": 1.9
+    },
+    {
+      "state": "WA",
+      "state_name": "WASHINGTON",
+      "crop": "corn",
+      "year": 2023,
+      "acre_feet_per_acre": 2.3
+    },
+    {
+      "state": "WA",
+      "state_name": "WASHINGTON",
+      "crop": "corn",
+      "year": 2023,
+      "acre_feet_per_acre": 2.2
+    },
+    {
+      "state": "WA",
+      "state_name": "WASHINGTON",
+      "crop": "corn",
+      "year": 2023,
+      "acre_feet_per_acre": 2.2
+    },
+    {
+      "state": "WA",
+      "state_name": "WASHINGTON",
+      "crop": "corn",
+      "year": 2023,
+      "acre_feet_per_acre": 2.4
+    },
+    {
+      "state": "WA",
+      "state_name": "WASHINGTON",
+      "crop": "corn",
+      "year": 2023,
+      "acre_feet_per_acre": 2.4
+    }
+  ]
+}

@@ -38,11 +38,25 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# S3 Configuration
+# S3 Configuration.
+# State- and county-aggregated data share the bucket but live under distinct
+# prefixes so they can't accidentally overwrite each other. Caller picks the
+# layout via --layout {state,county}; the `*_counties/` prefixes hold the
+# COUNTY-agg_level NASS rows produced by --county-only ingests, separate
+# from the STATE-agg_level rows served to the main dashboard tabs.
 S3_BUCKET = "usda-analysis-datasets"
-S3_BROWSER_PREFIX = "survey_datasets/partitioned_states"
-S3_ATHENA_PREFIX = "survey_datasets/athena_optimized"
 S3_BACKUP_PREFIX = "survey_datasets/backups"
+
+LAYOUT_PREFIXES = {
+    "state": {
+        "browser": "survey_datasets/partitioned_states",
+        "athena":  "survey_datasets/athena_optimized",
+    },
+    "county": {
+        "browser": "survey_datasets/partitioned_states_counties",
+        "athena":  "survey_datasets/athena_optimized_counties",
+    },
+}
 
 DEFAULT_SOURCE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "output")
 DEFAULT_REGION = os.environ.get("AWS_REGION", "us-east-2")
@@ -152,14 +166,19 @@ def upload_all(
     do_backup: bool = True,
     dry_run: bool = False,
     region: str = DEFAULT_REGION,
+    layout: str = "state",
 ):
     """Upload all parquet files from source directory to S3.
 
-    Uploads to both browser-fetch and Athena-optimized paths. Per-file failures
-    are caught and logged; the function returns False if any upload failed so
-    the caller (cron_runner.sh) can suppress downstream steps that depend on a
-    clean S3 state (notably the `last_success` stamp in quickstats_ingest).
+    Uploads to both browser-fetch and Athena-optimized paths for the chosen
+    layout. Per-file failures are caught and logged; the function returns
+    False if any upload failed so the caller (cron_runner.sh) can suppress
+    downstream steps that depend on a clean S3 state (notably the
+    `last_success` stamp in quickstats_ingest).
     """
+    if layout not in LAYOUT_PREFIXES:
+        raise ValueError(f"Unknown layout '{layout}'; expected one of {list(LAYOUT_PREFIXES)}")
+    prefixes = LAYOUT_PREFIXES[layout]
     s3_client = get_s3_client(region)
 
     succeeded = 0
@@ -177,7 +196,8 @@ def upload_all(
             failed.append((s3_key, str(e)))
 
     logger.info("=" * 60)
-    logger.info("Uploading browser-fetch layout (partitioned_states/)")
+    logger.info(f"Layout: {layout}")
+    logger.info(f"Uploading browser-fetch layout ({prefixes['browser']}/)")
     logger.info("=" * 60)
 
     parquet_files = [f for f in os.listdir(source_dir) if f.endswith(".parquet")]
@@ -189,14 +209,14 @@ def upload_all(
 
     for filename in sorted(parquet_files):
         local_path = os.path.join(source_dir, filename)
-        s3_key = f"{S3_BROWSER_PREFIX}/{filename}"
+        s3_key = f"{prefixes['browser']}/{filename}"
         _try_upload(local_path, s3_key)
 
     athena_source = os.path.join(source_dir, "athena_optimized")
     if os.path.exists(athena_source):
         logger.info("")
         logger.info("=" * 60)
-        logger.info("Uploading Athena-optimized layout (athena_optimized/)")
+        logger.info(f"Uploading Athena-optimized layout ({prefixes['athena']}/)")
         logger.info("=" * 60)
 
         for partition_dir in sorted(os.listdir(athena_source)):
@@ -208,7 +228,7 @@ def upload_all(
             if not os.path.exists(data_file):
                 continue
 
-            s3_key = f"{S3_ATHENA_PREFIX}/{partition_dir}/data.parquet"
+            s3_key = f"{prefixes['athena']}/{partition_dir}/data.parquet"
             _try_upload(data_file, s3_key)
     else:
         logger.info("No Athena-optimized directory found, skipping Athena upload")
@@ -222,7 +242,12 @@ def upload_all(
     logger.info("=" * 60)
 
     all_good = len(failed) == 0
-    if all_good and not dry_run:
+    # Only stamp the NASS manifest after a clean STATE-layout upload. County
+    # uploads are standalone artifacts; promoting the manifest on a county-
+    # only run would cause incremental_check.py to skip the next state-level
+    # ingest (it compares against manifest.uploaded_record_counts, which is
+    # state-scoped).
+    if all_good and not dry_run and layout == "state":
         _promote_manifest_after_upload()
 
     return all_good
@@ -260,6 +285,15 @@ def main():
         "--source-dir", default=DEFAULT_SOURCE_DIR, help="Directory containing parquet files"
     )
     parser.add_argument(
+        "--layout",
+        choices=sorted(LAYOUT_PREFIXES),
+        default="state",
+        help="S3 path layout: 'state' (default) for STATE-level NASS rows to "
+        "partitioned_states/, 'county' for COUNTY-level rows to "
+        "partitioned_states_counties/. Pick based on what your pipeline/output "
+        "directory actually contains — the tool does not re-inspect row content.",
+    )
+    parser.add_argument(
         "--no-backup", action="store_true", help="Skip backing up existing S3 files"
     )
     parser.add_argument("--dry-run", action="store_true", help="Show what would be uploaded")
@@ -275,6 +309,7 @@ def main():
         do_backup=not args.no_backup,
         dry_run=args.dry_run,
         region=args.region,
+        layout=args.layout,
     )
 
     sys.exit(0 if success else 1)

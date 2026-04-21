@@ -34,13 +34,30 @@ export default function YieldTrendChart({ data, commodity, stateName, unit }: Yi
     const last = data[data.length - 1];
     if (!first?.stateYield || !last?.stateYield) return '';
     const pct = ((last.stateYield - first.stateYield) / first.stateYield) * 100;
+
+    // Percentile rank of the most recent yield within the series. Uses the
+    // standard "percent of values strictly below" definition; n ≥ 2 is guarded
+    // above.
+    const yields = data.map((d) => d.stateYield).filter((v) => v > 0);
+    const below = yields.filter((v) => v < last.stateYield).length;
+    const pctile = Math.round((below / yields.length) * 100);
+    const ordinal = (() => {
+      const mod10 = pctile % 10;
+      const mod100 = pctile % 100;
+      if (mod100 >= 11 && mod100 <= 13) return `${pctile}th`;
+      if (mod10 === 1) return `${pctile}st`;
+      if (mod10 === 2) return `${pctile}nd`;
+      if (mod10 === 3) return `${pctile}rd`;
+      return `${pctile}th`;
+    })();
+
     return generateCaption('crops-yield-trend', {
       stateName,
       commodity,
       direction: pct >= 0 ? 'grown' : 'declined',
       pct: Math.abs(pct).toFixed(0),
       startYear: first.year,
-      percentile: '—',
+      percentile: ordinal,
     });
   }, [data, stateName, commodity]);
 

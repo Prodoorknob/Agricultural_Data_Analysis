@@ -1,0 +1,311 @@
+{
+  "dataset": "eia_state_prices",
+  "rows": [
+    {
+      "state": "AK",
+      "cents_per_kwh": 19.48,
+      "year": 2024,
+      "source": "eia_state_profiles_2024_static"
+    },
+    {
+      "state": "AL",
+      "cents_per_kwh": 7.58,
+      "year": 2024,
+      "source": "eia_state_profiles_2024_static"
+    },
+    {
+      "state": "AR",
+      "cents_per_kwh": 7.34,
+      "year": 2024,
+      "source": "eia_state_profiles_2024_static"
+    },
+    {
+      "state": "AZ",
+      "cents_per_kwh": 7.53,
+      "year": 2024,
+      "source": "eia_state_profiles_2024_static"
+    },
+    {
+      "state": "CA",
+      "cents_per_kwh": 17.52,
+      "year": 2024,
+      "source": "eia_state_profiles_2024_static"
+    },
+    {
+      "state": "CO",
+      "cents_per_kwh": 9.06,
+      "year": 2024,
+      "source": "eia_state_profiles_2024_static"
+    },
+    {
+      "state": "CT",
+      "cents_per_kwh": 13.64,
+      "year": 2024,
+      "source": "eia_state_profiles_2024_static"
+    },
+    {
+      "state": "DC",
+      "cents_per_kwh": 14.96,
+      "year": 2024,
+      "source": "eia_state_profiles_2024_static"
+    },
+    {
+      "state": "DE",
+      "cents_per_kwh": 9.1,
+      "year": 2024,
+      "source": "eia_state_profiles_2024_static"
+    },
+    {
+      "state": "FL",
+      "cents_per_kwh": 8.54,
+      "year": 2024,
+      "source": "eia_state_profiles_2024_static"
+    },
+    {
+      "state": "GA",
+      "cents_per_kwh": 7.18,
+      "year": 2024,
+      "source": "eia_state_profiles_2024_static"
+    },
+    {
+      "state": "HI",
+      "cents_per_kwh": 24.1,
+      "year": 2024,
+      "source": "eia_state_profiles_2024_static"
+    },
+    {
+      "state": "IA",
+      "cents_per_kwh": 6.58,
+      "year": 2024,
+      "source": "eia_state_profiles_2024_static"
+    },
+    {
+      "state": "ID",
+      "cents_per_kwh": 7.72,
+      "year": 2024,
+      "source": "eia_state_profiles_2024_static"
+    },
+    {
+      "state": "IL",
+      "cents_per_kwh": 8.5,
+      "year": 2024,
+      "source": "eia_state_profiles_2024_static"
+    },
+    {
+      "state": "IN",
+      "cents_per_kwh": 8.37,
+      "year": 2024,
+      "source": "eia_state_profiles_2024_static"
+    },
+    {
+      "state": "KS",
+      "cents_per_kwh": 9.21,
+      "year": 2024,
+      "source": "eia_state_profiles_2024_static"
+    },
+    {
+      "state": "KY",
+      "cents_per_kwh": 7.76,
+      "year": 2024,
+      "source": "eia_state_profiles_2024_static"
+    },
+    {
+      "state": "LA",
+      "cents_per_kwh": 7.12,
+      "year": 2024,
+      "source": "eia_state_profiles_2024_static"
+    },
+    {
+      "state": "MA",
+      "cents_per_kwh": 16.26,
+      "year": 2024,
+      "source": "eia_state_profiles_2024_static"
+    },
+    {
+      "state": "MD",
+      "cents_per_kwh": 10.12,
+      "year": 2024,
+      "source": "eia_state_profiles_2024_static"
+    },
+    {
+      "state": "ME",
+      "cents_per_kwh": 11.59,
+      "year": 2024,
+      "source": "eia_state_profiles_2024_static"
+    },
+    {
+      "state": "MI",
+      "cents_per_kwh": 8.63,
+      "year": 2024,
+      "source": "eia_state_profiles_2024_static"
+    },
+    {
+      "state": "MN",
+      "cents_per_kwh": 8.68,
+      "year": 2024,
+      "source": "eia_state_profiles_2024_static"
+    },
+    {
+      "state": "MO",
+      "cents_per_kwh": 8.24,
+      "year": 2024,
+      "source": "eia_state_profiles_2024_static"
+    },
+    {
+      "state": "MS",
+      "cents_per_kwh": 7.85,
+      "year": 2024,
+      "source": "eia_state_profiles_2024_static"
+    },
+    {
+      "state": "MT",
+      "cents_per_kwh": 6.4,
+      "year": 2024,
+      "source": "eia_state_profiles_2024_static"
+    },
+    {
+      "state": "NC",
+      "cents_per_kwh": 7.31,
+      "year": 2024,
+      "source": "eia_state_profiles_2024_static"
+    },
+    {
+      "state": "ND",
+      "cents_per_kwh": 7.18,
+      "year": 2024,
+      "source": "eia_state_profiles_2024_static"
+    },
+    {
+      "state": "NE",
+      "cents_per_kwh": 7.97,
+      "year": 2024,
+      "source": "eia_state_profiles_2024_static"
+    },
+    {
+      "state": "NH",
+      "cents_per_kwh": 13.99,
+      "year": 2024,
+      "source": "eia_state_profiles_2024_static"
+    },
+    {
+      "state": "NJ",
+      "cents_per_kwh": 12.47,
+      "year": 2024,
+      "source": "eia_state_profiles_2024_static"
+    },
+    {
+      "state": "NM",
+      "cents_per_kwh": 7.44,
+      "year": 2024,
+      "source": "eia_state_profiles_2024_static"
+    },
+    {
+      "state": "NV",
+      "cents_per_kwh": 7.75,
+      "year": 2024,
+      "source": "eia_state_profiles_2024_static"
+    },
+    {
+      "state": "NY",
+      "cents_per_kwh": 9.56,
+      "year": 2024,
+      "source": "eia_state_profiles_2024_static"
+    },
+    {
+      "state": "OH",
+      "cents_per_kwh": 7.71,
+      "year": 2024,
+      "source": "eia_state_profiles_2024_static"
+    },
+    {
+      "state": "OK",
+      "cents_per_kwh": 6.61,
+      "year": 2024,
+      "source": "eia_state_profiles_2024_static"
+    },
+    {
+      "state": "OR",
+      "cents_per_kwh": 7.4,
+      "year": 2024,
+      "source": "eia_state_profiles_2024_static"
+    },
+    {
+      "state": "PA",
+      "cents_per_kwh": 8.24,
+      "year": 2024,
+      "source": "eia_state_profiles_2024_static"
+    },
+    {
+      "state": "RI",
+      "cents_per_kwh": 14.95,
+      "year": 2024,
+      "source": "eia_state_profiles_2024_static"
+    },
+    {
+      "state": "SC",
+      "cents_per_kwh": 7.5,
+      "year": 2024,
+      "source": "eia_state_profiles_2024_static"
+    },
+    {
+      "state": "SD",
+      "cents_per_kwh": 7.27,
+      "year": 2024,
+      "source": "eia_state_profiles_2024_static"
+    },
+    {
+      "state": "TN",
+      "cents_per_kwh": 7.78,
+      "year": 2024,
+      "source": "eia_state_profiles_2024_static"
+    },
+    {
+      "state": "TX",
+      "cents_per_kwh": 6.48,
+      "year": 2024,
+      "source": "eia_state_profiles_2024_static"
+    },
+    {
+      "state": "UT",
+      "cents_per_kwh": 6.57,
+      "year": 2024,
+      "source": "eia_state_profiles_2024_static"
+    },
+    {
+      "state": "VA",
+      "cents_per_kwh": 7.87,
+      "year": 2024,
+      "source": "eia_state_profiles_2024_static"
+    },
+    {
+      "state": "VT",
+      "cents_per_kwh": 11.0,
+      "year": 2024,
+      "source": "eia_state_profiles_2024_static"
+    },
+    {
+      "state": "WA",
+      "cents_per_kwh": 6.86,
+      "year": 2024,
+      "source": "eia_state_profiles_2024_static"
+    },
+    {
+      "state": "WI",
+      "cents_per_kwh": 8.43,
+      "year": 2024,
+      "source": "eia_state_profiles_2024_static"
+    },
+    {
+      "state": "WV",
+      "cents_per_kwh": 7.72,
+      "year": 2024,
+      "source": "eia_state_profiles_2024_static"
+    },
+    {
+      "state": "WY",
+      "cents_per_kwh": 6.93,
+      "year": 2024,
+      "source": "eia_state_profiles_2024_static"
+    }
+  ]
+}

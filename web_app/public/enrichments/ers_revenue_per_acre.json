@@ -1,0 +1,35 @@
+{
+  "dataset": "ers_revenue_per_acre",
+  "rows": [
+    {
+      "crop": "corn",
+      "year": 2024,
+      "gross_value_usd_per_acre": 757.48,
+      "source_file": "corn.xlsx"
+    },
+    {
+      "crop": "cotton",
+      "year": 2024,
+      "gross_value_usd_per_acre": 685.59,
+      "source_file": "cotton.xlsx"
+    },
+    {
+      "crop": "sorghum",
+      "year": 2024,
+      "gross_value_usd_per_acre": 279.37,
+      "source_file": "sorghum.xlsx"
+    },
+    {
+      "crop": "soybeans",
+      "year": 2024,
+      "gross_value_usd_per_acre": 544.29,
+      "source_file": "soybeans.xlsx"
+    },
+    {
+      "crop": "wheat",
+      "year": 2024,
+      "gross_value_usd_per_acre": 287.33,
+      "source_file": "wheat.xlsx"
+    }
+  ]
+}

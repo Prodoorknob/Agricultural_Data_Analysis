@@ -2,6 +2,9 @@ import { parquetRead, parquetMetadata } from 'hyparquet';
 
 // S3 bucket configuration - Primary data source
 const S3_BUCKET_URL = 'https://usda-analysis-datasets.s3.us-east-2.amazonaws.com/survey_datasets/partitioned_states';
+// Root of the bucket — used when fetching from non-default prefixes
+// (partitioned_states_counties/, enrichment/, etc.)
+const S3_BUCKET_ROOT = 'https://usda-analysis-datasets.s3.us-east-2.amazonaws.com';
 
 export const US_STATES: Record<string, string> = {
     'AL': 'ALABAMA', 'AK': 'ALASKA', 'AZ': 'ARIZONA', 'AR': 'ARKANSAS', 'CA': 'CALIFORNIA',
@@ -95,17 +98,28 @@ async function parseParquetBuffer(arrayBuffer: ArrayBuffer): Promise<any[]> {
  * 2. Try local API proxy (fallback)
  * 3. Return empty array on all failures
  *
- * @param filename Relative path to the parquet file (e.g., 'IN.parquet')
+ * @param filename EITHER a bare filename (e.g. `IN.parquet`) — resolves under
+ *   the default `survey_datasets/partitioned_states/` prefix — OR a path with
+ *   a slash, which is treated as a KEY RELATIVE to a custom prefix
+ *   (e.g. `partitioned_states_counties/IN.parquet` or `enrichment/foo.parquet`).
+ *   Paths starting with `partitioned_states_counties/` or `enrichment/` are
+ *   resolved from the bucket root.
  * @param signal Optional AbortSignal — callers pass one tied to component
  *   lifecycle so rapid state switches don't race older fetches on top of
  *   fresher state updates.
  */
 async function fetchParquet(filename: string, signal?: AbortSignal): Promise<any[]> {
-    const justFilename = filename.includes('/') ? filename.split('/').pop() || filename : filename;
+    // Decide whether this is a bare filename (default prefix) or a rooted key.
+    const hasSlash = filename.includes('/');
+    const rootedPrefixes = ['partitioned_states_counties/', 'enrichment/'];
+    const isRooted = rootedPrefixes.some(p => filename.startsWith(p));
+    const s3Url = isRooted
+        ? `${S3_BUCKET_ROOT}/${filename.startsWith('enrichment/') ? filename : `survey_datasets/${filename}`}`
+        : `${S3_BUCKET_URL}/${hasSlash ? filename.split('/').pop() : filename}`;
+    const justFilename = filename.split('/').pop() || filename;
 
-    console.log(`[S3] Attempting to fetch ${justFilename} from S3...`);
+    console.log(`[S3] Attempting to fetch ${justFilename} from S3... (${s3Url})`);
     try {
-        const s3Url = `${S3_BUCKET_URL}/${justFilename}`;
         const s3Response = await fetch(s3Url, {
             method: 'GET',
             mode: 'cors',
@@ -167,6 +181,37 @@ export async function fetchStateData(stateAlpha: string, signal?: AbortSignal) {
  */
 export async function fetchNationalCrops(signal?: AbortSignal) {
     return fetchParquet('partitioned_states/NATIONAL.parquet', signal);
+}
+
+/**
+ * Fetch COUNTY-level NASS rows for a specific state. Backs the Crops tab
+ * choropleth — 50 files total, typically 15-30K rows each. The S3 layout is
+ * separate from the state-level dataset (see upload_to_s3.py --layout).
+ */
+export async function fetchCountyData(stateAlpha: string, signal?: AbortSignal) {
+    const stateName = getStateName(stateAlpha);
+    if (!stateName) {
+        console.error(`Unknown state alpha for county fetch: ${stateAlpha}`);
+        return [];
+    }
+    return fetchParquet(`partitioned_states_counties/${stateAlpha}.parquet`, signal);
+}
+
+/**
+ * Fetch the nationwide NOAA nClimDiv county-precipitation parquet — one
+ * small artifact (~100 KB) with 3,100 rows: fips, precip_normal_mm_yr,
+ * precip_recent_mm_yr, precip_anomaly_pct.
+ */
+export async function fetchCountyPrecip(signal?: AbortSignal) {
+    return fetchParquet('enrichment/county_precip.parquet', signal);
+}
+
+/**
+ * Fetch the nationwide NASS irrigated-county-acres parquet — 2017 + 2022
+ * Census rows. Columns: fips, state, crop, year, irrigated_acres.
+ */
+export async function fetchIrrigatedCountyAcres(signal?: AbortSignal) {
+    return fetchParquet('enrichment/nass_irrigated_county.parquet', signal);
 }
 
 /**

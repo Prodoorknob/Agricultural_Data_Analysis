@@ -19,7 +19,7 @@ const templates: Record<string, string> = {
 
   // Crops
   'crops-yield-trend':
-    '{stateName} {commodity} yields have {direction} {pct}% since {startYear} ({percentile}th percentile of the 25-year record).',
+    '{stateName} {commodity} yields have {direction} {pct}% since {startYear} ({percentile} percentile of the 25-year record).',
   'crops-anomaly':
     'Biggest dip: {anomalyYear} ({delta}%, {narrative}).',
   'crops-profit':

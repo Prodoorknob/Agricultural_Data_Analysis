@@ -3,7 +3,9 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useFilters } from '@/hooks/useFilters';
 import { LATEST_NASS_YEAR, CROP_COMMODITIES } from '@/lib/constants';
-import { US_STATES, fetchStateData, fetchNationalCrops } from '@/utils/serviceData';
+import {
+  US_STATES, fetchStateData, fetchNationalCrops, fetchCountyData, fetchCountyPrecip, fetchIrrigatedCountyAcres,
+} from '@/utils/serviceData';
 import { filterData, getCommodityStory, detectAnomalies, getTopCrops, getCropConditionTrends } from '@/utils/processData';
 import BandShell from '@/components/shared/BandShell';
 import CommodityPicker from '@/components/shared/CommodityPicker';
@@ -12,7 +14,9 @@ import YieldTrendChart from '@/components/crops/YieldTrendChart';
 import ProfitChart from '@/components/crops/ProfitChart';
 import HarvestEfficiency from '@/components/crops/HarvestEfficiency';
 import CropProgressStrip from '@/components/crops/CropProgressStrip';
-import CountyDrillDown from '@/components/crops/CountyDrillDown';
+import CropsStateMap, { rollupByCounty } from '@/components/crops/CropsStateMap';
+import CropsPeers from '@/components/crops/CropsPeers';
+import CropsCountyDrill from '@/components/crops/CropsCountyDrill';
 
 // Backend /api/v1/crops/profit-history accepts these keys. Frontend stores
 // commodity uppercase with plural for 'SOYBEANS' / 'PEANUTS', so normalize
@@ -60,20 +64,31 @@ export default function CropsPage() {
 
   const [stateData, setStateData] = useState<any[]>([]);
   const [nationalData, setNationalData] = useState<any[]>([]);
+  const [countyData, setCountyData] = useState<any[]>([]);
+  const [precipByFips, setPrecipByFips] = useState<Map<string, any>>(new Map());
+  const [irrigatedByFipsCrop, setIrrigatedByFipsCrop] = useState<Map<string, number>>(new Map());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedFips, setSelectedFips] = useState<string | null>(null);
+
+  // Reset drill-down when state or crop changes
+  useEffect(() => {
+    setSelectedFips(null);
+  }, [stateCode, commodity]);
 
   useEffect(() => {
     setLoading(true);
     setError(null);
     (async () => {
       try {
-        const [sd, nd] = await Promise.all([
+        const [sd, nd, cd] = await Promise.all([
           stateCode ? fetchStateData(stateCode) : Promise.resolve([]),
           fetchNationalCrops(),
+          stateCode ? fetchCountyData(stateCode) : Promise.resolve([]),
         ]);
         setStateData(sd || []);
         setNationalData(nd || []);
+        setCountyData(cd || []);
       } catch {
         setError('Failed to load crop data.');
       }
@@ -81,7 +96,55 @@ export default function CropsPage() {
     })();
   }, [stateCode]);
 
+  // Enrichments (load once per session — small nationwide parquets/JSONs)
+  useEffect(() => {
+    (async () => {
+      try {
+        const [precipRows, irrRows] = await Promise.all([
+          fetchCountyPrecip(),
+          fetchIrrigatedCountyAcres(),
+        ]);
+        const pm = new Map<string, any>();
+        for (const r of precipRows || []) {
+          if (r.fips) pm.set(String(r.fips), r);
+        }
+        setPrecipByFips(pm);
+        const im = new Map<string, number>();
+        for (const r of irrRows || []) {
+          // prefer most-recent census year when both 2017 and 2022 present
+          const key = `${r.fips}|${String(r.crop || '').toLowerCase()}`;
+          const existing = im.get(key);
+          const yr = Number(r.year);
+          if (!existing || yr > 0) im.set(key, Number(r.irrigated_acres));
+        }
+        setIrrigatedByFipsCrop(im);
+      } catch (err) {
+        console.warn('[enrichments] load failed', err);
+      }
+    })();
+  }, []);
+
   const activeData = useMemo(() => filterData(stateCode ? stateData : nationalData), [stateCode, stateData, nationalData]);
+
+  // County-level rollup for the map + peers + drill. filterData applies the
+  // same reference_period / source / class filters we fixed earlier, so the
+  // county numbers stay consistent with the state KPIs.
+  const filteredCountyData = useMemo(() => filterData(countyData), [countyData]);
+  const countyRollup = useMemo(
+    () => rollupByCounty(filteredCountyData, commodity, year),
+    [filteredCountyData, commodity, year],
+  );
+
+  const handleCountyClick = useCallback((fips: string) => setSelectedFips(fips), []);
+  const handleCountyClose = useCallback(() => setSelectedFips(null), []);
+
+  // Esc key dismiss
+  useEffect(() => {
+    if (!selectedFips) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setSelectedFips(null); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [selectedFips]);
 
   // Commodity story — 25 years of merged metrics
   const storyResult = useMemo(() => getCommodityStory(activeData, commodity), [activeData, commodity]);
@@ -91,9 +154,16 @@ export default function CropsPage() {
   const heroData = useMemo(() => {
     const thisYear = story.find((s: any) => s.year === year);
     const priorYear = story.find((s: any) => s.year === year - 1);
-    const fiveYearsAgo = story.filter((s: any) => s.year >= year - 5 && s.year <= year - 1);
-    const avg5yr = fiveYearsAgo.length > 0
-      ? fiveYearsAgo.reduce((s: number, r: any) => s + (r.yield || 0), 0) / fiveYearsAgo.length
+    // 5-year average: exclude years where yield is 0/missing. Census years
+    // (2017, 2012) don't always have a SURVEY yield row for every commodity —
+    // averaging 0s in drags the baseline down ~20% and makes the delta card
+    // lie about how the current year compares.
+    const fiveYearYields = story
+      .filter((s: any) => s.year >= year - 5 && s.year <= year - 1)
+      .map((s: any) => s.yield || 0)
+      .filter((v: number) => v > 0);
+    const avg5yr = fiveYearYields.length > 0
+      ? fiveYearYields.reduce((s: number, v: number) => s + v, 0) / fiveYearYields.length
       : 0;
 
     const yieldNow = thisYear?.yield || 0;
@@ -269,12 +339,14 @@ export default function CropsPage() {
     setError(null);
     (async () => {
       try {
-        const [sd, nd] = await Promise.all([
+        const [sd, nd, cd] = await Promise.all([
           stateCode ? fetchStateData(stateCode) : Promise.resolve([]),
           fetchNationalCrops(),
+          stateCode ? fetchCountyData(stateCode) : Promise.resolve([]),
         ]);
         setStateData(sd || []);
         setNationalData(nd || []);
+        setCountyData(cd || []);
       } catch {
         setError('Failed to load crop data.');
       }
@@ -338,8 +410,98 @@ export default function CropsPage() {
       </div>
 
       <BandShell loading={loading} error={error} onRetry={retry}>
-        {/* Band B — Hero KPI row */}
+        {/* Band B — Hero KPI row (state-level KPIs) */}
         <CropHeroRow {...heroData} />
+
+        {/* Band B2 — Inverted-L: map + drill-down panel. Only shown when a
+            state is selected and we successfully loaded county data. */}
+        {stateCode && countyRollup.size > 0 && (
+          <div style={{ marginBottom: 24 }}>
+            <div className="crops-invL-wrap">
+              <div className="card crops-mapcard">
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.12em', color: 'var(--text3)', textTransform: 'uppercase', marginBottom: 10 }}>
+                  County choropleth · Yield anomaly vs state median
+                </div>
+                <CropsStateMap
+                  stateAlpha={stateCode}
+                  countyRows={filteredCountyData}
+                  commodity={commodity}
+                  year={year}
+                  onCountyClick={handleCountyClick}
+                  selectedFips={selectedFips}
+                />
+              </div>
+
+              <div className="card crops-panelcard">
+                {selectedFips ? (
+                  <CropsCountyDrill
+                    rollup={countyRollup}
+                    selectedFips={selectedFips}
+                    stateName={stateName}
+                    commodityLabel={commodityLabel}
+                    year={year}
+                    precipRow={precipByFips.get(selectedFips)}
+                    irrigatedAcres={irrigatedByFipsCrop.get(`${selectedFips}|${commodity.toLowerCase()}`)}
+                    onClose={handleCountyClose}
+                  />
+                ) : (
+                  <div>
+                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.12em', color: 'var(--text3)', textTransform: 'uppercase', marginBottom: 6 }}>
+                      {stateName} · {countyRollup.size} reporting counties
+                    </div>
+                    <div style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.01em', marginBottom: 12 }}>
+                      Click a county to drill in
+                    </div>
+                    <div style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.6, maxWidth: 640 }}>
+                      The map colors counties by yield anomaly vs the state
+                      median. Green = above median, rust = below. Clicking any
+                      county swaps this panel into an Ogallala-style drill with
+                      KPIs, growing-season precipitation vs 30-year normal
+                      (NOAA nClimDiv), and irrigated-acres share from the 2022
+                      Census of Ag.
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="card crops-peerscard">
+                <CropsPeers
+                  rollup={countyRollup}
+                  mode={selectedFips ? 'county' : 'state'}
+                  selectedFips={selectedFips}
+                  onCountyClick={handleCountyClick}
+                />
+              </div>
+
+              <div className="card crops-methcard">
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.4fr', gap: 24 }}>
+                  <div>
+                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.12em', color: 'var(--text3)', textTransform: 'uppercase', marginBottom: 8 }}>Sources</div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                      <span className="pchip">USDA NASS QuickStats · 2001–2024</span>
+                      <span className="pchip">NOAA nClimDiv 1991–2020 normals</span>
+                      <span className="pchip">NASS Census of Ag 2022 · irrigated acres</span>
+                      <span className="pchip pchip--faint">Updated Apr 2026</span>
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.12em', color: 'var(--text3)', textTransform: 'uppercase', marginBottom: 8 }}>Method signature</div>
+                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text2)', lineHeight: 1.65 }}>
+                      State totals are NASS <code>agg_level_desc = &apos;STATE&apos;</code>
+                      rows under <code>reference_period_desc = &apos;YEAR&apos;</code>. County
+                      rollup uses the same canonical slice with <code>unit_desc</code>
+                      checks to avoid biotech-PCT sub-types. Choropleth metric is yield
+                      anomaly relative to state median; ranks recompute from the
+                      reporting subset. Precipitation from NCEI climdiv-pcpncy
+                      (hundredths-of-inches → mm); irrigated-acres from the
+                      CENSUS prodn_practice_desc=IRRIGATED split.
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Band C — Yield trend with anomaly flags */}
         {yieldTrendData.length > 0 && (

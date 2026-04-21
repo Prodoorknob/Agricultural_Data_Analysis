@@ -409,3 +409,94 @@ Optional env vars:
   MODEL_SIGNING_KEY=<hmac-secret>            # enables pickle signing
   MODEL_REQUIRE_SIGNED=1                     # refuse unverified loads at startup
 ```
+
+### County Coverage Fill (2026-04-19)
+
+Closed most of the county-level NASS gaps identified in `research/county-coverage-analysis-2026-04-17.md`. Dataset roughly doubled; wheat — previously zero rows — is the headline gain. **Local parquets updated; S3 and yield models are NOT yet refreshed — see pending items below.**
+
+#### Pending (read me first next session)
+
+1. **Upload new parquets to S3.** Local `pipeline/output/*.parquet` has the new data; S3 still serves the pre-fill snapshot. Frontend and yield training both read from S3, so nothing downstream sees the new data until this runs.
+   ```
+   aws sso login                                  # SSO token expires; refresh first
+   python pipeline/upload_to_s3.py --backup
+   ```
+   **Before running, verify `upload_to_s3.py` covers the county S3 layout.** The script's defaults are `S3_BROWSER_PREFIX = "survey_datasets/partitioned_states"` + `S3_ATHENA_PREFIX = "survey_datasets/athena_optimized"`, but county parquets per earlier CLAUDE.md notes live under `survey_datasets/partitioned_states_counties/` and `survey_datasets/athena_optimized_counties/`. May need a flag/branch; don't `--backup` on the state layout if what you're uploading is county-only.
+
+2. **Retrain yield models** — required if you want the new wheat + expanded corn/soy/etc. county rows reflected in forecasts. Yield is the only module affected; acreage is state-level and unaffected, price uses different sources.
+   ```
+   python -m backend.models.train_yield --persist-accuracy --upload-s3
+   # ~3-4 hrs: 60 models (3 crops × 20 weeks)
+   ssh ec2-host 'sudo systemctl restart ag-prediction'   # reload artifacts
+   ```
+
+3. **Optional: label the 572 UNCLASSIFIED triples.** `pipeline/county_coverage_allowlist.json` currently only holds 70 PENDING_PUBLICATION entries. The 572 remaining gaps are almost certainly NOT_GROWN or NASS_SUPPRESSION — the classifier couldn't distinguish because local state parquets are COUNTY-only (the post-Apr-2026 county-only ingest overwrote state-level rows). A one-time state-level NASS pull for those specific combos would let the allowlist be fully labeled.
+
+4. **Audit regeneration hygiene.** `pipeline/_county_coverage_audit.py` now lists WHEAT in its `COUNTY_COMMODITIES`. Next regeneration of `research/county-coverage-analysis-YYYY-MM-DD.md` should read "12 commodities".
+
+#### What shipped
+
+- **New script:** `pipeline/fill_county_gaps.py`. Re-audits current parquets → computes gap set (ideal × `MAJOR_PRODUCERS` minus `COUNTY_SKIP_STATES` minus allowlist) → runs `quickstats_ingest.py --county-only --resume --states <ST>` **one state at a time** (throttle-resilient: each state atomically commits its parquet before the next starts). Post-ingest re-audits + classifies residuals (NOT_GROWN / NASS_SUPPRESSION / PENDING_PUBLICATION / UNCLASSIFIED). Stops on empty gap set or plateau. Always resume-by-default; no `--resume` flag needed on the wrapper. Flags: `--states`, `--max-rounds`, `--min-delta`, `--dry-run`.
+- **Two-line patch to `pipeline/quickstats_ingest.py`:** added `"WHEAT"` to `COUNTY_COMMODITIES` and `"WHEAT": {"AK", "HI", "DC"}` to `COUNTY_SKIP_STATES`. Permanent — future main-pipeline runs include wheat.
+- **`.env` pass-through in the filler.** Main ingest reads `USDA_QUICKSTATS_API_KEY` or AWS SSM; project `.env` ships the key under `QUICKSTATS_API_KEY`. `fill_county_gaps.py::_subprocess_env` reads `.env`, re-exports under the expected name, avoids SSO dependency.
+- **Persistent artifacts:**
+  - `pipeline/county_coverage_allowlist.json` — 70 entries, all PENDING_PUBLICATION (2025 data not yet released). Auto-prunes expired entries on next run.
+  - `pipeline/fill_county_gaps_report.json` — per-run summary.
+  - `research/county-coverage-analysis-2026-04-19.md` — regenerated audit alongside the Apr-17 baseline.
+
+#### Numbers (before → after)
+
+| Metric | 2026-04-17 | 2026-04-19 | Δ |
+|---|---:|---:|---:|
+| County rows | 870,995 | 1,932,343 | +1,061,348 (+122%) |
+| (state, commodity) pairs | 241 | 277 | +36 |
+| (state, commodity, year) triples | 2,470 | 4,748 | +2,278 |
+| 4/4 stat-complete pairs | 166 | 201 | +35 |
+| Counties | 3,101 | 3,105 | +4 |
+
+Per-commodity row deltas: WHEAT 0 → **418,424**; HAY +184K; CORN +166K; SOYBEANS +104K; SORGHUM +48K; COTTON +46K; OATS +44K; BARLEY +26K; SUNFLOWER +17K; RICE +6K.
+
+Of the 1,764 originally-computed gap triples, 1,192 closed (68%). Residual 572 persisted across 2 rounds (structural / unreleased / classifier-blind). The "coverage_pct=165%" value in the JSON report is an artifact of comparing post-fill triples against a `MAJOR_PRODUCERS`-only ideal denominator — more data returned than the major-producer slice predicted. Use the gap-closure count as the real signal.
+
+#### Known minor issue
+
+WY reported "ingest failed" on both rounds' subprocess returncode — it has one stubborn triple (2024 BARLEY) that NASS 400s on every retry. Almost certainly unpublished upstream. Safe to ignore; will auto-resolve when NASS publishes or `PENDING_PUBLICATION` logic promotes it.
+
+### County S3 Upload + Crops Tab Redesign (2026-04-21)
+
+Closed the pending post-county-fill work and shipped a full Crops-tab rebuild.
+
+#### What shipped
+
+**S3 upload for county layout.** `pipeline/upload_to_s3.py` now takes `--layout {state,county}`. Layout-specific prefixes: state writes to `partitioned_states/` + `athena_optimized/`, county writes to `partitioned_states_counties/` + `athena_optimized_counties/`. Manifest stamp only fires on clean STATE uploads — county-only uploads cannot falsely promote `uploaded_record_counts` and block the next state ingest. Uploaded 48 state-partitioned county parquets + matching Athena layout to the correct prefix with backups. 96 successful, 0 failed.
+
+**Three P0 Crops-tab data bugs fixed.**
+- `processData.ts::filterData` now drops `YEAR - *` reference_period variants (JUN ACREAGE, MAR ACREAGE, NOV FORECAST, SEP FORECAST, etc.) and includes `reference_period_desc + class_desc + prodn/util practice + short_desc` in the SURVEY/CENSUS dedup key. Indiana corn 2024 planted acres: 31.0M → 5.2M.
+- `getCommodityStory` switched from `sum` to `max` with unit gates (ACRES for area, BU/CWT/LB/TONS for production, non-PCT for yield). Biotech-PCT sub-rows can no longer contaminate acre totals. Harvest efficiency chart: peaks 300% → max 100%.
+- `YieldTrendChart` computes percentile ordinal client-side (96th, 91st, 22nd with proper 11/12/13 special case); caption template no longer double-suffixes. Fixed "—th percentile" → "96th percentile".
+- `crops/page.tsx` 5-year baseline now skips zero-yield years so Census-year SURVEY gaps (e.g. 2017 Indiana corn has CENSUS-only rows) don't drag the baseline down ~20%.
+
+**5 enrichment ingests ported from aquifer-watch** in `pipeline/enrichments/`:
+- `noaa_climdiv_county_precip.py`: nationwide NCEI climdiv parquet, 3,137 counties, 1895–2025. Expanded NCDC→FIPS map to all 50 states. Output `enrichment/county_precip.parquet` on S3.
+- `nass_irrigated_county.py`: NASS Census 2017+2022 irrigated acres by (fips, crop). 252 counties (5-state rate-limit residual). Output `enrichment/nass_irrigated_county.parquet` on S3.
+- `iwms_water.py`: state × crop water-applied per acre (155 rows). Writes parquet + JSON.
+- `ers_revenue.py`: national $/acre gross revenue per commodity. Writes JSON.
+- `eia_prices.py`: state-level industrial ¢/kWh. 51 states, 2024 static fallback with all-50 table.
+- Small outputs (IWMS, ERS, EIA) land in `web_app/public/enrichments/` for direct static fetch.
+
+**Crops tab redesign — inverted-L layout with click-to-drill choropleth.** New components in `web_app/src/components/crops/`:
+- `CropsStateMap.tsx`: SVG choropleth rendering all 50 states' counties from `/us-counties.geojson`. Yield-anomaly-vs-state-median color ramp, clamped ±30%. Hover tooltip with yield + anomaly + harvested + production. Click calls back with fips. Exports `rollupByCounty` helper for the panel + peers.
+- `CropsCountyDrill.tsx`: Ogallala-density panel — status pills (rank of N, anomaly %), 3 KPIs with context subtitles, growing-season precipitation block from NOAA nClimDiv (30-yr normal / recent / anomaly %), method signature footnote.
+- `CropsPeers.tsx`: mode-aware — top-5/weakest-3 in state mode, 6 nearest-yield peers in county mode. Rows clickable.
+
+**Layout**: float-based inverted L, not grid. Map floats left at 30%, panel is a BFC (`flow-root`) to pack right, peers clears left for full-width wrap once past map's bottom, method band clears both. `720px` breakpoint collapses to single column. `globals.css:308-358`.
+
+**Data layer**: `serviceData.ts` gained `fetchCountyData` (from new county prefix), `fetchCountyPrecip` (from enrichment/ prefix), `fetchIrrigatedCountyAcres`. `fetchParquet` now routes by-prefix instead of hard-coding `partitioned_states/`.
+
+**Verified end-to-end in browser preview with Indiana corn 2024**: state KPIs (198 bu/ac, 5.2M ac, $4.3B sales), map renders 92 counties, 72 with reported yield, click-to-drill into Gibson County shows real NOAA precip (1223 mm/yr normal, 1238 recent, +1.3% anomaly), nearest peers table works, zero console errors.
+
+#### Known residuals (low priority)
+
+- NASS CENSUS endpoint 403'd ~5 states (WI, WY, WV, WA) at 6-concurrent ThreadPoolExecutor. Residual 252 counties is enough for the irrigated overlay. Rerun at concurrency=2 to fill.
+- IWMS + ERS + EIA are ingested but not yet bound into UI features. Water-productivity KPI (bu/acre-foot) is the obvious next hook.
+- Crops-mockup artifacts (`web_app/public/crops-redesign-mockup.html`, `crops-mockup-data.json`) and `_compare_state_vs_county.py` were exploratory tooling — safe to delete on next cleanup pass.
