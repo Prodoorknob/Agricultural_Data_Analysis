@@ -80,11 +80,15 @@ async def get_yield_forecast(
         )
     )
     avg_result = await db.execute(avg_stmt)
-    county_avg = avg_result.scalar()
+    # SQLAlchemy returns Decimal for AVG() on NUMERIC columns; cast to float
+    # up-front so arithmetic with forecast.p50 (also cast) doesn't raise
+    # TypeError: unsupported operand for -: 'float' and 'Decimal'.
+    county_avg_raw = avg_result.scalar()
+    county_avg = float(county_avg_raw) if county_avg_raw is not None else None
 
     vs_avg_pct = None
     if county_avg and county_avg > 0:
-        vs_avg_pct = round(float((float(forecast.p50) - county_avg) / county_avg * 100), 1)
+        vs_avg_pct = round((float(forecast.p50) - county_avg) / county_avg * 100, 1)
 
     return YieldForecastResponse(
         fips=forecast.fips,
@@ -95,7 +99,7 @@ async def get_yield_forecast(
         p50=float(forecast.p50),
         p90=float(forecast.p90),
         confidence=forecast.confidence,
-        county_avg_5yr=round(float(county_avg), 1) if county_avg else None,
+        county_avg_5yr=round(county_avg, 1) if county_avg else None,
         vs_avg_pct=vs_avg_pct,
         model_ver=forecast.model_ver,
         last_updated=forecast.created_at.isoformat() if forecast.created_at else None,

@@ -1,5 +1,11 @@
 from pydantic_settings import BaseSettings
 from functools import lru_cache
+from pathlib import Path
+
+# Absolute path so the env file resolves regardless of which CWD uvicorn
+# runs from (project root vs backend/). Previously env_file="../.env" only
+# worked when CWD was backend/.
+_ENV_FILE = Path(__file__).resolve().parent.parent / ".env"
 
 
 class Settings(BaseSettings):
@@ -19,7 +25,7 @@ class Settings(BaseSettings):
     # App
     CORS_ORIGINS: list[str] = ["*"]
 
-    model_config = {"env_file": "../.env", "env_file_encoding": "utf-8", "extra": "ignore"}
+    model_config = {"env_file": str(_ENV_FILE), "env_file_encoding": "utf-8", "extra": "ignore"}
 
 
 @lru_cache

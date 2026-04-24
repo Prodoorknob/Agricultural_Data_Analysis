@@ -5,9 +5,12 @@
 
 import { useState, useCallback, useEffect } from 'react';
 
+// The env var points at the FastAPI root (e.g. https://agri-intel.rvedire.com);
+// this hook calls the yield router path. Previously a fragile replace() assumed
+// the env ended with "/price" and fell back to "/<host>/map" when it didn't.
 const API_BASE =
-  process.env.NEXT_PUBLIC_PREDICTION_API_URL?.replace(/\/price$/, '/yield') ||
-  'http://localhost:8000/api/v1/predict/yield';
+  (process.env.NEXT_PUBLIC_PREDICTION_API_URL || 'http://localhost:8000') +
+  '/api/v1/predict/yield';
 
 // ---- Response Types ----
 
@@ -104,6 +107,13 @@ export function useYieldForecast(
     async (signal?: AbortSignal) => {
       setLoading(true);
       setError(null);
+      // Clear stale results immediately so a year/crop switch doesn't flash
+      // the prior slice's counties on the map while the new fetch is in
+      // flight. The container relies on (loading && mapData.length === 0) to
+      // decide between loading state, map, and empty state.
+      setMapData([]);
+      setMapWeek(null);
+      setForecast(null);
 
       try {
         const cropYear = year || new Date().getFullYear();

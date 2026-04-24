@@ -8,6 +8,7 @@ import SeasonClock from '@/components/forecasts/SeasonClock';
 import AcreageCard from '@/components/forecasts/AcreageCard';
 import AccuracyPanel from '@/components/forecasts/AccuracyPanel';
 import YieldSeasonReview from '@/components/forecasts/YieldSeasonReview';
+import CountyYieldForecast from '@/components/forecasts/CountyYieldForecast';
 import SectionHeading from '@/components/shared/SectionHeading';
 
 type YieldViewMode = 'current' | 'review';
@@ -200,23 +201,7 @@ function YieldSection() {
         </div>
       </div>
 
-      {mode === 'current' ? (
-        <div
-          className="p-6 rounded-[var(--radius-lg)] border"
-          style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}
-        >
-          <p className="text-[18px] font-bold mb-2" style={{ color: 'var(--text)' }}>
-            County Yield Forecast
-          </p>
-          <p className="text-[13px]" style={{ color: 'var(--text2)' }}>
-            County-level yield forecasts for corn and soybean begin May 19 at week 1 of
-            the growing season. Switch to <em>Last Season Review</em> to inspect the
-            2024–2025 walk-forward test performance.
-          </p>
-        </div>
-      ) : (
-        <YieldSeasonReview />
-      )}
+      {mode === 'current' ? <CountyYieldForecast /> : <YieldSeasonReview />}
     </div>
   );
 }
