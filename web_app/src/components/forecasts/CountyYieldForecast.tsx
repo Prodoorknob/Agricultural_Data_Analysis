@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useYieldForecast } from '@/hooks/useYieldForecast';
 import YieldChoroplethMap from './YieldChoroplethMap';
 import CountyYieldCard from './CountyYieldCard';
+import StateYieldCard from './StateYieldCard';
 import CitationBlock from '@/components/shared/CitationBlock';
 
 type CropKey = 'corn' | 'soybean' | 'wheat';
@@ -35,6 +36,21 @@ const STATE_FIPS_TO_ALPHA: Record<string, string> = {
   '56': 'WY',
 };
 
+const STATE_FIPS_TO_NAME: Record<string, string> = {
+  '01': 'Alabama', '04': 'Arizona', '05': 'Arkansas', '06': 'California',
+  '08': 'Colorado', '09': 'Connecticut', '10': 'Delaware', '12': 'Florida',
+  '13': 'Georgia', '16': 'Idaho', '17': 'Illinois', '18': 'Indiana',
+  '19': 'Iowa', '20': 'Kansas', '21': 'Kentucky', '22': 'Louisiana',
+  '23': 'Maine', '24': 'Maryland', '25': 'Massachusetts', '26': 'Michigan',
+  '27': 'Minnesota', '28': 'Mississippi', '29': 'Missouri', '30': 'Montana',
+  '31': 'Nebraska', '32': 'Nevada', '33': 'New Hampshire', '34': 'New Jersey',
+  '35': 'New Mexico', '36': 'New York', '37': 'North Carolina', '38': 'North Dakota',
+  '39': 'Ohio', '40': 'Oklahoma', '41': 'Oregon', '42': 'Pennsylvania',
+  '44': 'Rhode Island', '45': 'South Carolina', '46': 'South Dakota', '47': 'Tennessee',
+  '48': 'Texas', '49': 'Utah', '50': 'Vermont', '51': 'Virginia',
+  '53': 'Washington', '54': 'West Virginia', '55': 'Wisconsin', '56': 'Wyoming',
+};
+
 // Load the same county GeoJSON the map uses so we can resolve a friendly
 // county name from FIPS for the header of the detail card.
 let _countyNameIndex: Record<string, string> | null = null;
@@ -56,37 +72,42 @@ function loadCountyNameIndex(): Promise<Record<string, string>> {
   return _countyNamePromise;
 }
 
+const MIN_WEEK = 1;
+const MAX_WEEK = 20;
+
 export default function CountyYieldForecast() {
   const [crop, setCrop] = useState<CropKey>('corn');
   const [year, setYear] = useState<number>(YEAR_CANDIDATES[0]);
   const [autoPicked, setAutoPicked] = useState(false);
-  // Once the user clicks a year button, lock out the auto-probe so it doesn't
-  // clobber their choice on the next crop change.
   const [userPickedYear, setUserPickedYear] = useState(false);
   const [selectedFips, setSelectedFips] = useState<string | null>(null);
+  const [selectedState, setSelectedState] = useState<string | null>(null);
   const [countyNames, setCountyNames] = useState<Record<string, string>>({});
+
+  // Week control: `userWeek` is null until the user touches the slider, so
+  // the API picks the latest available week and we display whatever it
+  // returns. Once the user moves the slider, the chosen week is sent.
+  const [userWeek, setUserWeek] = useState<number | null>(null);
 
   const { forecast, mapData, mapWeek, loading, error } = useYieldForecast(
     selectedFips,
     crop,
     year,
+    userWeek ?? undefined,
   );
 
   useEffect(() => {
     loadCountyNameIndex().then(setCountyNames).catch(() => setCountyNames({}));
   }, []);
 
-  // Reset the user-picked flag so a probe can run again when crop changes.
-  // This happens BEFORE the probe effect and in its own effect so state
-  // sequencing stays obvious.
+  // Reset the user-picked flag so the auto-probe can run again on crop change.
   useEffect(() => {
     setUserPickedYear(false);
   }, [crop]);
 
-  // On crop change (and only if the user hasn't manually chosen a year):
-  // probe candidate years in order and pick the newest with data. Setting
-  // `userPickedYear` when a user clicks a year button prevents this effect
-  // from clobbering their choice on the next crop change.
+  // On crop change: probe candidate years in order and pick the newest with
+  // data. Setting `userPickedYear` when a user clicks a year button prevents
+  // this from clobbering their choice on the next crop change.
   useEffect(() => {
     if (userPickedYear) return;
     let cancelled = false;
@@ -117,11 +138,19 @@ export default function CountyYieldForecast() {
     };
   }, [crop, userPickedYear]);
 
-  // Clear selection when the crop or year changes because the prior county
-  // might not have data for the new slice.
+  // Clear county+state selection and week override when the crop or year
+  // changes — prior selections may not be valid for the new slice.
   useEffect(() => {
     setSelectedFips(null);
+    setSelectedState(null);
+    setUserWeek(null);
   }, [crop, year]);
+
+  // Keep selectedState in sync with whichever county is currently selected
+  // so the map's dimming behavior follows the panel.
+  useEffect(() => {
+    if (selectedFips) setSelectedState(selectedFips.slice(0, 2));
+  }, [selectedFips]);
 
   const handleYearClick = (y: number) => {
     setUserPickedYear(true);
@@ -129,21 +158,51 @@ export default function CountyYieldForecast() {
     setYear(y);
   };
 
+  const handleStateClick = (stateFips: string) => {
+    // Toggle off when clicking the already-selected state.
+    if (selectedState === stateFips && !selectedFips) {
+      setSelectedState(null);
+      return;
+    }
+    setSelectedState(stateFips);
+    setSelectedFips(null);
+  };
+
   const selectedCountyName = useMemo(
     () => (selectedFips ? countyNames[selectedFips] || null : null),
     [selectedFips, countyNames],
   );
   const selectedStateAlpha = useMemo(
-    () => (selectedFips ? STATE_FIPS_TO_ALPHA[selectedFips.slice(0, 2)] || null : null),
-    [selectedFips],
+    () =>
+      selectedState
+        ? STATE_FIPS_TO_ALPHA[selectedState] || null
+        : selectedFips
+          ? STATE_FIPS_TO_ALPHA[selectedFips.slice(0, 2)] || null
+          : null,
+    [selectedFips, selectedState],
+  );
+  const selectedStateName = useMemo(
+    () => (selectedState ? STATE_FIPS_TO_NAME[selectedState] || null : null),
+    [selectedState],
   );
 
+  // Dropdown options: only states that have at least one county in the
+  // current map slice. Sorted alphabetically by name.
+  const availableStates = useMemo(() => {
+    const seen = new Set<string>();
+    for (const c of mapData) seen.add(c.fips.slice(0, 2));
+    return Array.from(seen)
+      .map((fips) => ({ fips, name: STATE_FIPS_TO_NAME[fips] || fips }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [mapData]);
+
   const empty = !loading && mapData.length === 0;
-  // During a year/crop switch we don't want the prior year's counties
-  // to linger on the map — better to show a brief loading state than to
-  // flash stale data and then swap to an empty message.
   const showLoading = loading && mapData.length === 0;
   const showMap = !loading && mapData.length > 0;
+
+  const displayedWeek = userWeek ?? mapWeek;
+  const sliderValue = userWeek ?? mapWeek ?? MAX_WEEK;
+  const sliderDisabled = !showMap;
 
   return (
     <div
@@ -152,7 +211,7 @@ export default function CountyYieldForecast() {
     >
       {/* Controls row */}
       <div className="flex items-center justify-between flex-wrap gap-3 mb-4">
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-4 flex-wrap">
           {/* Crop tabs */}
           <div
             className="inline-flex items-center p-1 rounded-[var(--radius-full)]"
@@ -202,14 +261,60 @@ export default function CountyYieldForecast() {
               );
             })}
           </div>
+
+          {/* State filter */}
+          <div className="flex items-center gap-2 text-[12px]" style={{ fontFamily: 'var(--font-mono)' }}>
+            <span style={{ color: 'var(--text3)' }}>State</span>
+            <select
+              value={selectedState ?? ''}
+              onChange={(e) => {
+                const v = e.target.value;
+                setSelectedState(v || null);
+                setSelectedFips(null);
+              }}
+              disabled={availableStates.length === 0}
+              className="px-2 py-0.5 rounded-[var(--radius-sm)]"
+              style={{
+                background: 'var(--surface2)',
+                color: 'var(--text)',
+                border: '1px solid var(--border)',
+                fontFamily: 'var(--font-mono)',
+                fontSize: 12,
+              }}
+            >
+              <option value="">All states</option>
+              {availableStates.map((s) => (
+                <option key={s.fips} value={s.fips}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+            {selectedState && (
+              <button
+                onClick={() => {
+                  setSelectedState(null);
+                  setSelectedFips(null);
+                }}
+                className="text-[11px] px-1.5 py-0.5 rounded-[var(--radius-sm)]"
+                style={{
+                  background: 'transparent',
+                  color: 'var(--text3)',
+                  border: '1px solid var(--border)',
+                }}
+                title="Clear state filter"
+              >
+                Clear
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Status chip */}
         <div className="text-[11px]" style={{ color: 'var(--text3)', fontFamily: 'var(--font-mono)' }}>
           {loading
             ? 'Loading…'
-            : mapWeek
-              ? `Week ${mapWeek} · ${mapData.length} counties`
+            : displayedWeek
+              ? `Week ${displayedWeek} · ${mapData.length} counties`
               : empty
                 ? 'No forecast'
                 : ''}
@@ -250,17 +355,103 @@ export default function CountyYieldForecast() {
             <YieldChoroplethMap
               counties={mapData}
               selectedFips={selectedFips}
-              onCountyClick={setSelectedFips}
+              selectedState={selectedState}
+              onCountyClick={(fips) => {
+                setSelectedFips(fips);
+                setSelectedState(fips.slice(0, 2));
+              }}
+              onStateClick={handleStateClick}
               unit={crop === 'wheat' ? 'bu/ac' : 'bu/ac'}
             />
+
+            {/* Week slider */}
+            <div className="mt-4 px-1">
+              <div
+                className="flex items-center justify-between mb-1 text-[11px]"
+                style={{ fontFamily: 'var(--font-mono)', color: 'var(--text3)' }}
+              >
+                <span>Week of growing season</span>
+                <span style={{ color: 'var(--text2)' }}>
+                  {displayedWeek ? `Week ${displayedWeek}` : '—'}
+                  {userWeek === null && mapWeek ? ' (latest)' : ''}
+                </span>
+              </div>
+              <div className="flex items-center gap-3">
+                <span
+                  className="text-[10px]"
+                  style={{ color: 'var(--text3)', fontFamily: 'var(--font-mono)' }}
+                >
+                  W{MIN_WEEK}
+                </span>
+                <input
+                  type="range"
+                  min={MIN_WEEK}
+                  max={MAX_WEEK}
+                  step={1}
+                  value={sliderValue}
+                  disabled={sliderDisabled}
+                  onChange={(e) => setUserWeek(Number(e.target.value))}
+                  className="flex-1"
+                  style={{ accentColor: 'var(--field)' }}
+                  aria-label="Growing-season week"
+                />
+                <span
+                  className="text-[10px]"
+                  style={{ color: 'var(--text3)', fontFamily: 'var(--font-mono)' }}
+                >
+                  W{MAX_WEEK}
+                </span>
+                {userWeek !== null && (
+                  <button
+                    onClick={() => setUserWeek(null)}
+                    className="text-[10px] px-1.5 py-0.5 rounded-[var(--radius-sm)]"
+                    style={{
+                      background: 'transparent',
+                      color: 'var(--text3)',
+                      border: '1px solid var(--border)',
+                      fontFamily: 'var(--font-mono)',
+                    }}
+                    title="Reset to latest week"
+                  >
+                    Latest
+                  </button>
+                )}
+              </div>
+            </div>
           </div>
           <div>
-            <CountyYieldCard
-              forecast={forecast}
-              countyName={selectedCountyName}
-              stateAlpha={selectedStateAlpha}
-              loading={!!selectedFips && loading}
-            />
+            {selectedFips && forecast ? (
+              <CountyYieldCard
+                forecast={forecast}
+                countyName={selectedCountyName}
+                stateAlpha={selectedStateAlpha}
+                loading={loading}
+              />
+            ) : selectedFips && loading ? (
+              <CountyYieldCard
+                forecast={null}
+                countyName={selectedCountyName}
+                stateAlpha={selectedStateAlpha}
+                loading
+              />
+            ) : selectedState ? (
+              <StateYieldCard
+                stateFips={selectedState}
+                stateName={selectedStateName}
+                stateAlpha={selectedStateAlpha}
+                counties={mapData}
+                crop={crop}
+                year={year}
+                week={displayedWeek}
+              />
+            ) : (
+              <CountyYieldCard
+                forecast={null}
+                countyName={null}
+                stateAlpha={null}
+                loading={false}
+              />
+            )}
           </div>
         </div>
       ) : null}

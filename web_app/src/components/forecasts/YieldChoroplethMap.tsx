@@ -6,7 +6,9 @@ import type { YieldMapItem } from '@/hooks/useYieldForecast';
 interface YieldChoroplethMapProps {
   counties: YieldMapItem[];
   selectedFips: string | null;
+  selectedState?: string | null;
   onCountyClick: (fips: string) => void;
+  onStateClick?: (stateFips: string) => void;
   unit?: string;
   height?: number;
 }
@@ -78,7 +80,9 @@ function pathFor(
 export default function YieldChoroplethMap({
   counties,
   selectedFips,
+  selectedState = null,
   onCountyClick,
+  onStateClick,
   unit = 'bu/ac',
   height = 420,
 }: YieldChoroplethMapProps) {
@@ -155,6 +159,7 @@ export default function YieldChoroplethMap({
       viewBox: `0 0 ${W} ${H}`,
       paths: features.map((f: any) => {
         const fips = String(f.id ?? f.properties?.GEOID ?? '').padStart(5, '0');
+        const stateFips = fips.slice(0, 2);
         const row = byFips.get(fips);
         let fill = '#2b3a30';
         if (row) {
@@ -166,6 +171,7 @@ export default function YieldChoroplethMap({
         }
         return {
           fips,
+          stateFips,
           name: (f.properties?.name || fips).toUpperCase(),
           d: pathFor(f.geometry, project),
           fill,
@@ -197,19 +203,37 @@ export default function YieldChoroplethMap({
         style={{ width: '100%', maxHeight: height, aspectRatio: '960 / 600' }}
       >
         <g>
-          {paths.map((p) => (
-            <path
-              key={p.fips}
-              d={p.d}
-              fill={p.fill}
-              stroke={selectedFips === p.fips ? 'var(--text)' : 'var(--surface)'}
-              strokeWidth={selectedFips === p.fips ? 1.2 : 0.3}
-              style={{ cursor: p.hasData ? 'pointer' : 'default', transition: 'stroke-width 0.1s' }}
-              onMouseMove={(e) => handleHover(e, p.fips)}
-              onMouseLeave={() => setTip(null)}
-              onClick={() => p.hasData && onCountyClick(p.fips)}
-            />
-          ))}
+          {paths.map((p) => {
+            const dimmed = !!selectedState && p.stateFips !== selectedState;
+            const isSelectedCounty = selectedFips === p.fips;
+            const isInSelectedState = !!selectedState && p.stateFips === selectedState;
+            const stroke = isSelectedCounty
+              ? 'var(--text)'
+              : isInSelectedState
+                ? 'var(--text2)'
+                : 'var(--surface)';
+            const strokeWidth = isSelectedCounty ? 1.2 : isInSelectedState ? 0.5 : 0.3;
+            return (
+              <path
+                key={p.fips}
+                d={p.d}
+                fill={p.fill}
+                fillOpacity={dimmed ? 0.35 : 1}
+                stroke={stroke}
+                strokeWidth={strokeWidth}
+                style={{ cursor: 'pointer', transition: 'stroke-width 0.1s, fill-opacity 0.15s' }}
+                onMouseMove={(e) => handleHover(e, p.fips)}
+                onMouseLeave={() => setTip(null)}
+                onClick={() => {
+                  if (p.hasData) {
+                    onCountyClick(p.fips);
+                  } else if (onStateClick) {
+                    onStateClick(p.stateFips);
+                  }
+                }}
+              />
+            );
+          })}
         </g>
       </svg>
 
@@ -250,7 +274,12 @@ export default function YieldChoroplethMap({
               <div style={{ color: 'var(--text3)', marginTop: 2 }}>Click to drill in</div>
             </>
           ) : (
-            <div style={{ color: 'var(--text3)' }}>No forecast</div>
+            <>
+              <div style={{ color: 'var(--text3)' }}>No model output</div>
+              {onStateClick && (
+                <div style={{ color: 'var(--text3)', marginTop: 2 }}>Click to filter state</div>
+              )}
+            </>
           )}
         </div>
       )}
