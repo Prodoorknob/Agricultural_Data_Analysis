@@ -1,7 +1,7 @@
 {
   "crop": "wheat",
   "week": 4,
-  "model_ver": "2026-04-15",
+  "model_ver": "2026-04-21",
   "train_rrmse": 18.05,
   "val_rrmse": 21.3,
   "test_rrmse": 25.71,

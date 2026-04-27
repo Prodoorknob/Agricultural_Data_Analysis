@@ -412,27 +412,24 @@ Optional env vars:
 
 ### County Coverage Fill (2026-04-19)
 
-Closed most of the county-level NASS gaps identified in `research/county-coverage-analysis-2026-04-17.md`. Dataset roughly doubled; wheat — previously zero rows — is the headline gain. **Local parquets updated; S3 and yield models are NOT yet refreshed — see pending items below.**
+Closed most of the county-level NASS gaps identified in `research/county-coverage-analysis-2026-04-17.md`. Dataset roughly doubled; wheat (previously zero rows) is the headline gain. Both downstream propagation steps (S3 upload, yield retrain) completed 2026-04-21.
 
-#### Pending (read me first next session)
+#### Resolved 2026-04-21
 
-1. **Upload new parquets to S3.** Local `pipeline/output/*.parquet` has the new data; S3 still serves the pre-fill snapshot. Frontend and yield training both read from S3, so nothing downstream sees the new data until this runs.
-   ```
-   aws sso login                                  # SSO token expires; refresh first
-   python pipeline/upload_to_s3.py --backup
-   ```
-   **Before running, verify `upload_to_s3.py` covers the county S3 layout.** The script's defaults are `S3_BROWSER_PREFIX = "survey_datasets/partitioned_states"` + `S3_ATHENA_PREFIX = "survey_datasets/athena_optimized"`, but county parquets per earlier CLAUDE.md notes live under `survey_datasets/partitioned_states_counties/` and `survey_datasets/athena_optimized_counties/`. May need a flag/branch; don't `--backup` on the state layout if what you're uploading is county-only.
+1. **S3 upload of new parquets — done.** Handled by the same-day "County S3 Upload + Crops Tab Redesign" work below: `pipeline/upload_to_s3.py --layout county` was added and run, 96 files uploaded to `survey_datasets/partitioned_states_counties/` + `survey_datasets/athena_optimized_counties/` with backups.
 
-2. **Retrain yield models** — required if you want the new wheat + expanded corn/soy/etc. county rows reflected in forecasts. Yield is the only module affected; acreage is state-level and unaffected, price uses different sources.
-   ```
-   python -m backend.models.train_yield --persist-accuracy --upload-s3
-   # ~3-4 hrs: 60 models (3 crops × 20 weeks)
-   ssh ec2-host 'sudo systemctl restart ag-prediction'   # reload artifacts
-   ```
+2. **Yield retrain — done.** All 60 models (3 crops × 20 weeks) bumped to `model_ver: 2026-04-21`. New per-crop summaries:
+   - corn: gate **pass**, avg test RRMSE 17.97% vs baseline 23.78% (was 17.44–18.51% on the 2026-04-14 batch).
+   - soybean: gate **pass**, 17.89% vs baseline 23.15% (was 17.29–17.76%).
+   - wheat: gate **fail**, 25.51% vs baseline 21.8%, 0/20 weeks pass. Slightly worse than the prior 23.42–25.00% range; more county data did not improve wheat. Frontend continues to show it with EXPERIMENTAL annotation per the surface-with-annotation policy.
 
-3. **Optional: label the 572 UNCLASSIFIED triples.** `pipeline/county_coverage_allowlist.json` currently only holds 70 PENDING_PUBLICATION entries. The 572 remaining gaps are almost certainly NOT_GROWN or NASS_SUPPRESSION — the classifier couldn't distinguish because local state parquets are COUNTY-only (the post-Apr-2026 county-only ingest overwrote state-level rows). A one-time state-level NASS pull for those specific combos would let the allowlist be fully labeled.
+   S3 model upload status not re-verified in this audit (SSO expired); rerun `aws s3 ls s3://usda-analysis-datasets/models/yield/` next time creds are fresh.
 
-4. **Audit regeneration hygiene.** `pipeline/_county_coverage_audit.py` now lists WHEAT in its `COUNTY_COMMODITIES`. Next regeneration of `research/county-coverage-analysis-YYYY-MM-DD.md` should read "12 commodities".
+#### Still open
+
+1. **Optional: label the 572 UNCLASSIFIED triples.** `pipeline/county_coverage_allowlist.json` currently only holds 70 PENDING_PUBLICATION entries. The 572 remaining gaps are almost certainly NOT_GROWN or NASS_SUPPRESSION — the classifier couldn't distinguish because local state parquets are COUNTY-only (the post-Apr-2026 county-only ingest overwrote state-level rows). A one-time state-level NASS pull for those specific combos would let the allowlist be fully labeled.
+
+2. **Audit regeneration hygiene.** `pipeline/_county_coverage_audit.py` adds WHEAT at filter time (line 150) but the `COUNTY_COMMODITIES` list literal (line 31) still has 11 entries; the markdown templating at line 445 still reads "11 commodities targeted". Next regeneration of `research/county-coverage-analysis-YYYY-MM-DD.md` should update the literal to 12.
 
 #### What shipped
 
@@ -500,3 +497,17 @@ Closed the pending post-county-fill work and shipped a full Crops-tab rebuild.
 - NASS CENSUS endpoint 403'd ~5 states (WI, WY, WV, WA) at 6-concurrent ThreadPoolExecutor. Residual 252 counties is enough for the irrigated overlay. Rerun at concurrency=2 to fill.
 - IWMS + ERS + EIA are ingested but not yet bound into UI features. Water-productivity KPI (bu/acre-foot) is the obvious next hook.
 - Crops-mockup artifacts (`web_app/public/crops-redesign-mockup.html`, `crops-mockup-data.json`) and `_compare_state_vs_county.py` were exploratory tooling — safe to delete on next cleanup pass.
+
+### County Yield Forecast: state filter + week slider (2026-04-26)
+
+Frontend interactivity pass on the Forecasts tab county yield map. Commit `ca05f9c`.
+
+- `web_app/src/components/forecasts/YieldChoroplethMap.tsx`: accepts `selectedState` and `onStateClick`. Counties whose 2-digit FIPS prefix doesn't match `selectedState` render at 0.35 fill-opacity; selected-state counties get a brighter border. Click routing: a county WITH model output drills to the county card (existing); a county WITHOUT model output (gray) calls `onStateClick(fips.slice(0,2))` to filter the map to that state. Tooltip distinguishes "Click to drill in" (data) from "Click to filter state" (no data).
+- `web_app/src/components/forecasts/StateYieldCard.tsx` (new): right-panel state aggregate. Computes county count, p50 median/min/max, and mean `vs_avg_pct` anomaly across counties whose FIPS starts with the selected 2-digit state. Shown when a state is selected but no county is.
+- `web_app/src/components/forecasts/CountyYieldForecast.tsx`: adds `selectedState` and `userWeek` state. State dropdown in the controls row enumerates only states present in the current `mapData` (alphabetical, full state names from a new `STATE_FIPS_TO_NAME` map). Week slider (1-20) below the map; `userWeek` is null until touched, so the API picks the latest available week and the slider mirrors `mapWeek` from the response. Once moved, a `Latest` reset chip appears. Crop/year change resets `selectedFips`, `selectedState`, and `userWeek` to null. Selecting a county auto-syncs `selectedState` to its prefix so the dim follows the drill.
+
+#### Known limitation: single-county yield endpoint is week-agnostic
+
+The map endpoint `GET /api/v1/predict/yield/map?crop=X&year=Y&week=N` accepts a week, but the single-county endpoint `GET /api/v1/predict/yield/?fips=...&crop=X&year=Y` does NOT. So when the slider is at e.g. week 5 and the user clicks a county, the right-side `CountyYieldCard` shows the latest stored forecast (e.g. week 20) for that county, not week 5. Cosmetic only — the map and card disagree on `week` while showing the same crop/year/county.
+
+To fix: extend `backend/routers/yield_forecast.py::get_forecast` to accept an optional `week: int = Query(None)` and filter `yield_forecasts` rows to that week before falling back to "latest". Then update `web_app/src/hooks/useYieldForecast.ts::fetchAll` to forward the `week` param to the `/?fips=` URL. Frontend already threads `userWeek` through the hook signature (`useYieldForecast(fips, crop, year, week)`) — only the URL construction needs to change.

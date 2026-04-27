@@ -1,6 +1,6 @@
 {
   "crop": "wheat",
-  "model_ver": "2026-04-15",
+  "model_ver": "2026-04-21",
   "n_weeks": 20,
   "n_weeks_pass_gate": 0,
   "gate_status": "fail",

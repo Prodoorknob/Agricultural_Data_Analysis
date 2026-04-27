@@ -1,7 +1,7 @@
 {
   "crop": "soybean",
   "week": 2,
-  "model_ver": "2026-04-15",
+  "model_ver": "2026-04-21",
   "train_rrmse": 15.32,
   "val_rrmse": 19.75,
   "test_rrmse": 18.96,

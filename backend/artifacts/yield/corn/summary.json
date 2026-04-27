@@ -1,6 +1,6 @@
 {
   "crop": "corn",
-  "model_ver": "2026-04-14",
+  "model_ver": "2026-04-21",
   "n_weeks": 20,
   "n_weeks_pass_gate": 20,
   "gate_status": "pass",

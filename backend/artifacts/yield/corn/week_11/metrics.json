@@ -1,7 +1,7 @@
 {
   "crop": "corn",
   "week": 11,
-  "model_ver": "2026-04-14",
+  "model_ver": "2026-04-21",
   "train_rrmse": 16.37,
   "val_rrmse": 14.64,
   "test_rrmse": 17.53,
