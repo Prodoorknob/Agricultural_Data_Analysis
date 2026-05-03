@@ -14,6 +14,10 @@ import type { CountyCollection, CountyProps } from './types';
  * counties carry `data_quality === "no_data"` and have null thickness — the
  * client must NOT render them as regular aquifer counties (dim/gray instead).
  */
+/** Local copy served from `web_app/public/`. Lets dev runs pick up a freshly
+ *  rebuilt geojson before the S3 publish has happened. Falls back to the
+ *  S3 URL on 404. */
+export const BASELINE_URL_LOCAL = '/baseline_counties.geojson';
 export const BASELINE_URL =
   'https://usda-analysis-datasets.s3.amazonaws.com/aquiferwatch/web/baseline_counties.geojson';
 
@@ -50,6 +54,10 @@ interface RawProps {
   irr_dryland: number | null;
   pumping_af_yr: number | null;
   pumping_af_yr_usgs2015: number | null;
+  pumping_af_yr_kdwr: number | null;
+  pumping_af_yr_kdwr_year: number | null;
+  pumping_af_yr_display: number | null;
+  pumping_af_yr_source: 'kdwr_orr_metered' | 'usgs2015_water_use' | 'inferred_nass_iwms' | null;
   irrigated_acres_total: number | null;
   acres_corn: number | null;
   acres_soybeans: number | null;
@@ -123,6 +131,10 @@ function adapt(raw: RawProps, geom: Geometry): CountyProps {
     dcl: nullable(raw.annual_decline_m),
     rch: nullable(raw.recharge_mm_yr),
     pmp: num(raw.pumping_af_yr, 0),
+    pmpDisplay: num(raw.pumping_af_yr_display ?? raw.pumping_af_yr, 0),
+    pmpSrc: raw.pumping_af_yr_source ?? 'inferred_nass_iwms',
+    pmpKdwr: nullable(raw.pumping_af_yr_kdwr),
+    pmpKdwrYear: nullable(raw.pumping_af_yr_kdwr_year),
     acres: num(raw.irrigated_acres_total, 0),
     corn: num(raw.acres_corn, 0),
     soy: num(raw.acres_soybeans, 0),
@@ -169,11 +181,18 @@ export function useBaseline(): {
 
   useEffect(() => {
     let cancelled = false;
-    fetch(BASELINE_URL)
-      .then((r) => {
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        return r.json();
-      })
+    const fetchWithFallback = async () => {
+      try {
+        const local = await fetch(BASELINE_URL_LOCAL);
+        if (local.ok) return local.json();
+      } catch {
+        /* fall through to S3 */
+      }
+      const remote = await fetch(BASELINE_URL);
+      if (!remote.ok) throw new Error(`HTTP ${remote.status}`);
+      return remote.json();
+    };
+    fetchWithFallback()
       .then((raw: FeatureCollection<Geometry, RawProps>) => {
         if (cancelled) return;
         const features: Feature<Geometry, CountyProps>[] = raw.features.map((f) => ({

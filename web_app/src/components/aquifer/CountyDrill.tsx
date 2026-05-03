@@ -1,7 +1,8 @@
 'use client';
 
 import type { CountyProps, Scenario } from './types';
-import { STATES, SCENARIOS, cropMix, depColor, fmt, thicknessAt } from './aquifer-math';
+import { STATES, cropMix, fmt } from './aquifer-math';
+import WaterColumn from './WaterColumn';
 
 interface Props {
   county: CountyProps;
@@ -13,29 +14,6 @@ interface Props {
 export default function CountyDrill({ county, year, scenario, onClose }: Props) {
   const crops = cropMix(county);
   const totalWater = crops.reduce((s, c) => s + c.waterAF, 0);
-
-  // Compact thickness trajectory 1950 → 2100, BAU vs active scenario.
-  const curve: Array<{ y: number; t: number; tbau: number }> = [];
-  for (let y = 1950; y <= 2100; y += 2) {
-    curve.push({
-      y,
-      t: thicknessAt(county, y, scenario),
-      tbau: thicknessAt(county, y, SCENARIOS[0]),
-    });
-  }
-  const thkNow = thicknessAt(county, year, scenario);
-  const maxT = Math.max(...curve.map((d) => Math.max(d.t, d.tbau)), (county.thk ?? 0) * 1.1, 10);
-  const cw = 300, ch = 120;
-  const curvePath = (key: 't' | 'tbau') =>
-    curve
-      .map((d, i) => {
-        const x = (i / (curve.length - 1)) * cw;
-        const yv = ch - (Math.max(0, d[key]) / maxT) * ch;
-        return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${yv.toFixed(1)}`;
-      })
-      .join(' ');
-  const yearIdx = (year - 1950) / 2;
-  const yearX = (yearIdx / (curve.length - 1)) * cw;
 
   // Source-colored chip style based on thickness provenance.
   const srcTagStyle =
@@ -49,7 +27,7 @@ export default function CountyDrill({ county, year, scenario, onClose }: Props) 
                                  'No data';
 
   return (
-    <div style={{
+    <div data-drill-root style={{
       background: 'var(--surface)',
       border: '1px solid var(--border)',
       borderRadius: 'var(--radius-lg)',
@@ -69,7 +47,7 @@ export default function CountyDrill({ county, year, scenario, onClose }: Props) 
       >
         ×
       </button>
-      <div style={{ position: 'relative' }}>
+      <div data-drill-section="header" style={{ position: 'relative' }}>
         <div className="eyebrow">{STATES[county.state]?.name || county.state} · FIPS {county.fips}</div>
         <div className="stat" style={{ fontSize: 32, fontWeight: 800, lineHeight: 1, margin: '6px 0', letterSpacing: '-0.01em', color: 'var(--text)' }}>
           {county.name}
@@ -113,54 +91,10 @@ export default function CountyDrill({ county, year, scenario, onClose }: Props) 
         </div>
       </div>
 
-      {/* Thickness trajectory — compact, replaces the KPI block that
-          now floats inside the map as an overlay. */}
-      <div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
-          <div className="eyebrow">Thickness trajectory · 1950 → 2100</div>
-          <div className="mono" style={{ fontSize: 9, color: 'var(--text3)', display: 'flex', gap: 10, alignItems: 'center' }}>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-              <span style={{ display: 'inline-block', width: 10, height: 2, background: 'var(--text3)' }} />BAU
-            </span>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-              <span style={{ display: 'inline-block', width: 10, height: 2, background: 'var(--field)' }} />
-              {scenario.label.split(' ')[0]}
-            </span>
-          </div>
-        </div>
-        <div style={{ background: 'var(--surface2)', borderRadius: 'var(--radius-sm)', padding: 6 }}>
-          <svg viewBox={`0 0 ${cw} ${ch + 14}`} style={{ width: '100%' }}>
-            <path d={curvePath('tbau')} fill="none" stroke="var(--text3)" strokeWidth="1" strokeDasharray="3 3" />
-            <path d={curvePath('t')} fill="none" stroke="var(--field)" strokeWidth="2" />
-            <line
-              x1="0"
-              y1={ch - (9 / maxT) * ch}
-              x2={cw}
-              y2={ch - (9 / maxT) * ch}
-              stroke="var(--negative)"
-              strokeDasharray="2 2"
-              strokeWidth="0.8"
-              opacity="0.6"
-            />
-            <text x="2" y={ch - (9 / maxT) * ch - 2} fontSize="8" fontFamily="var(--font-mono)" fill="var(--negative)">
-              9 m uneconomic
-            </text>
-            <line x1={yearX} y1="0" x2={yearX} y2={ch} stroke="var(--text)" strokeWidth="1" />
-            <circle
-              cx={yearX}
-              cy={ch - (Math.max(0, thkNow) / maxT) * ch}
-              r="3"
-              fill="var(--field)"
-              stroke="var(--bg)"
-              strokeWidth="1.5"
-            />
-            <text x="2" y="10" fontSize="9" fontFamily="var(--font-mono)" fill="var(--text3)">{maxT.toFixed(0)}m</text>
-            <text x="2" y={ch - 2} fontSize="9" fontFamily="var(--font-mono)" fill="var(--text3)">0</text>
-          </svg>
-        </div>
-      </div>
+      {/* Aquifer water-column gauge — replaces the line trajectory. */}
+      <WaterColumn county={county} year={year} scenario={scenario} />
 
-      <div>
+      <div data-drill-section="cropmix">
         <div className="eyebrow">Who&apos;s drawing the water · {year <= 2024 ? 'measured' : 'baseline crop mix'}</div>
         {crops.length === 0 ? (
           <div className="mono" style={{ fontSize: 11, color: 'var(--text3)', padding: 20, textAlign: 'center', background: 'var(--surface2)', borderRadius: 'var(--radius-sm)', marginTop: 8 }}>
@@ -201,13 +135,20 @@ export default function CountyDrill({ county, year, scenario, onClose }: Props) 
         )}
       </div>
 
-      <div>
-        <div className="eyebrow">Baseline economics · 2022</div>
+      <div data-drill-section="economics">
+        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 4 }}>
+          <div className="eyebrow">
+            Baseline economics · {county.pmpSrc === 'kdwr_orr_metered' && county.pmpKdwrYear
+              ? county.pmpKdwrYear
+              : '2022'}
+          </div>
+          <PumpSourceChip src={county.pmpSrc} year={county.pmpKdwrYear} />
+        </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, padding: 12, background: 'var(--surface2)', borderRadius: 'var(--radius-sm)', marginTop: 8 }}>
           <Econ label="Irrigated acres" value={fmt.int(county.acres)} />
-          <Econ label="Pumping" value={fmt.af(county.pmp)} />
+          <Econ label="Pumping" value={fmt.af(county.pmpDisplay)} />
           <Econ label="Ag value" value={fmt.usd(county.agv)} />
-          <Econ label="$ per acre-foot" value={county.pmp ? '$' + Math.round(county.agv / county.pmp).toLocaleString() : '—'} />
+          <Econ label="$ per acre-foot" value={county.pmpDisplay ? '$' + Math.round(county.agv / county.pmpDisplay).toLocaleString() : '—'} />
           {county.pcost != null && (
             <>
               <Econ
@@ -217,9 +158,9 @@ export default function CountyDrill({ county, year, scenario, onClose }: Props) 
               <Econ
                 label="Net $ per AF"
                 value={
-                  county.pmp
+                  county.pmpDisplay
                     ? '$' +
-                      Math.max(0, Math.round(county.agv / county.pmp - county.pcost)).toLocaleString()
+                      Math.max(0, Math.round(county.agv / county.pmpDisplay - county.pcost)).toLocaleString()
                     : '—'
                 }
               />
@@ -235,7 +176,7 @@ export default function CountyDrill({ county, year, scenario, onClose }: Props) 
 
       {/* Climate — NOAA nClimDiv 1991-2020 normal vs 2019-2023 recent */}
       {county.pnorm != null && (
-        <div>
+        <div data-drill-section="climate">
           <div className="eyebrow">Climate · NOAA nClimDiv</div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, padding: 12, background: 'var(--surface2)', borderRadius: 'var(--radius-sm)', marginTop: 8 }}>
             <Econ label="30-yr normal" value={`${county.pnorm.toFixed(0)} mm/yr`} />
@@ -252,7 +193,7 @@ export default function CountyDrill({ county, year, scenario, onClose }: Props) 
       )}
 
       {/* Irrigation method mix — IWMS 2018 per-state shares */}
-      <div>
+      <div data-drill-section="irrigation">
         <div className="eyebrow">Irrigation method mix · IWMS 2018 (state avg)</div>
         <div style={{ display: 'flex', height: 18, borderRadius: 4, overflow: 'hidden', background: 'var(--surface2)', marginTop: 8, marginBottom: 6 }}>
           <div title={`Center pivot ${(county.mPivot * 100).toFixed(0)}%`} style={{ width: `${county.mPivot * 100}%`, background: 'var(--field)' }} />
@@ -268,6 +209,27 @@ export default function CountyDrill({ county, year, scenario, onClose }: Props) 
         </div>
       </div>
     </div>
+  );
+}
+
+function PumpSourceChip({ src, year }: { src: CountyProps['pmpSrc']; year: number | null }) {
+  const map: Record<CountyProps['pmpSrc'], { label: string; tone: string; tint: string }> = {
+    kdwr_orr_metered:    { label: year ? `Metered · KDWR ${year}` : 'Metered · KDWR',  tone: 'var(--field)',   tint: 'var(--field-tint)' },
+    usgs2015_water_use:  { label: 'USGS 2015 raster',                                  tone: 'var(--harvest)', tint: 'var(--harvest-tint)' },
+    inferred_nass_iwms:  { label: 'Inferred · NASS × IWMS',                            tone: 'var(--text3)',   tint: 'var(--surface2)' },
+  };
+  const m = map[src];
+  return (
+    <span
+      className="mono"
+      style={{
+        fontSize: 9, padding: '2px 6px', borderRadius: 3,
+        color: m.tone, background: m.tint, border: `1px solid ${m.tone}`,
+        textTransform: 'uppercase', letterSpacing: '0.08em', whiteSpace: 'nowrap',
+      }}
+    >
+      {m.label}
+    </span>
   );
 }
 

@@ -281,7 +281,10 @@ export default function OgallalaReport() {
                     />
                   )}
                   <TTRow label="years→uneconomic" value={fmt.yr(c.yrsU)} />
-                  <TTRow label="pumping" value={fmt.af(c.pmp)} />
+                  <TTRow
+                    label={c.pmpSrc === 'kdwr_orr_metered' ? `pumping (KDWR ${c.pmpKdwrYear ?? ''})` : 'pumping'}
+                    value={fmt.af(c.pmpDisplay || c.pmp)}
+                  />
                   <TTRow label="irr. acres" value={fmt.int(c.acres)} />
                   <div
                     className="mono"

@@ -3,7 +3,7 @@
 import { useCallback, useMemo } from 'react';
 import type { Feature, Geometry, Polygon, MultiPolygon, Position } from 'geojson';
 import type { CountyCollection, CountyProps, MapMode, Scenario } from './types';
-import { BBOX, depColor, project, thicknessAt } from './aquifer-math';
+import { BBOX, depColor, physicalThicknessAt, project, thicknessAt } from './aquifer-math';
 
 const W = 1000;
 const H = 900;
@@ -189,20 +189,17 @@ export default function CountyMap({
       style={{ width: '100%', height: '100%', display: 'block', userSelect: 'none' }}
     >
       <defs>
-        <linearGradient id="spike-grad-red" x1="0" y1="1" x2="0" y2="0">
-          <stop offset="0%" stopColor="#E63946" stopOpacity="0.3" />
-          <stop offset="60%" stopColor="#E63946" stopOpacity="0.95" />
-          <stop offset="100%" stopColor="#FFE8EC" stopOpacity="1" />
+        {/* Water-fill gradients — bottom darker, top brighter so the surface
+            catches a highlight, like the cone gradients did at their tips. */}
+        <linearGradient id="water-blue" x1="0" y1="1" x2="0" y2="0">
+          <stop offset="0%"   stopColor="#0F2F52" stopOpacity="0.85" />
+          <stop offset="60%"  stopColor="#1F4E80" stopOpacity="0.92" />
+          <stop offset="100%" stopColor="#5B9BD5" stopOpacity="1" />
         </linearGradient>
-        <linearGradient id="spike-grad-amber" x1="0" y1="1" x2="0" y2="0">
-          <stop offset="0%" stopColor="#D4A017" stopOpacity="0.3" />
-          <stop offset="60%" stopColor="#D4A017" stopOpacity="0.9" />
-          <stop offset="100%" stopColor="#FFF6D3" stopOpacity="1" />
-        </linearGradient>
-        <linearGradient id="spike-grad-green" x1="0" y1="1" x2="0" y2="0">
-          <stop offset="0%" stopColor="#52B788" stopOpacity="0.3" />
-          <stop offset="60%" stopColor="#52B788" stopOpacity="0.9" />
-          <stop offset="100%" stopColor="#E8F5EE" stopOpacity="1" />
+        <linearGradient id="water-red" x1="0" y1="1" x2="0" y2="0">
+          <stop offset="0%"   stopColor="#4A130C" stopOpacity="0.85" />
+          <stop offset="60%"  stopColor="#7A1F12" stopOpacity="0.92" />
+          <stop offset="100%" stopColor="#E05A4A" stopOpacity="1" />
         </linearGradient>
         <filter id="lift-shadow" x="-30%" y="-30%" width="160%" height="160%">
           <feDropShadow dx="0" dy="3" stdDeviation="3.5" floodColor="#000" floodOpacity="0.42" />
@@ -256,6 +253,7 @@ export default function CountyMap({
               return (
                 <path
                   key={f.fips}
+                  data-fips={f.fips}
                   d={pathD(f.paths)}
                   fill={fillColor}
                   stroke={isSel ? 'var(--text)' : isHov ? 'var(--text2)' : 'transparent'}
@@ -283,6 +281,7 @@ export default function CountyMap({
             return (
               <path
                 key={`${f.fips}-base`}
+                data-fips={f.fips}
                 d={pathD(f.paths)}
                 fill={baseFill}
                 stroke={isSel ? 'var(--field)' : 'transparent'}
@@ -328,68 +327,181 @@ export default function CountyMap({
         />
       </g>
 
-      {/* Spikes (columns mode) — outside tilt group, stay vertical */}
+      {/* 3-D water columns (columns mode) — outside tilt group, stay vertical.
+          Each county renders as a transparent glass tank with water filled
+          inside. Container height scales mildly by acres (so big-ag counties
+          stand out) but stays in a tight range so tanks read as comparable.
+          Water fill = current thickness / baseline (matches WaterColumn
+          panel); color is blue gradient when above the optimum line, red
+          gradient below. Optimum = max(9 m, 50% of baseline). */}
       {mode === 'columns' && (
         <g>
           {sortedForColumns.map((f) => {
             if (!f.props.onHpa) return null;
-            const thk = Math.max(0, thkAtYear(f.props));
-            const severity = Math.max(0, Math.min(1, 1 - thk / 60));
-            const decline = f.props.dcl || 0;
-            const dSev = Math.max(0, Math.min(1, -decline / 1.0));
-            const combined = Math.max(severity, dSev);
-            if (combined < 0.05) return null;
-            const spikeH = 8 + combined * 180;
-            const spikeW = Math.max(2, Math.sqrt(f.props.acres + 1) * 0.05);
+            const baseline = Math.max(1, f.props.thk ?? 0);
+            const thk = Math.max(0, Math.min(baseline, physicalThicknessAt(f.props, year, scenario)));
+            const optimum = Math.max(9, baseline * 0.5);
+            const aboveOpt = thk >= optimum;
+            const fillPct = thk / baseline;
+            const optPct = Math.min(1, optimum / baseline);
+
+            // Mildly acres-scaled tank size, kept in a comfortable range so
+            // tanks compare apples-to-apples across the map.
+            const acresScale = Math.sqrt(f.props.acres + 1);
+            const colW = Math.max(2.6, Math.min(8, 2.6 + acresScale * 0.025));
+            const colH = Math.max(28, Math.min(64, 28 + acresScale * 0.18));
+            const dx = colW * 0.55;
+            const dy = colW * 0.32;
+
             const tiltedY = H * 0.62 + (f.cy - H * 0.62) * 0.6;
             const tiltedX = f.cx;
             const isSel = selected === f.fips;
             const isHov = hovered === f.fips;
-            const grad =
-              combined > 0.55 ? 'url(#spike-grad-red)' :
-              combined > 0.25 ? 'url(#spike-grad-amber)' :
-              'url(#spike-grad-green)';
-            const tipColor = combined > 0.55 ? '#FF4556' : combined > 0.25 ? '#F5C047' : '#74D4A0';
+
+            // Container corners (front face + back face, axonometric).
+            const fl = tiltedX - colW, fr = tiltedX + colW;
+            const yb = tiltedY,        yt = tiltedY - colH;
+            const bl = fl + dx, br = fr + dx;
+            const yBb = yb - dy, yBt = yt - dy;
+
+            // Water surface y-coordinates (front + back).
+            const waterH = colH * fillPct;
+            const ywF = yb - waterH;
+            const ywB = ywF - dy;
+            const yOptF = yb - colH * optPct;
+
+            // Container = transparent cyan wireframe. Water = saturated
+            // gradient that reads cleanly against the muted base map.
+            const tankStroke = isSel ? '#9BE2FF' : isHov ? '#7DD3FC' : '#7DD3FC';
+            const tankOpacity = isSel ? 1 : isHov ? 1 : 0.78;
+            const waterFill = aboveOpt ? 'url(#water-blue)' : 'url(#water-red)';
+            const waterSide = aboveOpt ? '#0F2F52' : '#4A130C';
+            const waterTop  = aboveOpt ? '#7DB6E0' : '#F08070';
+
+            // Per-county clip — keeps the water box's right & top faces
+            // from poking through neighbouring tanks at extreme zooms.
+            const clipId = `tank-clip-${f.fips}`;
+
             return (
               <g
                 key={f.fips}
+                data-fips={f.fips}
                 onMouseEnter={() => onHover(f.fips)}
                 onMouseLeave={() => onHover(null)}
                 onClick={() => onSelect(f.fips)}
                 style={{ cursor: 'pointer' }}
               >
+                <defs>
+                  <clipPath id={clipId}>
+                    {/* Composite of the three visible tank faces */}
+                    <polygon points={`${fl},${yb} ${fr},${yb} ${br},${yBb} ${br},${yBt} ${bl},${yBt} ${fl},${yt}`} />
+                  </clipPath>
+                </defs>
+
+                {/* Ground shadow */}
                 <ellipse
-                  cx={tiltedX}
+                  cx={tiltedX + dx * 0.5}
                   cy={tiltedY + 1}
-                  rx={spikeW * 1.4}
-                  ry={spikeW * 0.45}
+                  rx={colW * 1.7}
+                  ry={colW * 0.55}
                   fill="rgba(0,0,0,0.5)"
-                  opacity="0.35"
+                  opacity="0.28"
                 />
+
+                {/* Subtle "empty glass" fill so the tank reads as a vessel
+                    even when nearly drained */}
                 <polygon
-                  points={`${tiltedX - spikeW},${tiltedY} ${tiltedX + spikeW},${tiltedY} ${tiltedX},${tiltedY - spikeH}`}
-                  fill={grad}
-                  opacity={isHov || isSel ? 1 : 0.88}
-                  style={{ transition: 'opacity 200ms var(--ease-out)' }}
+                  points={`${fl},${yb} ${fr},${yb} ${br},${yBb} ${br},${yBt} ${bl},${yBt} ${fl},${yt}`}
+                  fill="rgba(125, 211, 252, 0.08)"
+                  pointerEvents="none"
                 />
-                <circle
-                  cx={tiltedX}
-                  cy={tiltedY - spikeH}
-                  r={Math.max(1.2, spikeW * 0.45)}
-                  fill={tipColor}
-                  opacity="0.95"
+
+                {/* Water (clipped to tank silhouette so faces stay tidy) */}
+                {waterH > 0.4 && (
+                  <g clipPath={`url(#${clipId})`}>
+                    {/* Right face of water */}
+                    <polygon
+                      points={`${fr},${yb} ${br},${yBb} ${br},${ywB} ${fr},${ywF}`}
+                      fill={waterSide}
+                      opacity="0.7"
+                    />
+                    {/* Water surface (top face of water box) */}
+                    <polygon
+                      points={`${fl},${ywF} ${fr},${ywF} ${br},${ywB} ${bl},${ywB}`}
+                      fill={waterTop}
+                      opacity="0.92"
+                    />
+                    {/* Front face of water */}
+                    <rect
+                      x={fl}
+                      y={ywF}
+                      width={colW * 2}
+                      height={waterH}
+                      fill={waterFill}
+                    />
+                    {/* Subtle surface highlight band */}
+                    <rect
+                      x={fl}
+                      y={ywF}
+                      width={colW * 2}
+                      height={Math.min(1.4, waterH * 0.2)}
+                      fill="rgba(255,255,255,0.35)"
+                    />
+                  </g>
+                )}
+
+                {/* Optimum dashed line on the front face */}
+                <line
+                  x1={fl - 0.6}
+                  x2={fr + 0.6}
+                  y1={yOptF}
+                  y2={yOptF}
+                  stroke="rgba(255,255,255,0.65)"
+                  strokeWidth="0.55"
+                  strokeDasharray="1.6 1.4"
+                  opacity={isHov || isSel ? 1 : 0.75}
+                  pointerEvents="none"
                 />
+
+                {/* Container wireframe — drawn last so the glass edges sit on top */}
+                <g
+                  fill="none"
+                  stroke={tankStroke}
+                  strokeWidth={isSel ? 1.4 : isHov ? 1.2 : 1.0}
+                  strokeLinejoin="round"
+                  strokeLinecap="round"
+                  opacity={tankOpacity}
+                  pointerEvents="none"
+                >
+                  {/* Front face */}
+                  <rect x={fl} y={yt} width={colW * 2} height={colH} />
+                  {/* Top face (parallelogram) */}
+                  <polygon points={`${fl},${yt} ${fr},${yt} ${br},${yBt} ${bl},${yBt}`} />
+                  {/* Right (side) face */}
+                  <polygon points={`${fr},${yb} ${br},${yBb} ${br},${yBt} ${fr},${yt}`} />
+                </g>
+
+                {/* Invisible hit-target so thin tanks are still easy to click */}
+                <rect
+                  x={fl - 1.5}
+                  y={yt - 2}
+                  width={colW * 2 + dx + 3}
+                  height={colH + dy + 4}
+                  fill="transparent"
+                />
+
+                {/* Selection callout — vertical pin above the column */}
                 {isSel && (
-                  <g>
+                  <g pointerEvents="none">
                     <line
                       x1={tiltedX}
-                      y1={tiltedY - spikeH - 14}
+                      y1={yt - 14}
                       x2={tiltedX}
-                      y2={tiltedY - spikeH - 4}
+                      y2={yt - 4}
                       stroke="var(--text)"
                       strokeWidth="1.5"
                     />
-                    <circle cx={tiltedX} cy={tiltedY - spikeH - 18} r="3" fill="var(--text)" />
+                    <circle cx={tiltedX} cy={yt - 18} r="3" fill="var(--text)" />
                   </g>
                 )}
               </g>
@@ -410,6 +522,7 @@ export default function CountyMap({
             return (
               <circle
                 key={f.fips}
+                data-fips={f.fips}
                 cx={f.cx}
                 cy={f.cy}
                 r={r}

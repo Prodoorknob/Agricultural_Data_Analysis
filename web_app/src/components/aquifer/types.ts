@@ -18,7 +18,13 @@ export interface CountyProps {
   thk: number | null;   // saturated_thickness_m
   dcl: number | null;   // annual_decline_m (heuristic or measured)
   rch: number | null;   // recharge_mm_yr
-  pmp: number;          // pumping_af_yr
+  pmp: number;          // pumping_af_yr (inferred — kept for scenario math)
+  // Best-known pumping (KDWR metered > USGS 2015 raster > inferred). Frontend
+  // displays this; scenario math still uses `pmp` for delta consistency.
+  pmpDisplay: number;
+  pmpSrc: 'kdwr_orr_metered' | 'usgs2015_water_use' | 'inferred_nass_iwms';
+  pmpKdwr: number | null;       // KDWR latest-year metered (KS only)
+  pmpKdwrYear: number | null;   // year that value was reported
   acres: number;
   corn: number; soy: number; srg: number; wht: number; ctn: number; alf: number;
   agv: number;

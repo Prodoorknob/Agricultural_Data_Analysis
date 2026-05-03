@@ -28,7 +28,7 @@ export default function Ranking({ counties, scenario, year, selected, onSelect }
   const sortedFor = (tab: Tab): Array<{ c: CountyProps; v: number }> => {
     if (tab === 'dry')  return onHpa.map((c) => ({ c, v: thicknessAt(c, year, scenario) })).sort((a, b) => a.v - b.v).slice(0, 10);
     if (tab === 'fast') return onHpa.map((c) => ({ c, v: effectiveDecline(c) })).sort((a, b) => a.v - b.v).slice(0, 10);
-    return onHpa.map((c) => ({ c, v: c.pmp || 0 })).sort((a, b) => b.v - a.v).slice(0, 10);
+    return onHpa.map((c) => ({ c, v: c.pmpDisplay || c.pmp || 0 })).sort((a, b) => b.v - a.v).slice(0, 10);
   };
 
   const formatV = (tab: Tab, v: number) =>

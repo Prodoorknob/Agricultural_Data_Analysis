@@ -99,6 +99,34 @@ export function thicknessAt(c: CountyProps, year: number, scenario: Scenario): n
 }
 
 /**
+ * Sign-safe physical thickness projection.
+ *
+ * `thicknessAt` keeps a signed-decline convention that, combined with the way
+ * `dclP` (NB02 1-step delta) is sometimes stored with the opposite sign,
+ * produces projected values that *grow* the aquifer. That's mathematically
+ * tidy for the line-trajectory chart but breaks the water-column metaphor:
+ * the tank should always be in the act of draining forward, never re-filling.
+ *
+ * Here we always treat the decline as physical depletion at rate
+ * `|effectiveDecline(c)|`, modulated by the scenario's pumpDelta and any
+ * threshold rule. Historical (year ≤ 2024) values back-fill *up* from the
+ * 2024 baseline so the predev side reads as a fuller aquifer.
+ */
+export function physicalThicknessAt(c: CountyProps, year: number, scenario: Scenario): number {
+  const baseline2024 = c.thk;
+  if (baseline2024 == null) return 0;
+  const declAbs = Math.abs(effectiveDecline(c));
+  const pumpMult = 1 + scenario.pumpDelta;
+  let dec = declAbs * pumpMult;
+  if (scenario.threshold != null && baseline2024 < scenario.threshold) dec = 0;
+
+  if (year <= 2024) {
+    return baseline2024 + declAbs * (2024 - year);
+  }
+  return Math.max(0, baseline2024 - dec * (year - 2024));
+}
+
+/**
  * Region-level aggregate. **Only counties with `onHpa` contribute** — off-HPA
  * counties are part of the HPA-state geography but sit outside the aquifer
  * footprint, so they shouldn't pad the mean thickness or depletion counts.
