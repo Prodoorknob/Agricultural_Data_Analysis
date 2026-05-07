@@ -1,10 +1,10 @@
 {
   "crop": "soybean",
   "week": 14,
-  "model_ver": "2026-04-21",
-  "train_rrmse": 14.96,
-  "val_rrmse": 17.94,
-  "test_rrmse": 17.76,
+  "model_ver": "2026-05-07",
+  "train_rrmse": 16.94,
+  "val_rrmse": 13.61,
+  "test_rrmse": 19.24,
   "baselines": {
     "county_mean_rrmse": 23.15,
     "prior_year_rrmse": 15.62
@@ -13,50 +13,56 @@
   "n_train": 9675,
   "n_val": 2291,
   "n_test": 1449,
-  "n_features": 10,
+  "n_features": 11,
   "feature_cols": [
-    "county_mean_yield",
     "county_yield_trend",
     "prior_year_yield",
     "county_yield_std",
-    "year",
-    "gdd_ytd",
-    "precip_season_in",
+    "gdd_anom",
+    "tmax_anom",
+    "precip_anom_in",
     "precip_deficit_in",
-    "tmax_avg",
-    "hot_days"
+    "hot_days",
+    "drought_d3d4_pct",
+    "tropical_track_pts_within_200km",
+    "flood_event_count"
   ],
   "has_weather_features": true,
+  "target_mode": "anomaly_5yr_mean",
+  "n_climatology_counties": 1275,
+  "drought_attached": true,
+  "hurricane_attached": true,
+  "flood_attached": true,
   "top_features": [
     {
-      "name": "year",
-      "importance": 1420.0
-    },
-    {
-      "name": "county_mean_yield",
-      "importance": 1199.0
+      "name": "prior_year_yield",
+      "importance": 1379.0
     },
     {
       "name": "county_yield_trend",
-      "importance": 1145.0
+      "importance": 1168.0
     },
     {
       "name": "county_yield_std",
-      "importance": 1090.0
+      "importance": 1108.0
     },
     {
-      "name": "prior_year_yield",
-      "importance": 941.0
+      "name": "precip_anom_in",
+      "importance": 883.0
     },
     {
-      "name": "tmax_avg",
-      "importance": 906.0
+      "name": "tmax_anom",
+      "importance": 807.0
     },
     {
-      "name": "gdd_ytd",
-      "importance": 782.0
+      "name": "gdd_anom",
+      "importance": 743.0
+    },
+    {
+      "name": "precip_deficit_in",
+      "importance": 716.0
     }
   ],
-  "conformal_q80": 9.956989793485477,
+  "conformal_q80": 8.190870710284255,
   "confidence_tier": "medium"
 }

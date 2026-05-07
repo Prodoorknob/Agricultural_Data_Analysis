@@ -1,62 +1,68 @@
 {
   "crop": "wheat",
   "week": 13,
-  "model_ver": "2026-04-21",
-  "train_rrmse": 18.02,
-  "val_rrmse": 20.54,
-  "test_rrmse": 24.85,
+  "model_ver": "2026-05-07",
+  "train_rrmse": 19.1,
+  "val_rrmse": 18.63,
+  "test_rrmse": 20.67,
   "baselines": {
     "county_mean_rrmse": 21.8,
     "prior_year_rrmse": 23.7
   },
-  "beats_baseline": false,
+  "beats_baseline": true,
   "n_train": 19880,
   "n_val": 3018,
   "n_test": 955,
-  "n_features": 10,
+  "n_features": 11,
   "feature_cols": [
-    "county_mean_yield",
     "county_yield_trend",
     "prior_year_yield",
     "county_yield_std",
-    "year",
-    "gdd_ytd",
-    "precip_season_in",
+    "gdd_anom",
+    "tmax_anom",
+    "precip_anom_in",
     "precip_deficit_in",
-    "tmax_avg",
-    "hot_days"
+    "hot_days",
+    "drought_d3d4_pct",
+    "tropical_track_pts_within_200km",
+    "flood_event_count"
   ],
   "has_weather_features": true,
+  "target_mode": "anomaly_5yr_mean",
+  "n_climatology_counties": 1327,
+  "drought_attached": true,
+  "hurricane_attached": true,
+  "flood_attached": true,
   "top_features": [
     {
-      "name": "year",
-      "importance": 1771.0
+      "name": "prior_year_yield",
+      "importance": 1335.0
     },
     {
-      "name": "county_mean_yield",
-      "importance": 1300.0
-    },
-    {
-      "name": "gdd_ytd",
-      "importance": 1131.0
+      "name": "precip_deficit_in",
+      "importance": 1318.0
     },
     {
       "name": "county_yield_trend",
-      "importance": 1129.0
+      "importance": 1317.0
     },
     {
-      "name": "prior_year_yield",
-      "importance": 1022.0
+      "name": "tmax_anom",
+      "importance": 1290.0
     },
     {
       "name": "county_yield_std",
-      "importance": 991.0
+      "importance": 1232.0
     },
     {
-      "name": "tmax_avg",
-      "importance": 928.0
+      "name": "gdd_anom",
+      "importance": 1221.0
+    },
+    {
+      "name": "precip_anom_in",
+      "importance": 1164.0
     }
   ],
-  "conformal_q80": 14.88181841996072,
+  "conformal_q80": 12.730353946477308,
   "confidence_tier": "medium"
 }

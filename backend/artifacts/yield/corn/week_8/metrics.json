@@ -1,10 +1,10 @@
 {
   "crop": "corn",
   "week": 8,
-  "model_ver": "2026-04-21",
-  "train_rrmse": 16.96,
-  "val_rrmse": 15.6,
-  "test_rrmse": 18.49,
+  "model_ver": "2026-05-07",
+  "train_rrmse": 19.04,
+  "val_rrmse": 14.78,
+  "test_rrmse": 20.16,
   "baselines": {
     "county_mean_rrmse": 23.78,
     "prior_year_rrmse": 16.06
@@ -13,50 +13,56 @@
   "n_train": 11595,
   "n_val": 2608,
   "n_test": 1701,
-  "n_features": 10,
+  "n_features": 11,
   "feature_cols": [
-    "county_mean_yield",
     "county_yield_trend",
     "prior_year_yield",
     "county_yield_std",
-    "year",
-    "gdd_ytd",
-    "precip_season_in",
+    "gdd_anom",
+    "tmax_anom",
+    "precip_anom_in",
     "precip_deficit_in",
-    "tmax_avg",
-    "hot_days"
+    "hot_days",
+    "drought_d3d4_pct",
+    "tropical_track_pts_within_200km",
+    "flood_event_count"
   ],
   "has_weather_features": true,
+  "target_mode": "anomaly_5yr_mean",
+  "n_climatology_counties": 1495,
+  "drought_attached": true,
+  "hurricane_attached": true,
+  "flood_attached": true,
   "top_features": [
     {
-      "name": "year",
-      "importance": 1402.0
-    },
-    {
-      "name": "county_mean_yield",
-      "importance": 1224.0
-    },
-    {
-      "name": "county_yield_std",
-      "importance": 1167.0
+      "name": "prior_year_yield",
+      "importance": 1212.0
     },
     {
       "name": "county_yield_trend",
-      "importance": 1152.0
+      "importance": 1190.0
     },
     {
-      "name": "prior_year_yield",
-      "importance": 1004.0
+      "name": "county_yield_std",
+      "importance": 1044.0
     },
     {
-      "name": "tmax_avg",
-      "importance": 993.0
+      "name": "tmax_anom",
+      "importance": 1033.0
     },
     {
-      "name": "gdd_ytd",
-      "importance": 911.0
+      "name": "gdd_anom",
+      "importance": 884.0
+    },
+    {
+      "name": "precip_deficit_in",
+      "importance": 817.0
+    },
+    {
+      "name": "precip_anom_in",
+      "importance": 807.0
     }
   ],
-  "conformal_q80": 27.647987565589737,
+  "conformal_q80": 28.269823377493253,
   "confidence_tier": "medium"
 }
