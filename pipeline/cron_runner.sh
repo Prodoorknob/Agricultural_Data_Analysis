@@ -431,36 +431,70 @@ if [ "${RUN_MODE}" = "--weekly-yield" ]; then
 
     set +e
 
-    # Step 1: ETL - fetch latest data from all sources
-    echo "Step 1a: NOAA weather data..."
-    python -m backend.etl.ingest_noaa
-    NOAA_EXIT=$?
+    # The trained yield model reads from four consolidated parquet caches:
+    #   1. ghcn_processed/county_weather_2000_<YYYY>.parquet   (daily NOAA weather)
+    #   2. drought_history.parquet                              (USDM county D3+D4)
+    #   3. storm_floods.parquet                                 (NOAA Storm Events floods)
+    #   4. hurdat2.parquet                                      (Atlantic tropical cyclone tracks)
+    #
+    # Each cron firing extends each cache to current date, then runs inference.
+    # The legacy ingest_noaa / ingest_drought / ingest_nasa_power / ingest_crop_conditions
+    # scripts populate a different DB-side feature table (feature_weekly) that's
+    # not consumed by the deployed yield model — kept under the OPTIONAL block
+    # below so they can run, but their failure does not gate inference.
 
-    echo "Step 1b: NASA POWER solar/VPD..."
-    python -m backend.etl.ingest_nasa_power
-    NASA_EXIT=$?
+    CURRENT_YEAR="$(date +%Y)"
 
-    echo "Step 1c: US Drought Monitor..."
-    python -m backend.etl.ingest_drought
+    echo "Step 1a: extend GHCN parquet to current date..."
+    python -m backend.etl.extend_ghcn_to_current
+    GHCN_EXIT=$?
+
+    echo "Step 1b: extend USDM drought history (current year only)..."
+    python -m backend.etl.backfill_drought_history \
+        --year-start "${CURRENT_YEAR}" --year-end "${CURRENT_YEAR}" \
+        --growing-season-only
     DROUGHT_EXIT=$?
 
-    echo "Step 1d: NASS crop conditions..."
-    python -m backend.etl.ingest_crop_conditions
-    NASS_EXIT=$?
+    echo "Step 1c: extend NOAA Storm Events (current year only)..."
+    python -m backend.etl.backfill_storm_events \
+        --year-start "${CURRENT_YEAR}" --year-end "${CURRENT_YEAR}"
+    SE_EXIT=$?
 
-    # Step 2: Run yield inference
+    # Refresh HURDAT2 only during Atlantic hurricane season (June-November) —
+    # a fresh download every Thursday outside that window is wasted bandwidth.
+    HURDAT_EXIT=0
+    MONTH_NUM="$(date +%-m)"
+    if [ "${MONTH_NUM}" -ge 6 ] && [ "${MONTH_NUM}" -le 11 ]; then
+        echo "Step 1d: refresh HURDAT2 (Atlantic hurricane season)..."
+        python -m backend.etl.backfill_hurdat2
+        HURDAT_EXIT=$?
+    else
+        echo "Step 1d: HURDAT2 refresh skipped (off-season)"
+    fi
+
+    # Optional legacy ETL — populates feature_weekly DB table. The deployed
+    # yield model does not depend on this table; its failure must not block
+    # inference. Wrap each in `|| true` so the script always reaches step 2.
+    echo "Step 1e: legacy feature_weekly ETL (best-effort)..."
+    python -m backend.etl.ingest_noaa || echo "  (ingest_noaa failed; non-fatal)"
+    python -m backend.etl.ingest_nasa_power || echo "  (ingest_nasa_power failed; non-fatal)"
+    python -m backend.etl.ingest_drought || echo "  (ingest_drought failed; non-fatal)"
+    python -m backend.etl.ingest_crop_conditions || echo "  (ingest_crop_conditions failed; non-fatal)"
+
+    # Step 2: Run yield inference (auto-detects current week per crop)
     echo "Step 2: Running yield inference..."
     python -m backend.models.yield_inference
     INFERENCE_EXIT=$?
 
     set -e
 
-    # Check results
+    # Check results — inference is the only gate that matters; cache extends
+    # are best-effort because last-week's data still produces valid forecasts.
     FAILED=0
-    [ ${NOAA_EXIT} -ne 0 ] && echo "WARNING: NOAA ingest failed" && FAILED=1
-    [ ${NASA_EXIT} -ne 0 ] && echo "WARNING: NASA POWER ingest failed" && FAILED=1
-    [ ${DROUGHT_EXIT} -ne 0 ] && echo "WARNING: Drought ingest failed" && FAILED=1
-    [ ${NASS_EXIT} -ne 0 ] && echo "WARNING: NASS conditions ingest failed" && FAILED=1
+    [ ${GHCN_EXIT} -ne 0 ] && echo "WARNING: GHCN extend failed" && FAILED=1
+    [ ${DROUGHT_EXIT} -ne 0 ] && echo "WARNING: USDM drought refresh failed" && FAILED=1
+    [ ${SE_EXIT} -ne 0 ] && echo "WARNING: Storm Events refresh failed" && FAILED=1
+    [ ${HURDAT_EXIT} -ne 0 ] && echo "WARNING: HURDAT2 refresh failed" && FAILED=1
     [ ${INFERENCE_EXIT} -ne 0 ] && echo "WARNING: Yield inference failed" && FAILED=1
 
     # Restart FastAPI to reload model cache
@@ -470,7 +504,7 @@ if [ "${RUN_MODE}" = "--weekly-yield" ]; then
         aws sns publish \
             --topic-arn "${SNS_TOPIC_ARN}" \
             --subject "Yield Pipeline: Partial FAILURE" \
-            --message "Weekly yield pipeline completed with errors at $(date). NOAA=${NOAA_EXIT} NASA=${NASA_EXIT} Drought=${DROUGHT_EXIT} NASS=${NASS_EXIT} Inference=${INFERENCE_EXIT}. See log: ${LOGFILE}" \
+            --message "Weekly yield pipeline completed with errors at $(date). GHCN=${GHCN_EXIT} Drought=${DROUGHT_EXIT} StormEvents=${SE_EXIT} HURDAT=${HURDAT_EXIT} Inference=${INFERENCE_EXIT}. See log: ${LOGFILE}" \
             --region "${AWS_REGION}" 2>/dev/null || true
     else
         aws sns publish \

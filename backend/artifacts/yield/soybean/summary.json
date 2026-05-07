@@ -1,12 +1,16 @@
 {
   "crop": "soybean",
-  "model_ver": "2026-04-21",
+  "model_ver": "2026-05-07",
   "n_weeks": 20,
   "n_weeks_pass_gate": 20,
   "gate_status": "pass",
-  "avg_val_rrmse": 17.8,
-  "avg_test_rrmse": 17.89,
+  "avg_val_rrmse": 13.74,
+  "avg_test_rrmse": 18.93,
   "avg_baseline_rrmse": 23.15,
   "has_weather_features": true,
+  "target_mode": "anomaly_5yr_mean",
+  "drought_attached": true,
+  "hurricane_attached": true,
+  "flood_attached": true,
   "gate_threshold_pct": 10.0
 }

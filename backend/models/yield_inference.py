@@ -81,25 +81,45 @@ def run_inference(
     nass_yields: pd.DataFrame | None = None,
     weather_df: pd.DataFrame | None = None,
     prism_normals: dict | None = None,
+    drought_df: pd.DataFrame | None = None,
+    hurdat_df: pd.DataFrame | None = None,
+    flood_df: pd.DataFrame | None = None,
+    county_centroids: pd.DataFrame | None = None,
 ) -> int:
     """Run yield inference for a given crop/week, upsert results to DB.
 
     Builds the full feature set the model was trained on (NASS history +
-    weather if the model expects it). If the model's feature_cols include
-    weather columns and weather data is missing, inference is skipped for
-    that (crop, week) rather than silently zero-filling — a degraded
-    prediction is worse than no prediction for a published forecast.
+    weather anomalies if the model expects them). When the model's
+    target_mode is ``anomaly_5yr_mean``, the prior-5-year mean yield is
+    computed per county and passed to ``model.predict()`` as the baseline so
+    the residual can be added back into bu/acre space.
+
+    If a required input (weather or model-expected drought) is missing,
+    inference is skipped for that county rather than silently zero-filling —
+    a degraded prediction is worse than no prediction for a published forecast.
     """
     model = load_model(crop, week)
     if model is None:
         logger.warning("No model for %s week %d. Skipping.", crop, week)
         return 0
 
-    logger.info("Running inference for %s week %d year %d (model ver: %s, features: %s)",
-                crop, week, crop_year, model.model_ver, model.feature_cols)
+    target_mode = getattr(model, "target_mode", "absolute")
+    climatology = getattr(model, "climatology", {}) or {}
 
-    weather_cols = {"gdd_ytd", "precip_season_in", "precip_deficit_in", "tmax_avg", "hot_days"}
+    logger.info(
+        "Running inference for %s week %d year %d (model ver: %s, target_mode: %s, features: %s)",
+        crop, week, crop_year, model.model_ver, target_mode, model.feature_cols,
+    )
+
+    weather_anom_cols = {"gdd_anom", "tmax_anom", "precip_anom_in", "precip_deficit_in", "hot_days"}
+    legacy_weather_cols = {"gdd_ytd", "precip_season_in", "tmax_avg"}
+    weather_cols = weather_anom_cols | legacy_weather_cols
     needs_weather = any(c in weather_cols for c in model.feature_cols)
+    needs_drought = "drought_d3d4_pct" in model.feature_cols
+    hurricane_cols = {"tropical_track_pts_within_200km"}
+    needs_hurricane = any(c in hurricane_cols for c in model.feature_cols)
+    flood_cols = {"flood_event_count"}
+    needs_flood = any(c in flood_cols for c in model.feature_cols)
 
     if nass_yields is None:
         from backend.models.train_yield import load_nass_county_yields
@@ -117,7 +137,10 @@ def run_inference(
         from backend.models.train_yield import (
             load_weather_data,
             load_prism_normals as _load_prism_normals,
+            load_drought_history,
             compute_weather_features,
+            apply_weather_anomalies,
+            attach_drought_features,
         )
         if weather_df is None:
             weather_df = load_weather_data()
@@ -141,6 +164,72 @@ def run_inference(
                 crop, week, crop_year,
             )
             return 0
+
+        # Apply anomalies using the climatology saved into the model
+        # artifact at training time. Counties absent from climatology will
+        # carry NaN anomaly columns — LightGBM handles these natively.
+        if climatology and any(c.endswith("_anom") or c == "precip_anom_in" for c in model.feature_cols):
+            wx_features = apply_weather_anomalies(wx_features, climatology)
+
+        # Attach drought if model expects it.
+        if needs_drought:
+            if drought_df is None:
+                drought_df = load_drought_history()
+            if drought_df is None or drought_df.empty:
+                logger.warning(
+                    "Model %s week %d expects drought_d3d4_pct but USDM history "
+                    "is unavailable; rows without a drought lookup will get NaN.",
+                    crop, week,
+                )
+                wx_features["drought_d3d4_pct"] = np.nan
+            else:
+                wx_features = attach_drought_features(wx_features, drought_df, crop, week)
+
+        # Attach hurricane proximity if model expects it.
+        if needs_hurricane:
+            from backend.models.train_yield import (
+                load_hurdat2,
+                load_county_centroids,
+                attach_hurricane_features,
+            )
+            if hurdat_df is None:
+                hurdat_df = load_hurdat2()
+            if county_centroids is None:
+                county_centroids = load_county_centroids()
+            if (
+                hurdat_df is None or hurdat_df.empty
+                or county_centroids is None or county_centroids.empty
+            ):
+                logger.warning(
+                    "Model %s week %d expects hurricane features but HURDAT2 / "
+                    "centroids unavailable; columns will be NaN.",
+                    crop, week,
+                )
+                for c in hurricane_cols:
+                    wx_features[c] = np.nan
+            else:
+                wx_features = attach_hurricane_features(
+                    wx_features, hurdat_df, county_centroids, crop, week,
+                )
+
+        # Attach flood aggregates if model expects them.
+        if needs_flood:
+            from backend.models.train_yield import (
+                load_storm_floods,
+                attach_flood_features,
+            )
+            if flood_df is None:
+                flood_df = load_storm_floods()
+            if flood_df is None or flood_df.empty:
+                logger.warning(
+                    "Model %s week %d expects flood features but Storm Events "
+                    "cache unavailable; columns will default to 0.",
+                    crop, week,
+                )
+                wx_features["flood_event_count"] = 0.0
+            else:
+                wx_features = attach_flood_features(wx_features, flood_df, crop, week)
+
         wx_lookup = wx_features.set_index(["fips", "year"])
         logger.info("  Weather features computed for %d (fips, year) pairs", len(wx_features))
 
@@ -158,11 +247,18 @@ def run_inference(
             skipped_no_hist += 1
             continue
 
+        # Baseline = mean of prior 5 years (or all available history if <5
+        # years on file). Used both as the anomaly-mode predict baseline and
+        # as a frontend-facing comparator.
+        last_n = county_hist.tail(5)
+        county_5yr_mean = float(last_n.mean()) if len(last_n) else float(county_hist.mean())
+
         feat = {
-            "county_mean_yield": county_hist.mean(),
             "county_yield_trend": _compute_trend(county_hist),
             "prior_year_yield": county_hist.iloc[-1],
             "county_yield_std": county_hist.std(),
+            # Legacy absolute-target models still expect these:
+            "county_mean_yield": county_hist.mean(),
             "year": crop_year,
         }
 
@@ -171,11 +267,17 @@ def run_inference(
                 skipped_no_weather += 1
                 continue
             wx_row = wx_lookup.loc[(fips, crop_year)]
-            feat["gdd_ytd"] = wx_row["gdd_ytd"]
-            feat["precip_season_in"] = wx_row["precip_season_in"]
-            feat["precip_deficit_in"] = wx_row["precip_deficit_in"]
-            feat["tmax_avg"] = wx_row["tmax_avg"]
-            feat["hot_days"] = wx_row["hot_days"]
+            # Populate every weather col the row carries; only the ones in
+            # model.feature_cols will actually be used.
+            for col in (
+                "gdd_ytd", "tmax_avg", "precip_season_in",
+                "gdd_anom", "tmax_anom", "precip_anom_in",
+                "precip_deficit_in", "hot_days", "drought_d3d4_pct",
+                "tropical_track_pts_within_200km",
+                "flood_event_count",
+            ):
+                if col in wx_row.index:
+                    feat[col] = wx_row[col]
 
         missing = [c for c in model.feature_cols if c not in feat]
         if missing:
@@ -185,7 +287,10 @@ def run_inference(
         feature_row = pd.DataFrame([feat])[model.feature_cols]
 
         try:
-            pred = model.predict(feature_row)
+            if target_mode == "anomaly_5yr_mean":
+                pred = model.predict(feature_row, baseline=county_5yr_mean)
+            else:
+                pred = model.predict(feature_row)
         except Exception as exc:
             logger.debug("Prediction failed for FIPS %s: %s", fips, exc)
             continue
@@ -264,16 +369,32 @@ if __name__ == "__main__":
 
     crops = COMMODITIES if args.crop == "all" else [args.crop]
 
-    # Load weather data once and share across (crop, week) inferences.
-    # If unavailable, run_inference() will skip weather-dependent models cleanly.
+    # Load weather + drought + hurricane + flood data once and share across
+    # (crop, week) inferences. If unavailable, run_inference() will skip
+    # downstream features cleanly.
     shared_weather = None
     shared_normals = None
+    shared_drought = None
+    shared_hurdat = None
+    shared_floods = None
+    shared_centroids = None
     try:
-        from backend.models.train_yield import load_weather_data, load_prism_normals
+        from backend.models.train_yield import (
+            load_weather_data,
+            load_prism_normals,
+            load_drought_history,
+            load_hurdat2,
+            load_storm_floods,
+            load_county_centroids,
+        )
         shared_weather = load_weather_data()
         shared_normals = load_prism_normals()
+        shared_drought = load_drought_history()
+        shared_hurdat = load_hurdat2()
+        shared_floods = load_storm_floods()
+        shared_centroids = load_county_centroids()
     except Exception as exc:
-        logger.warning("Could not preload weather data (will retry per-crop): %s", exc)
+        logger.warning("Could not preload feature inputs (will retry per-crop): %s", exc)
 
     for crop in crops:
         week = args.week or current_week_of_season(crop)
@@ -285,6 +406,10 @@ if __name__ == "__main__":
             crop, week, args.year,
             weather_df=shared_weather,
             prism_normals=shared_normals,
+            drought_df=shared_drought,
+            hurdat_df=shared_hurdat,
+            flood_df=shared_floods,
+            county_centroids=shared_centroids,
         )
         total += n
 

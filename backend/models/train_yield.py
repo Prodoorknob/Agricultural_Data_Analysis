@@ -4,22 +4,40 @@ Trains 60 LightGBM quantile models (3 crops × 20 weeks).
 Integrates GHCN daily weather data to compute week-specific GDD and precip deficit,
 combined with NASS historical yield features.
 
+Target reformulation (default ON, see USE_ANOMALY_TARGET):
+  Models predict ``yield_residual = yield_bu - county_5yr_prior_mean(fips, year)``.
+  This breaks the cross-county leakage previously caused by ``year`` being the
+  top-importance feature: corn-belt time trends were being applied to SE
+  Atlantic counties (NC corn 2024 outlier — see
+  research/yield-model-nc-2024-investigation.md). The 5yr baseline is added
+  back at predict time.
+
 Features per (fips, year, week):
-  - county_mean_yield   (NASS historical)
-  - county_yield_trend  (NASS historical)
-  - prior_year_yield    (NASS prior year)
-  - county_yield_std    (NASS variability)
-  - year                (trend capture)
-  - gdd_ytd             (weather: accumulated growing degree days through week W)
-  - precip_season_in    (weather: total precip from planting through week W)
-  - precip_deficit_in   (weather: actual - normal precip)
-  - tmax_avg            (weather: avg daily max temp during growing season)
-  - hot_days            (weather: days with tmax > 95°F, heat stress proxy)
+  NASS history:
+  - county_yield_trend  (slope of prior-year yields, structural)
+  - prior_year_yield    (last-year realized — reused as a robustness anchor)
+  - county_yield_std    (variability)
+
+  Weather anomalies vs county climatology computed from training years:
+  - gdd_anom            (GDD minus county/week climatology)
+  - tmax_anom           (avg max temp minus county/week climatology)
+  - precip_anom_in      (precip total minus county/week climatology)
+  - precip_deficit_in   (PRISM normals based deficit, kept as redundant signal)
+  - hot_days            (count of days >95F — kept as absolute heat-stress count)
+
+  County drought (loaded from USDM cache if available):
+  - drought_d3d4_pct    (D3+D4 percent area at most-recent USDM Thursday)
+
+  ``year`` is intentionally REMOVED from the feature set — its previous role
+  as the dominant LightGBM split was the root cause of the NC 2024 mode of
+  failure documented in research/yield-model-nc-2024-investigation.md.
 
 Usage:
     python -m backend.models.train_yield
     python -m backend.models.train_yield --commodity corn --week 15 --skip-cv
     python -m backend.models.train_yield --upload-s3
+    python -m backend.models.train_yield --absolute-target  # legacy mode
+    python -m backend.models.train_yield --prune-old-versions  # clean stale rows
 """
 
 import argparse
@@ -41,8 +59,31 @@ logger = setup_logging("train_yield")
 ARTIFACTS_DIR = Path(__file__).parent.parent / "artifacts" / "yield"
 LOCAL_DATA_DIR = Path(__file__).parent.parent / "etl" / "data"
 NASS_CACHE_DIR = LOCAL_DATA_DIR / "nass_cache"
-GHCN_PATH = LOCAL_DATA_DIR / "ghcn_processed" / "county_weather_2000_2025.parquet"
+GHCN_DIR = LOCAL_DATA_DIR / "ghcn_processed"
 PRISM_PATH = LOCAL_DATA_DIR / "prism_normals.csv"
+DROUGHT_HISTORY_PATH = LOCAL_DATA_DIR / "drought_history.parquet"
+HURDAT2_PATH = LOCAL_DATA_DIR / "hurdat2.parquet"
+COUNTY_CENTROIDS_PATH = LOCAL_DATA_DIR / "county_centroids.csv"
+STORM_FLOODS_PATH = LOCAL_DATA_DIR / "storm_floods.parquet"
+
+
+def _resolve_ghcn_path() -> Path:
+    """Pick the latest ``county_weather_2000_<YYYY>.parquet``.
+
+    The GHCN cache filename is suffixed by the latest year of coverage.
+    ``backend/etl/extend_ghcn_to_current.py`` writes
+    ``county_weather_2000_<end-year>.parquet`` and leaves earlier-year files
+    in place. This resolver lets train + inference always pick the freshest
+    cache without code edits each year.
+    """
+    candidates = sorted(GHCN_DIR.glob("county_weather_2000_*.parquet"))
+    if candidates:
+        # Highest year suffix sorts last alphabetically (e.g. 2025 < 2026).
+        return candidates[-1]
+    return GHCN_DIR / "county_weather_2000_2025.parquet"  # legacy fallback
+
+
+GHCN_PATH = _resolve_ghcn_path()
 
 COMMODITIES = {"corn": "CORN", "soybean": "SOYBEANS", "wheat": "WHEAT"}
 WEEKS = range(1, 21)  # 20 weeks of growing season
@@ -57,6 +98,16 @@ TEST_START, TEST_END = 2023, 2024
 
 # Baseline gate: model must beat county historical mean by >=10% relative improvement
 BASELINE_GATE_PCT = 10.0
+
+# Target reformulation. When True, models predict yield - county_5yr_mean
+# (see module docstring + research/yield-model-nc-2024-investigation.md).
+USE_ANOMALY_TARGET = True
+BASELINE_LOOKBACK_YEARS = 5
+
+# New anomaly-based feature column ordering (used by both training and inference).
+WEATHER_ANOM_COLS = ["gdd_anom", "tmax_anom", "precip_anom_in", "precip_deficit_in", "hot_days"]
+DROUGHT_COLS = ["drought_d3d4_pct"]
+NASS_HIST_COLS = ["county_yield_trend", "prior_year_yield", "county_yield_std"]
 
 
 # ---- Data loaders ----
@@ -177,7 +228,148 @@ def load_prism_normals() -> dict[tuple[str, int], float]:
     return result
 
 
+def load_hurdat2() -> pd.DataFrame:
+    """Load NOAA HURDAT2 Atlantic tropical cyclone tracks from local parquet.
+
+    Built by ``backend.etl.backfill_hurdat2``. Returns columns
+    ``[storm_id, storm_name, date, status, is_landfall, lat, lon,
+    max_wind_kt, min_pressure_mb]``. Empty DataFrame if cache missing —
+    callers must handle gracefully so models can still train without
+    hurricane features.
+    """
+    if not HURDAT2_PATH.exists():
+        logger.warning(
+            "HURDAT2 cache not found at %s — hurricane features will all be "
+            "NaN. Run `python -m backend.etl.backfill_hurdat2`.",
+            HURDAT2_PATH,
+        )
+        return pd.DataFrame(columns=[
+            "storm_id", "storm_name", "date", "status",
+            "is_landfall", "lat", "lon", "max_wind_kt",
+        ])
+    df = pd.read_parquet(HURDAT2_PATH)
+    if "date" in df.columns and not pd.api.types.is_datetime64_any_dtype(df["date"]):
+        df["date"] = pd.to_datetime(df["date"], errors="coerce")
+    logger.info(
+        "Loaded HURDAT2: %d track points, %d storms, %d..%d",
+        len(df),
+        df["storm_id"].nunique() if "storm_id" in df.columns else 0,
+        df["date"].dt.year.min() if len(df) else 0,
+        df["date"].dt.year.max() if len(df) else 0,
+    )
+    return df
+
+
+def load_county_centroids() -> pd.DataFrame:
+    """Load county centroid table for great-circle distance computations."""
+    if not COUNTY_CENTROIDS_PATH.exists():
+        logger.warning(
+            "County centroids not found at %s — hurricane features will be skipped.",
+            COUNTY_CENTROIDS_PATH,
+        )
+        return pd.DataFrame(columns=["fips", "lat", "lon"])
+    df = pd.read_csv(COUNTY_CENTROIDS_PATH, dtype={"fips": str})
+    df["fips"] = df["fips"].str.zfill(5)
+    logger.info("Loaded county centroids: %d counties", len(df))
+    return df[["fips", "lat", "lon"]]
+
+
+def load_storm_floods() -> pd.DataFrame:
+    """Load NOAA Storm Events flood/flash-flood records from local parquet.
+
+    Built by ``backend.etl.backfill_storm_events``. Returns columns
+    ``[fips, event_date, event_type, damage_property_usd]``. Empty if
+    cache missing — flood features become NaN downstream.
+    """
+    if not STORM_FLOODS_PATH.exists():
+        logger.warning(
+            "Storm Events cache not found at %s — flood features will all be "
+            "NaN. Run `python -m backend.etl.backfill_storm_events`.",
+            STORM_FLOODS_PATH,
+        )
+        return pd.DataFrame(columns=["fips", "event_date", "event_type", "damage_property_usd"])
+    df = pd.read_parquet(STORM_FLOODS_PATH)
+    if "event_date" in df.columns and not pd.api.types.is_datetime64_any_dtype(df["event_date"]):
+        df["event_date"] = pd.to_datetime(df["event_date"], errors="coerce")
+    logger.info(
+        "Loaded NOAA Storm Events floods: %d rows, %d counties, %d..%d",
+        len(df),
+        df["fips"].nunique() if "fips" in df.columns else 0,
+        df["event_date"].dt.year.min() if len(df) else 0,
+        df["event_date"].dt.year.max() if len(df) else 0,
+    )
+    return df
+
+
+def load_drought_history() -> pd.DataFrame:
+    """Load county-level USDM drought history from local parquet cache.
+
+    Expected columns: ``fips`` (str, 5-char), ``date`` (datetime64), ``d3d4_pct``
+    (float). Built by ``backend.etl.backfill_drought_history`` (separate
+    backfill script — fetches one Thursday per growing-season week from the
+    USDM API and writes a single parquet).
+
+    Returns an empty DataFrame if the cache file is missing; callers must
+    handle that gracefully so models can still train without drought data.
+    """
+    if not DROUGHT_HISTORY_PATH.exists():
+        logger.warning(
+            "Drought history not found at %s — drought_d3d4_pct will be null. "
+            "Run `python -m backend.etl.backfill_drought_history` to populate.",
+            DROUGHT_HISTORY_PATH,
+        )
+        return pd.DataFrame(columns=["fips", "date", "d3d4_pct"])
+    t0 = _time.time()
+    df = pd.read_parquet(DROUGHT_HISTORY_PATH)
+    if "date" in df.columns and not pd.api.types.is_datetime64_any_dtype(df["date"]):
+        df["date"] = pd.to_datetime(df["date"], errors="coerce")
+    df = df.dropna(subset=["fips", "date"])
+    df["fips"] = df["fips"].astype(str).str.zfill(5)
+    if "d3d4_pct" not in df.columns and {"d3_pct", "d4_pct"}.issubset(df.columns):
+        df["d3d4_pct"] = df["d3_pct"].fillna(0) + df["d4_pct"].fillna(0)
+    logger.info(
+        "Loaded USDM drought history: %d rows (%d counties, %s..%s) in %.1fs",
+        len(df),
+        df["fips"].nunique(),
+        df["date"].min().strftime("%Y-%m-%d") if len(df) else "N/A",
+        df["date"].max().strftime("%Y-%m-%d") if len(df) else "N/A",
+        _time.time() - t0,
+    )
+    return df
+
+
 # ---- Weather feature computation ----
+
+def _compute_normal_precip_per_fips(
+    prism_normals: dict[tuple[str, int], float],
+    fips_list: list[str],
+    season_start_doy: int,
+    season_end_doy: int,
+) -> dict[str, float]:
+    """Sum daily PRISM normals across the season window per FIPS.
+
+    Each day in month M contributes ``monthly_normal[M]/30``. The window is
+    fixed across years for a given crop+week, so we precompute it once and
+    reuse instead of looping per (fips, year). Returns ``{fips: total_normal_in}``.
+    """
+    days_per_month = [0] * 13  # 1..12
+    start = date(2001, 1, 1) + timedelta(days=season_start_doy - 1)
+    end = date(2001, 1, 1) + timedelta(days=min(season_end_doy, 365) - 1)
+    cur = start
+    while cur <= end:
+        days_per_month[cur.month] += 1
+        cur += timedelta(days=1)
+
+    out: dict[str, float] = {}
+    for fips in fips_list:
+        total = 0.0
+        for m in range(1, 13):
+            d = days_per_month[m]
+            if d:
+                total += prism_normals.get((fips, m), 0.25) * d / 30.0
+        out[fips] = total
+    return out
+
 
 def compute_weather_features(
     weather_df: pd.DataFrame,
@@ -190,91 +382,354 @@ def compute_weather_features(
     """Compute weather features for all (fips, year) at a given week.
 
     Returns DataFrame with columns: fips, year, gdd_ytd, precip_season_in,
-    precip_deficit_in, tmax_avg, hot_days.
+    precip_deficit_in, tmax_avg, hot_days. Anomaly versions
+    (gdd_anom / tmax_anom / precip_anom_in) are produced separately by
+    ``apply_weather_anomalies`` once the climatology is known.
+
+    Vectorized: a single pandas groupby over (fips, year) replaces the
+    nested per-year per-fips Python loop. With ~16M GHCN rows pre-filtered
+    to the season window, this runs in a couple of seconds vs ~20 minutes
+    for the original implementation.
     """
     if weather_df.empty:
         return pd.DataFrame()
 
     planting_doy = PLANTING_DOY.get(crop, 110)
+    season_start_doy = planting_doy
+    season_end_doy = planting_doy + week * 7
 
-    # Filter weather to only needed counties
+    # Filter weather to only the requested counties.
     wx = weather_df[weather_df["fips"].isin(fips_list)].copy()
     if wx.empty:
         return pd.DataFrame()
 
-    # Parse date once
-    wx["date_parsed"] = pd.to_datetime(wx["date"], format="%Y-%m-%d", errors="coerce")
+    # Parse date once. Cache results because train_yield calls this 20 times
+    # per crop with the same weather_df slice — but recomputing is cheap.
+    if not pd.api.types.is_datetime64_any_dtype(wx["date"]):
+        wx["date_parsed"] = pd.to_datetime(wx["date"], format="%Y-%m-%d", errors="coerce")
+    else:
+        wx["date_parsed"] = wx["date"]
     wx["year_val"] = wx["date_parsed"].dt.year
     wx["doy"] = wx["date_parsed"].dt.dayofyear
-    wx["month"] = wx["date_parsed"].dt.month
 
-    results = []
-    for year in year_range:
-        # Growing season window: planting_doy to planting_doy + week*7
-        season_start_doy = planting_doy
-        season_end_doy = planting_doy + week * 7
-
-        # Handle year boundary for wheat (planting DOY 60, early in year)
-        wx_year = wx[wx["year_val"] == year]
-        season = wx_year[
-            (wx_year["doy"] >= season_start_doy) &
-            (wx_year["doy"] <= season_end_doy)
-        ]
-
-        if season.empty:
-            continue
-
-        # Group by FIPS for vectorized computation
-        for fips, grp in season.groupby("fips"):
-            # Only use rows where both tmax and tmin are present (for GDD)
-            temp_valid = grp.dropna(subset=["tmax_f", "tmin_f"])
-            prcp = grp["prcp_in"].dropna()
-
-            if len(temp_valid) < 5:  # Need at least 5 days of data
-                continue
-
-            tmax_vals = temp_valid["tmax_f"].values
-            tmin_vals = temp_valid["tmin_f"].values
-
-            # GDD: Σ max(0, (tmax+tmin)/2 - 50)
-            gdd_daily = ((tmax_vals + tmin_vals) / 2 - 50).clip(min=0)
-            gdd_ytd = float(np.sum(gdd_daily))
-
-            # Precipitation total (inches)
-            precip_total = float(prcp.sum())
-
-            # Precipitation deficit vs normal
-            normal_total = 0.0
-            start_date = date(year, 1, 1) + timedelta(days=season_start_doy - 1)
-            end_date = date(year, 1, 1) + timedelta(days=min(season_end_doy, 365) - 1)
-            current = start_date
-            while current <= end_date:
-                monthly_normal = prism_normals.get((fips, current.month), 0.25)
-                normal_total += monthly_normal / 30.0
-                current += timedelta(days=1)
-
-            precip_deficit = precip_total - normal_total
-
-            # Average daily max temp
-            tmax_avg = float(tmax_vals.mean())
-
-            # Hot days: tmax > 95°F (heat stress)
-            hot_days = int((tmax_vals > 95).sum())
-
-            results.append({
-                "fips": fips,
-                "year": year,
-                "gdd_ytd": round(gdd_ytd, 1),
-                "precip_season_in": round(precip_total, 2),
-                "precip_deficit_in": round(precip_deficit, 2),
-                "tmax_avg": round(tmax_avg, 1),
-                "hot_days": hot_days,
-            })
-
-    if not results:
+    season_mask = (
+        wx["year_val"].isin(list(year_range))
+        & (wx["doy"] >= season_start_doy)
+        & (wx["doy"] <= season_end_doy)
+    )
+    season = wx.loc[season_mask, ["fips", "year_val", "tmax_f", "tmin_f", "prcp_in"]]
+    if season.empty:
         return pd.DataFrame()
 
-    return pd.DataFrame(results)
+    # Daily-level derivations
+    season = season.copy()
+    season["gdd_daily"] = ((season["tmax_f"] + season["tmin_f"]) / 2 - 50).clip(lower=0)
+    season["hot_flag"] = (season["tmax_f"] > 95).astype("int8")
+    # Mark valid temperature rows for the >=5-day requirement
+    season["temp_valid"] = (season["tmax_f"].notna() & season["tmin_f"].notna()).astype("int8")
+
+    grouped = (
+        season.groupby(["fips", "year_val"], observed=True)
+        .agg(
+            gdd_ytd=("gdd_daily", "sum"),
+            precip_season_in=("prcp_in", "sum"),
+            tmax_avg=("tmax_f", "mean"),
+            hot_days=("hot_flag", "sum"),
+            n_temp_days=("temp_valid", "sum"),
+        )
+        .reset_index()
+        .rename(columns={"year_val": "year"})
+    )
+
+    # Drop county-years with too little observed temperature data (matches
+    # the previous "len(temp_valid) < 5" gate).
+    grouped = grouped[grouped["n_temp_days"] >= 5].drop(columns=["n_temp_days"])
+
+    # Precip deficit vs PRISM normals — precomputed once per FIPS for the
+    # fixed season window (same across all years).
+    normal_lookup = _compute_normal_precip_per_fips(
+        prism_normals, fips_list, season_start_doy, season_end_doy,
+    )
+    grouped["precip_deficit_in"] = (
+        grouped["precip_season_in"] - grouped["fips"].map(normal_lookup).fillna(0.0)
+    )
+
+    # Round for stable artifact output / human inspection
+    grouped["gdd_ytd"] = grouped["gdd_ytd"].round(1)
+    grouped["precip_season_in"] = grouped["precip_season_in"].round(2)
+    grouped["precip_deficit_in"] = grouped["precip_deficit_in"].round(2)
+    grouped["tmax_avg"] = grouped["tmax_avg"].round(1)
+    grouped["hot_days"] = grouped["hot_days"].astype(int)
+
+    return grouped[
+        ["fips", "year", "gdd_ytd", "precip_season_in",
+         "precip_deficit_in", "tmax_avg", "hot_days"]
+    ]
+
+
+def compute_climatology(
+    wx_features: pd.DataFrame,
+    train_end: int = TRAIN_END,
+) -> dict[str, dict[str, float]]:
+    """Compute per-county climatology from training years.
+
+    For each county, average the absolute weather features over years
+    ``year <= train_end``. This isolates the model from same-year leakage
+    while still letting a NC county's "is 2024 unusually hot for *here*"
+    signal show up as an anomaly.
+
+    Returns ``{fips: {"gdd_climo", "tmax_climo", "precip_climo"}}``. Counties
+    with no training-year coverage are omitted (caller treats the missing
+    anomaly as NaN, which LightGBM handles natively).
+    """
+    if wx_features.empty:
+        return {}
+    train = wx_features[wx_features["year"] <= train_end]
+    if train.empty:
+        logger.warning(
+            "No training-year weather rows (year <= %d) for climatology; "
+            "anomaly features will all be NaN", train_end,
+        )
+        return {}
+    grouped = train.groupby("fips").agg(
+        gdd_climo=("gdd_ytd", "mean"),
+        tmax_climo=("tmax_avg", "mean"),
+        precip_climo=("precip_season_in", "mean"),
+    )
+    return {
+        fips: {
+            "gdd_climo": float(row["gdd_climo"]),
+            "tmax_climo": float(row["tmax_climo"]),
+            "precip_climo": float(row["precip_climo"]),
+        }
+        for fips, row in grouped.iterrows()
+    }
+
+
+def apply_weather_anomalies(
+    wx_features: pd.DataFrame,
+    climatology: dict[str, dict[str, float]],
+) -> pd.DataFrame:
+    """Add ``gdd_anom``, ``tmax_anom``, ``precip_anom_in`` columns.
+
+    Anomaly = current value - county climatology. Counties absent from
+    ``climatology`` get NaN (LightGBM handles missing values natively).
+    """
+    if wx_features.empty:
+        return wx_features
+
+    result = wx_features.copy()
+    gdd_climo_map = {f: c["gdd_climo"] for f, c in climatology.items()}
+    tmax_climo_map = {f: c["tmax_climo"] for f, c in climatology.items()}
+    precip_climo_map = {f: c["precip_climo"] for f, c in climatology.items()}
+
+    result["gdd_anom"] = (
+        result["gdd_ytd"] - result["fips"].map(gdd_climo_map)
+    ).round(1)
+    result["tmax_anom"] = (
+        result["tmax_avg"] - result["fips"].map(tmax_climo_map)
+    ).round(1)
+    result["precip_anom_in"] = (
+        result["precip_season_in"] - result["fips"].map(precip_climo_map)
+    ).round(2)
+    return result
+
+
+def _haversine_km(lat1: np.ndarray, lon1: np.ndarray, lat2: np.ndarray, lon2: np.ndarray) -> np.ndarray:
+    """Vectorized great-circle distance in km between two arrays of points."""
+    R = 6371.0
+    lat1r = np.radians(lat1)
+    lat2r = np.radians(lat2)
+    dlat = lat2r - lat1r
+    dlon = np.radians(lon2 - lon1)
+    a = np.sin(dlat / 2) ** 2 + np.cos(lat1r) * np.cos(lat2r) * np.sin(dlon / 2) ** 2
+    return 2 * R * np.arcsin(np.sqrt(a))
+
+
+def attach_hurricane_features(
+    feature_df: pd.DataFrame,
+    hurdat_df: pd.DataFrame,
+    county_centroids: pd.DataFrame,
+    crop: str,
+    week: int,
+    proximity_km: float = 200.0,
+) -> pd.DataFrame:
+    """Attach tropical-cyclone proximity features per (fips, year).
+
+    Single feature on purpose:
+      - ``tropical_track_pts_within_200km`` — count of TS/HU/SS track
+        points within ``proximity_km`` of the county centroid during the
+        ``[planting_doy, planting_doy + week*7]`` window.
+
+    A first pass added distance + wind, but the heavy NaN distribution
+    (most counties never see a tropical system in any growing season)
+    let LightGBM split on noise and uniformly hurt validation+test.
+    Keeping a single 0-indexed integer feature means the tree only
+    splits when there's a real signal: most rows are 0 and a small
+    minority have positive counts.
+
+    Counties without a centroid receive NaN; the rest get the integer
+    count (0 when no storm activity is in window). The lingering-storm
+    case (Debby in NC 2024) shows up as 1+ track points within 200 km.
+    """
+    out = feature_df.copy()
+    out["tropical_track_pts_within_200km"] = np.nan
+
+    if hurdat_df.empty or county_centroids.empty:
+        return out
+
+    qualifying = hurdat_df[hurdat_df["status"].isin(["TS", "HU", "SS"])]
+    if qualifying.empty:
+        return out
+
+    planting_doy = PLANTING_DOY.get(crop, 110)
+    season_end_doy = planting_doy + week * 7
+
+    centroid_lookup = dict(zip(
+        county_centroids["fips"], zip(county_centroids["lat"], county_centroids["lon"])
+    ))
+
+    qualifying = qualifying.assign(
+        year=qualifying["date"].dt.year, doy=qualifying["date"].dt.dayofyear,
+    )
+    tracks_by_year: dict[int, pd.DataFrame] = {}
+    for yr, grp in qualifying.groupby("year"):
+        season = grp[(grp["doy"] >= planting_doy) & (grp["doy"] <= season_end_doy)]
+        if not season.empty:
+            tracks_by_year[int(yr)] = season
+
+    n_within = np.full(len(out), np.nan)
+    for i, (fips, year) in enumerate(zip(out["fips"], out["year"])):
+        centroid = centroid_lookup.get(str(fips))
+        if centroid is None:
+            continue
+        # County is in the centroid universe — start with a true zero and
+        # only increment when nearby tracks exist.
+        season_tracks = tracks_by_year.get(int(year))
+        if season_tracks is None or season_tracks.empty:
+            n_within[i] = 0
+            continue
+        clat, clon = centroid
+        track_lat = season_tracks["lat"].to_numpy()
+        track_lon = season_tracks["lon"].to_numpy()
+        dists = _haversine_km(
+            np.full(len(track_lat), clat),
+            np.full(len(track_lat), clon),
+            track_lat, track_lon,
+        )
+        n_within[i] = int((dists <= proximity_km).sum())
+
+    out["tropical_track_pts_within_200km"] = n_within
+    return out
+
+
+def attach_flood_features(
+    feature_df: pd.DataFrame,
+    flood_df: pd.DataFrame,
+    crop: str,
+    week: int,
+) -> pd.DataFrame:
+    """Attach flood-event count per (fips, year) for the season window.
+
+    Single feature:
+      - ``flood_event_count`` — number of NOAA Storm Events flood records
+        (Flood / Flash Flood / Heavy Rain / Tropical Storm / Hurricane /
+        Storm Surge / Coastal Flood) for the county within the season
+        window.
+
+    Damage USD was tested but its heavy-tailed distribution + log
+    transform let LightGBM split on damage-magnitude noise rather than
+    presence/absence. Keeping a single integer count keeps the signal
+    clean: 0 means "no flood reported in window," ≥1 means a real
+    event. True zeros (not missing) for counties without events.
+    """
+    out = feature_df.copy()
+    out["flood_event_count"] = 0.0
+
+    if flood_df.empty:
+        return out
+
+    planting_doy = PLANTING_DOY.get(crop, 110)
+    season_end_doy = planting_doy + week * 7
+
+    flood = flood_df.copy()
+    flood["year"] = flood["event_date"].dt.year
+    flood["doy"] = flood["event_date"].dt.dayofyear
+    flood = flood[(flood["doy"] >= planting_doy) & (flood["doy"] <= season_end_doy)]
+    if flood.empty:
+        return out
+
+    agg = (
+        flood.groupby(["fips", "year"], observed=True)
+        .agg(flood_event_count=("event_type", "size"))
+        .reset_index()
+    )
+
+    out = out.drop(columns=["flood_event_count"]).merge(
+        agg, on=["fips", "year"], how="left",
+    )
+    out["flood_event_count"] = out["flood_event_count"].fillna(0).astype(float)
+    return out
+
+
+def attach_drought_features(
+    feature_df: pd.DataFrame,
+    drought_df: pd.DataFrame,
+    crop: str,
+    week: int,
+) -> pd.DataFrame:
+    """Attach ``drought_d3d4_pct`` to a (fips, year) feature DataFrame.
+
+    Looks up the most recent USDM Thursday on or before the season-end date
+    for that (crop, year, week) and copies its D3+D4 percent area into the
+    feature row. Rows without a covering USDM observation get NaN.
+
+    Vectorized via ``pd.merge_asof`` (per-fips backward lookup). Drops the
+    quadratic per-row mask scan that made attach_drought_features dominate
+    train_yield wall time when run against the 2.5M-row USDM history.
+    """
+    if feature_df.empty:
+        return feature_df.assign(drought_d3d4_pct=np.nan)
+
+    out = feature_df.copy()
+    if drought_df.empty:
+        out["drought_d3d4_pct"] = np.nan
+        return out
+
+    planting_doy = PLANTING_DOY.get(crop, 110)
+    season_end_doy = planting_doy + week * 7
+
+    # Build target_date column (depends on year only since week is fixed
+    # for a given call).
+    def _safe_target_date(year: int) -> pd.Timestamp:
+        try:
+            return pd.Timestamp(
+                date(int(year), 1, 1) + timedelta(days=min(season_end_doy, 365) - 1)
+            )
+        except (ValueError, OverflowError):
+            return pd.NaT
+
+    # Vectorized via map of unique years -> target dates.
+    unique_years = out["year"].astype(int).unique()
+    year_to_date = {int(y): _safe_target_date(int(y)) for y in unique_years}
+    out["target_date"] = out["year"].astype(int).map(year_to_date)
+
+    # merge_asof requires both sides sorted on the on-key.
+    drought = drought_df[["fips", "date", "d3d4_pct"]].copy()
+    drought["date"] = pd.to_datetime(drought["date"])
+    drought = drought.sort_values(["date"])
+
+    out_sorted = out.sort_values(["target_date", "fips"])
+    merged = pd.merge_asof(
+        out_sorted,
+        drought.rename(columns={"date": "target_date"}),
+        on="target_date",
+        by="fips",
+        direction="backward",
+    )
+    merged = merged.drop(columns=["target_date"])
+    merged.rename(columns={"d3d4_pct": "drought_d3d4_pct"}, inplace=True)
+    return merged.reset_index(drop=True)
 
 
 # ---- Training ----
@@ -285,10 +740,22 @@ def train_single_model(
     nass_yields: pd.DataFrame,
     weather_df: pd.DataFrame,
     prism_normals: dict,
+    drought_df: pd.DataFrame | None = None,
+    hurdat_df: pd.DataFrame | None = None,
+    flood_df: pd.DataFrame | None = None,
+    county_centroids: pd.DataFrame | None = None,
     skip_cv: bool = False,
     capture_predictions: bool = False,
+    use_anomaly_target: bool = USE_ANOMALY_TARGET,
 ) -> dict:
     """Train a single YieldModel for (crop, week) with weather features.
+
+    Target reformulation: when ``use_anomaly_target`` is True (default), the
+    model is trained on ``yield_bu - county_5yr_prior_mean``; the baseline is
+    added back at predict time. Driven by the NC corn 2024 investigation
+    (research/yield-model-nc-2024-investigation.md) — eliminates the
+    cross-county "year" leakage that pulled SE Atlantic counties toward the
+    corn-belt mean.
 
     If capture_predictions is True, returned dict includes a 'predictions'
     key holding a list of per-row val+test predictions. Each item:
@@ -296,7 +763,8 @@ def train_single_model(
          actual_yield, county_5yr_mean, split}
     Used by the --persist-accuracy flag to populate yield_accuracy (§7.4 WI-3).
     """
-    logger.info("=== Training %s week %d ===", crop, week)
+    logger.info("=== Training %s week %d (target=%s) ===",
+                crop, week, "anomaly" if use_anomaly_target else "absolute")
 
     # Get list of counties with yield data
     fips_list = nass_yields["fips"].unique().tolist()
@@ -305,54 +773,77 @@ def train_single_model(
         int(nass_yields["year"].max()) + 1,
     )
 
-    # Compute weather features for this crop/week
+    # Compute absolute weather features for this crop/week, then derive
+    # county-week climatology from training years and convert to anomalies.
     wx_features = compute_weather_features(
         weather_df, prism_normals, crop, fips_list, year_range, week,
     )
     has_weather = not wx_features.empty
+
+    climatology: dict[str, dict[str, float]] = {}
     if has_weather:
+        climatology = compute_climatology(wx_features, train_end=TRAIN_END)
+        wx_features = apply_weather_anomalies(wx_features, climatology)
+        # Attach drought (no-op if drought_df is empty)
+        if drought_df is not None and not drought_df.empty:
+            wx_features = attach_drought_features(wx_features, drought_df, crop, week)
+        else:
+            wx_features["drought_d3d4_pct"] = np.nan
+        # Attach hurricane proximity (no-op if either input is empty)
+        if (
+            hurdat_df is not None and not hurdat_df.empty
+            and county_centroids is not None and not county_centroids.empty
+        ):
+            wx_features = attach_hurricane_features(
+                wx_features, hurdat_df, county_centroids, crop, week,
+            )
+        else:
+            wx_features["tropical_track_pts_within_200km"] = np.nan
+        # Attach NOAA Storm Events flood aggregates (no-op if missing)
+        if flood_df is not None and not flood_df.empty:
+            wx_features = attach_flood_features(wx_features, flood_df, crop, week)
+        else:
+            wx_features["flood_event_count"] = 0.0
         wx_lookup = wx_features.set_index(["fips", "year"])
-        logger.info("  Weather features: %d (fips,year) pairs", len(wx_features))
+        logger.info(
+            "  Weather features: %d (fips,year) pairs; climatology counties=%d; "
+            "drought=%s hurdat=%s floods=%s",
+            len(wx_features),
+            len(climatology),
+            bool(drought_df is not None and not drought_df.empty),
+            bool(hurdat_df is not None and not hurdat_df.empty),
+            bool(flood_df is not None and not flood_df.empty),
+        )
     else:
         wx_lookup = None
         logger.info("  No weather features available — using NASS-only features")
 
-    # Build feature rows
+    # Build feature rows via grouped, sorted iteration over the yield panel.
+    # The previous boolean-mask-per-row scheme was O(N^2) over ~22k rows per
+    # crop (5×10^8 ops on the corn panel — minutes per call). Walking each
+    # county once amortizes the historical-stat computation.
     features_rows = []
-    for _, row in nass_yields.iterrows():
-        fips = row["fips"]
-        year = row["year"]
-        yield_val = row["yield_bu"]
-
-        # NASS historical features
-        county_hist = nass_yields[
-            (nass_yields["fips"] == fips) & (nass_yields["year"] < year)
-        ]["yield_bu"]
-
-        if len(county_hist) < 3:
+    nass_sorted = nass_yields.sort_values(["fips", "year"], kind="stable")
+    for fips_val, grp in nass_sorted.groupby("fips", sort=False):
+        years_arr = grp["year"].to_numpy()
+        yields_arr = grp["yield_bu"].to_numpy(dtype=float)
+        n_rows = len(years_arr)
+        if n_rows < 4:
             continue
-
-        feat = {
-            "county_mean_yield": county_hist.mean(),
-            "county_yield_trend": _compute_trend(county_hist),
-            "prior_year_yield": county_hist.iloc[-1],
-            "county_yield_std": county_hist.std(),
-            "year": year,
-            "_fips": fips,
-            "_year": year,
-            "_yield": yield_val,
-        }
-
-        # Add weather features if available
-        if has_weather and (fips, year) in wx_lookup.index:
-            wx_row = wx_lookup.loc[(fips, year)]
-            feat["gdd_ytd"] = wx_row["gdd_ytd"]
-            feat["precip_season_in"] = wx_row["precip_season_in"]
-            feat["precip_deficit_in"] = wx_row["precip_deficit_in"]
-            feat["tmax_avg"] = wx_row["tmax_avg"]
-            feat["hot_days"] = wx_row["hot_days"]
-
-        features_rows.append(feat)
+        for i in range(n_rows):
+            if i < 3:  # need ≥3 prior years
+                continue
+            prior = yields_arr[:i]
+            last_n = prior[-BASELINE_LOOKBACK_YEARS:]
+            features_rows.append({
+                "county_yield_trend": _compute_trend(pd.Series(prior)),
+                "prior_year_yield": float(prior[-1]),
+                "county_yield_std": float(prior.std(ddof=1)) if len(prior) > 1 else 0.0,
+                "_fips": fips_val,
+                "_year": int(years_arr[i]),
+                "_yield": float(yields_arr[i]),
+                "_baseline": float(last_n.mean()),
+            })
 
     if not features_rows:
         logger.warning("No training data for %s week %d", crop, week)
@@ -360,7 +851,27 @@ def train_single_model(
 
     df = pd.DataFrame(features_rows)
 
-    # Use available features (drop all-null columns)
+    # Vectorized join of weather + drought + hurricane + flood features onto the panel.
+    if has_weather and wx_lookup is not None:
+        wx_join = wx_features[[
+            c for c in (
+                "fips", "year",
+                "gdd_anom", "tmax_anom", "precip_anom_in",
+                "precip_deficit_in", "hot_days", "drought_d3d4_pct",
+                "tropical_track_pts_within_200km",
+                "flood_event_count",
+            ) if c in wx_features.columns
+        ]].copy()
+        wx_join["year"] = wx_join["year"].astype(int)
+        df = df.merge(
+            wx_join,
+            left_on=["_fips", "_year"],
+            right_on=["fips", "year"],
+            how="left",
+        ).drop(columns=["fips", "year"])
+
+    # Use available features (drop all-null columns). Underscore-prefixed
+    # columns are housekeeping and never enter X.
     available_features = [
         c for c in df.columns
         if not c.startswith("_") and df[c].notna().any()
@@ -376,11 +887,25 @@ def train_single_model(
     test_mask = (df["_year"] >= TEST_START) & (df["_year"] <= TEST_END)
 
     X_train = df.loc[train_mask, available_features]
-    y_train = df.loc[train_mask, "_yield"]
     X_val = df.loc[val_mask, available_features]
-    y_val = df.loc[val_mask, "_yield"]
     X_test = df.loc[test_mask, available_features]
-    y_test = df.loc[test_mask, "_yield"]
+
+    y_train_abs = df.loc[train_mask, "_yield"].astype(float)
+    y_val_abs = df.loc[val_mask, "_yield"].astype(float)
+    y_test_abs = df.loc[test_mask, "_yield"].astype(float)
+
+    base_train = df.loc[train_mask, "_baseline"].astype(float)
+    base_val = df.loc[val_mask, "_baseline"].astype(float)
+    base_test = df.loc[test_mask, "_baseline"].astype(float)
+
+    if use_anomaly_target:
+        y_train = y_train_abs - base_train
+        y_val = y_val_abs - base_val
+        y_test = y_test_abs - base_test
+    else:
+        y_train = y_train_abs
+        y_val = y_val_abs
+        y_test = y_test_abs
 
     logger.info("  Split: train=%d, val=%d, test=%d, features=%d (%s)",
                 len(X_train), len(X_val), len(X_test), len(available_features),
@@ -390,30 +915,42 @@ def train_single_model(
         logger.warning("Insufficient data for %s week %d", crop, week)
         return {}
 
-    # Train model
+    # Train model in target space (residual when use_anomaly_target=True).
+    target_mode = "anomaly_5yr_mean" if use_anomaly_target else "absolute"
     model = YieldModel(
         crop=crop,
         week=week,
         model_ver=date.today().isoformat(),
         feature_cols=available_features,
+        target_mode=target_mode,
+        climatology=climatology,
     )
     model.fit(X_train, y_train)
 
-    # Evaluate
-    train_preds = model.q50.predict(X_train[model.feature_cols].fillna(0))
-    val_preds = model.q50.predict(X_val[model.feature_cols].fillna(0))
+    # Evaluate in absolute-yield space so RRMSE numbers are comparable to
+    # the prior model and the published gate. predict_batch handles the
+    # residual-to-absolute conversion internally when target_mode is set.
+    if use_anomaly_target:
+        _, train_p50_abs, _ = model.predict_batch(X_train, baselines=base_train.values)
+        _, val_p50_abs, _ = model.predict_batch(X_val, baselines=base_val.values)
+    else:
+        _, train_p50_abs, _ = model.predict_batch(X_train)
+        _, val_p50_abs, _ = model.predict_batch(X_val)
 
-    train_rrmse = compute_rrmse(y_train.values, train_preds)
-    val_rrmse = compute_rrmse(y_val.values, val_preds)
+    train_rrmse = compute_rrmse(y_train_abs.values, train_p50_abs)
+    val_rrmse = compute_rrmse(y_val_abs.values, val_p50_abs)
 
-    # Calibrate conformal intervals
+    # Calibrate conformal intervals in target space (residual when anomaly).
     model.calibrate_conformal(X_val, y_val)
 
     # Capture per-row walk-forward predictions for yield_accuracy persistence (§7.4 WI-3)
     prediction_rows: list[dict] = []
     if capture_predictions:
         val_df = df.loc[val_mask]
-        val_p10, val_p50, val_p90 = model.predict_batch(X_val)
+        if use_anomaly_target:
+            val_p10, val_p50, val_p90 = model.predict_batch(X_val, baselines=base_val.values)
+        else:
+            val_p10, val_p50, val_p90 = model.predict_batch(X_val)
         for i, (_, meta) in enumerate(val_df.iterrows()):
             actual = float(meta["_yield"])
             p50 = float(val_p50[i])
@@ -429,7 +966,7 @@ def train_single_model(
                 "model_p10": p10,
                 "model_p90": p90,
                 "actual_yield": actual,
-                "county_5yr_mean": round(float(meta.get("county_mean_yield", 0)), 1) if pd.notna(meta.get("county_mean_yield")) else None,
+                "county_5yr_mean": round(float(meta.get("_baseline", 0)), 1) if pd.notna(meta.get("_baseline")) else None,
                 "abs_error": round(abs(p50 - actual), 2),
                 "pct_error": pct_err,
                 "in_interval": bool(p10 <= actual <= p90),
@@ -439,12 +976,18 @@ def train_single_model(
     # Test set
     test_rrmse = None
     if len(X_test) > 0:
-        test_preds = model.q50.predict(X_test[model.feature_cols].fillna(0))
-        test_rrmse = compute_rrmse(y_test.values, test_preds)
+        if use_anomaly_target:
+            _, test_p50_abs, _ = model.predict_batch(X_test, baselines=base_test.values)
+        else:
+            _, test_p50_abs, _ = model.predict_batch(X_test)
+        test_rrmse = compute_rrmse(y_test_abs.values, test_p50_abs)
 
         if capture_predictions:
             test_df = df.loc[test_mask]
-            test_p10, test_p50, test_p90 = model.predict_batch(X_test)
+            if use_anomaly_target:
+                test_p10, test_p50, test_p90 = model.predict_batch(X_test, baselines=base_test.values)
+            else:
+                test_p10, test_p50, test_p90 = model.predict_batch(X_test)
             for i, (_, meta) in enumerate(test_df.iterrows()):
                 actual = float(meta["_yield"])
                 p50 = float(test_p50[i])
@@ -460,7 +1003,7 @@ def train_single_model(
                     "model_p10": p10,
                     "model_p90": p90,
                     "actual_yield": actual,
-                    "county_5yr_mean": round(float(meta.get("county_mean_yield", 0)), 1) if pd.notna(meta.get("county_mean_yield")) else None,
+                    "county_5yr_mean": round(float(meta.get("_baseline", 0)), 1) if pd.notna(meta.get("_baseline")) else None,
                     "abs_error": round(abs(p50 - actual), 2),
                     "pct_error": pct_err,
                     "in_interval": bool(p10 <= actual <= p90),
@@ -503,6 +1046,11 @@ def train_single_model(
         "n_features": len(model.feature_cols),
         "feature_cols": model.feature_cols,
         "has_weather_features": has_weather,
+        "target_mode": target_mode,
+        "n_climatology_counties": len(climatology),
+        "drought_attached": "drought_d3d4_pct" in model.feature_cols,
+        "hurricane_attached": "tropical_track_pts_within_200km" in model.feature_cols,
+        "flood_attached": "flood_event_count" in model.feature_cols,
         "top_features": [
             {"name": name, "importance": round(float(imp), 4)}
             for name, imp in model.get_top_features(7)
@@ -589,6 +1137,57 @@ def _compute_trend(series: pd.Series) -> float:
         return 0.0
 
 
+def prune_old_yield_accuracy_versions(crop: str | None = None) -> int:
+    """Delete yield_accuracy rows whose model_ver is not the current max.
+
+    The (forecast_year, fips, crop, week, model_ver) unique constraint means
+    each retraining run appends a fresh row instead of replacing prior ones.
+    Without periodic pruning, the analyst agent's outlier ranking gets
+    triplicated (NC corn 2024 / Lee Co showed 3 identical rows across
+    2026-04-14, 2026-04-15, 2026-04-21 model versions). Documented as a side
+    finding in research/yield-model-nc-2024-investigation.md.
+
+    Args:
+        crop: optional crop filter ("corn" / "soybean" / "wheat"); None = all.
+
+    Returns number of rows deleted.
+    """
+    from sqlalchemy import text
+    from backend.etl.common import get_sync_session
+
+    session = get_sync_session()
+    try:
+        if crop:
+            sql = text(
+                """
+                DELETE FROM yield_accuracy
+                 WHERE crop = :crop
+                   AND model_ver < (
+                     SELECT MAX(model_ver) FROM yield_accuracy WHERE crop = :crop
+                   )
+                """
+            )
+            params = {"crop": crop}
+        else:
+            sql = text(
+                """
+                DELETE FROM yield_accuracy ya
+                 WHERE ya.model_ver < (
+                   SELECT MAX(model_ver) FROM yield_accuracy WHERE crop = ya.crop
+                 )
+                """
+            )
+            params = {}
+        result = session.execute(sql, params)
+        session.commit()
+        return result.rowcount or 0
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
+
+
 def upload_to_s3():
     """Upload all yield model artifacts to S3."""
     import subprocess
@@ -639,6 +1238,10 @@ def _write_crop_summaries(all_metrics: list[dict]) -> None:
             "avg_test_rrmse": round(float(np.mean(test_rrmses)), 2) if test_rrmses else None,
             "avg_baseline_rrmse": round(float(np.mean(baselines)), 2) if baselines else None,
             "has_weather_features": any(m.get("has_weather_features") for m in ms),
+            "target_mode": ms[0].get("target_mode") if ms else None,
+            "drought_attached": any(m.get("drought_attached") for m in ms),
+            "hurricane_attached": any(m.get("hurricane_attached") for m in ms),
+            "flood_attached": any(m.get("flood_attached") for m in ms),
             "gate_threshold_pct": BASELINE_GATE_PCT,
         }
 
@@ -664,6 +1267,20 @@ if __name__ == "__main__":
         action="store_true",
         help="Upsert walk-forward val+test predictions to yield_accuracy table",
     )
+    parser.add_argument(
+        "--absolute-target",
+        action="store_true",
+        help="Train against absolute yield rather than (yield - 5yr mean) anomaly. "
+        "Provided for A/B comparison; production runs should leave this off.",
+    )
+    parser.add_argument(
+        "--prune-old-versions",
+        action="store_true",
+        help="After training (or standalone), DELETE yield_accuracy rows whose "
+        "model_ver < MAX(model_ver) per crop. Side finding from "
+        "research/yield-model-nc-2024-investigation.md — keeps the analyst "
+        "agent's outlier ranking clean.",
+    )
     args = parser.parse_args()
 
     t0 = _time.time()
@@ -671,9 +1288,15 @@ if __name__ == "__main__":
     # Load shared data once
     weather_df = load_weather_data()
     prism_normals = load_prism_normals()
+    drought_df = load_drought_history()
+    hurdat_df = load_hurdat2()
+    flood_df = load_storm_floods()
+    county_centroids = load_county_centroids()
 
     commodities = COMMODITIES if args.commodity == "all" else {args.commodity: COMMODITIES[args.commodity]}
     weeks = [args.week] if args.week else list(WEEKS)
+
+    use_anomaly_target = not args.absolute_target
 
     all_metrics = []
 
@@ -691,8 +1314,14 @@ if __name__ == "__main__":
 
         for week in weeks:
             metrics = train_single_model(
-                crop_key, week, nass_yields, weather_df, prism_normals, args.skip_cv,
+                crop_key, week, nass_yields, weather_df, prism_normals,
+                drought_df=drought_df,
+                hurdat_df=hurdat_df,
+                flood_df=flood_df,
+                county_centroids=county_centroids,
+                skip_cv=args.skip_cv,
                 capture_predictions=args.persist_accuracy,
+                use_anomaly_target=use_anomaly_target,
             )
             if metrics:
                 all_metrics.append(metrics)
@@ -726,6 +1355,18 @@ if __name__ == "__main__":
     # Per-crop aggregate summary (consumed by GET /api/v1/predict/yield/metadata
     # so the frontend can annotate models that fail the deployment gate).
     _write_crop_summaries(all_metrics)
+
+    if args.prune_old_versions:
+        try:
+            n_pruned = prune_old_yield_accuracy_versions(
+                None if args.commodity == "all" else args.commodity,
+            )
+            logger.info(
+                "Pruned %d stale yield_accuracy rows (model_ver < MAX per crop)",
+                n_pruned,
+            )
+        except Exception as exc:
+            logger.error("Could not prune yield_accuracy: %s", exc)
 
     if args.upload_s3:
         upload_to_s3()

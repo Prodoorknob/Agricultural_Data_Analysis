@@ -27,10 +27,16 @@ FEATURE_COLS = [
 # Human-readable feature labels for key driver reporting
 FEATURE_LABELS = {
     "gdd_ytd": "Heat accumulation (GDD)",
+    "gdd_anom": "Heat anomaly vs county climatology",
     "cci_cumul": "Crop condition index",
     "precip_deficit": "Precipitation deficit",
+    "precip_season_in": "Precipitation total",
+    "precip_anom_in": "Precipitation anomaly vs county climatology",
+    "tmax_avg": "Average max temperature",
+    "tmax_anom": "Max temp anomaly vs county climatology",
+    "hot_days": "Days above 95F",
     "vpd_stress_days": "VPD stress days",
-    "drought_d3d4_pct": "Severe drought area",
+    "drought_d3d4_pct": "Severe drought area (D3-D4)",
     "soil_awc": "Soil water capacity",
     "soil_drain": "Soil drainage class",
 }
@@ -48,6 +54,16 @@ class YieldModel:
     week: int = 0
     model_ver: str = ""
     feature_cols: list[str] = field(default_factory=lambda: list(FEATURE_COLS))
+
+    # Target reformulation. "absolute" means y is bu/acre as-is.
+    # "anomaly_5yr_mean" means y is (yield - county 5yr prior mean); callers
+    # must pass `baseline=` to predict() so the residual is converted back.
+    target_mode: str = "absolute"
+
+    # Per-county climatology saved at training time so inference can derive the
+    # same anomaly features without re-scanning all training years.
+    # Format: {fips: {"gdd_climo": float, "tmax_climo": float, "precip_climo": float}}
+    climatology: dict = field(default_factory=dict)
 
     # LightGBM models (set during fit)
     q10: object = None
@@ -93,8 +109,12 @@ class YieldModel:
         self.q50.fit(X_clean, y)
         self.q90.fit(X_clean, y)
 
-    def predict(self, X: pd.DataFrame) -> dict:
+    def predict(self, X: pd.DataFrame, baseline: float | None = None) -> dict:
         """Predict p10/p50/p90 for a single row or small batch.
+
+        For ``target_mode == "anomaly_5yr_mean"`` callers MUST pass
+        ``baseline`` (the county's prior-5-year mean yield); the model returns
+        a residual which is added back to the baseline before flooring.
 
         Returns dict with keys: p10, p50, p90.
         """
@@ -106,6 +126,15 @@ class YieldModel:
         p10 = float(self.q10.predict(X_clean)[0])
         p50 = float(self.q50.predict(X_clean)[0])
         p90 = float(self.q90.predict(X_clean)[0])
+
+        if self.target_mode == "anomaly_5yr_mean":
+            if baseline is None:
+                raise ValueError(
+                    "baseline is required for target_mode='anomaly_5yr_mean'"
+                )
+            p10 += float(baseline)
+            p50 += float(baseline)
+            p90 += float(baseline)
 
         # Enforce ordering: p10 <= p50 <= p90
         p10, p50, p90 = sorted([p10, p50, p90])
@@ -121,8 +150,17 @@ class YieldModel:
             "p90": round(p90, 1),
         }
 
-    def predict_batch(self, X: pd.DataFrame) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-        """Vectorized prediction for multiple rows."""
+    def predict_batch(
+        self,
+        X: pd.DataFrame,
+        baselines: np.ndarray | None = None,
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Vectorized prediction for multiple rows.
+
+        For ``target_mode == "anomaly_5yr_mean"`` callers MUST pass
+        ``baselines`` (1D array aligned with X rows). The residual prediction
+        is added to each baseline before flooring.
+        """
         X_clean = X[self.feature_cols].copy()
         X_clean = X_clean.fillna(X_clean.median())
         if X_clean.isna().any(axis=None):
@@ -131,6 +169,20 @@ class YieldModel:
         p10 = self.q10.predict(X_clean)
         p50 = self.q50.predict(X_clean)
         p90 = self.q90.predict(X_clean)
+
+        if self.target_mode == "anomaly_5yr_mean":
+            if baselines is None:
+                raise ValueError(
+                    "baselines is required for target_mode='anomaly_5yr_mean'"
+                )
+            baselines_arr = np.asarray(baselines, dtype=float)
+            if baselines_arr.shape[0] != p50.shape[0]:
+                raise ValueError(
+                    f"baselines length {baselines_arr.shape[0]} != predictions {p50.shape[0]}"
+                )
+            p10 = p10 + baselines_arr
+            p50 = p50 + baselines_arr
+            p90 = p90 + baselines_arr
 
         # Enforce ordering row-wise
         stacked = np.stack([p10, p50, p90], axis=1)
@@ -148,6 +200,8 @@ class YieldModel:
         """Post-hoc conformal calibration on validation set.
 
         Computes the 80th percentile of absolute residuals for interval scaling.
+        ``y_val`` must be in the model's target space (residual when
+        target_mode="anomaly_5yr_mean", absolute when "absolute").
         """
         X_clean = X_val[self.feature_cols].fillna(X_val[self.feature_cols].median())
         if X_clean.isna().any(axis=None):

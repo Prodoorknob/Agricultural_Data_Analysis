@@ -1,62 +1,68 @@
 {
   "crop": "wheat",
   "week": 3,
-  "model_ver": "2026-04-21",
-  "train_rrmse": 17.92,
-  "val_rrmse": 20.79,
-  "test_rrmse": 24.99,
+  "model_ver": "2026-05-07",
+  "train_rrmse": 19.25,
+  "val_rrmse": 18.93,
+  "test_rrmse": 21.85,
   "baselines": {
     "county_mean_rrmse": 21.8,
     "prior_year_rrmse": 23.7
   },
-  "beats_baseline": false,
+  "beats_baseline": true,
   "n_train": 19880,
   "n_val": 3018,
   "n_test": 955,
-  "n_features": 10,
+  "n_features": 11,
   "feature_cols": [
-    "county_mean_yield",
     "county_yield_trend",
     "prior_year_yield",
     "county_yield_std",
-    "year",
-    "gdd_ytd",
-    "precip_season_in",
+    "gdd_anom",
+    "tmax_anom",
+    "precip_anom_in",
     "precip_deficit_in",
-    "tmax_avg",
-    "hot_days"
+    "hot_days",
+    "drought_d3d4_pct",
+    "tropical_track_pts_within_200km",
+    "flood_event_count"
   ],
   "has_weather_features": true,
+  "target_mode": "anomaly_5yr_mean",
+  "n_climatology_counties": 1324,
+  "drought_attached": true,
+  "hurricane_attached": true,
+  "flood_attached": true,
   "top_features": [
     {
-      "name": "year",
-      "importance": 2042.0
-    },
-    {
-      "name": "county_mean_yield",
-      "importance": 1459.0
-    },
-    {
       "name": "prior_year_yield",
-      "importance": 1224.0
+      "importance": 1450.0
     },
     {
-      "name": "tmax_avg",
-      "importance": 1212.0
+      "name": "gdd_anom",
+      "importance": 1427.0
+    },
+    {
+      "name": "tmax_anom",
+      "importance": 1381.0
     },
     {
       "name": "county_yield_trend",
-      "importance": 1199.0
+      "importance": 1304.0
     },
     {
       "name": "county_yield_std",
-      "importance": 1130.0
+      "importance": 1290.0
     },
     {
-      "name": "gdd_ytd",
-      "importance": 943.0
+      "name": "precip_deficit_in",
+      "importance": 1285.0
+    },
+    {
+      "name": "precip_anom_in",
+      "importance": 1210.0
     }
   ],
-  "conformal_q80": 15.077537662658395,
+  "conformal_q80": 13.105560285884826,
   "confidence_tier": "low"
 }
