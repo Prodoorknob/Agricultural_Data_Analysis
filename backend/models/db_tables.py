@@ -3,12 +3,17 @@
 from datetime import date, datetime
 
 from sqlalchemy import (
+    JSON,
+    BigInteger,
     Boolean,
     Date,
     DateTime,
+    ForeignKey,
     Integer,
     Numeric,
+    SmallInteger,
     String,
+    Text,
     UniqueConstraint,
 )
 from sqlalchemy.orm import Mapped, mapped_column
@@ -361,3 +366,93 @@ class BlsEstablishment(Base):
     __table_args__ = (
         UniqueConstraint("state_fips", "year", "naics", name="uq_bls_establishments"),
     )
+
+
+# ---------------------------------------------------------------------------
+# Module 05: FieldPulse Weekly Analyst Agent
+# ---------------------------------------------------------------------------
+
+
+class AgentRun(Base):
+    """One row per weekly analyst-agent invocation."""
+
+    __tablename__ = "agent_runs"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    run_date: Mapped[date] = mapped_column(Date, nullable=False, unique=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False)
+    failed_at_step: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    newsletter_path: Mapped[str | None] = mapped_column(Text, nullable=True)
+    slug: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    n_signals_scanned: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    n_tool_calls: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    input_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    output_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    cost_usd: Mapped[float | None] = mapped_column(Numeric(8, 4), nullable=True)
+    duration_sec: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    dossier_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    approved_by: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+
+
+class AgentPick(Base):
+    """One row per published lead/brief; powers 8-week dedup memory."""
+
+    __tablename__ = "agent_picks"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    run_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("agent_runs.id", ondelete="CASCADE"), nullable=False
+    )
+    role: Mapped[str] = mapped_column(String(10), nullable=False)  # 'lead' | 'brief'
+    signal_id: Mapped[str] = mapped_column(String(100), nullable=False)
+    signal_domain: Mapped[str] = mapped_column(String(20), nullable=False)
+    signal_scope: Mapped[str] = mapped_column(String(50), nullable=False)
+    score: Mapped[float | None] = mapped_column(Numeric(5, 2), nullable=True)
+    mood_boost: Mapped[float | None] = mapped_column(Numeric(5, 2), nullable=True)
+    headline: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+
+
+class AgentMood(Base):
+    """Weekly mood JSON for audit + future feedback-loop tuning."""
+
+    __tablename__ = "agent_mood"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    run_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("agent_runs.id", ondelete="CASCADE"), nullable=False
+    )
+    mood_tags: Mapped[dict] = mapped_column(JSON, nullable=False)
+    primary_narrative: Mapped[str | None] = mapped_column(Text, nullable=True)
+    biases: Mapped[dict] = mapped_column(JSON, nullable=False)
+    avoid_unless_dramatic: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+
+
+class AgentSettings(Base):
+    """Singleton settings row (id=1). Holds the kill-switch."""
+
+    __tablename__ = "agent_settings"
+
+    id: Mapped[int] = mapped_column(SmallInteger, primary_key=True)
+    force_manual: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    auto_publish_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+
+
+class AgentDraftToken(Base):
+    """One-shot tokens for the magic-link auth flow on /insights/draft."""
+
+    __tablename__ = "agent_draft_tokens"
+
+    token: Mapped[str] = mapped_column(String(64), primary_key=True)
+    run_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("agent_runs.id", ondelete="CASCADE"), nullable=False
+    )
+    slug: Mapped[str] = mapped_column(String(80), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)

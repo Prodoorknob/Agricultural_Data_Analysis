@@ -46,6 +46,19 @@ async def get_yield_forecast(
     fips: str = Query(..., min_length=5, max_length=5, description="5-digit county FIPS"),
     crop: str = Depends(crop_param),
     year: int | None = Query(None, description="Crop year (defaults to current)"),
+    week: int | None = Query(
+        None,
+        ge=1,
+        le=20,
+        description="Specific week of season. If omitted, returns the latest "
+        "available week (existing behaviour). Threaded through from the "
+        "Forecasts-tab map slider so the right-side card stays in sync.",
+    ),
+    as_of: date | None = Query(
+        None,
+        description="Point-in-time mode (Module 05 backfill): only forecasts "
+        "with created_at <= as_of.",
+    ),
     db: AsyncSession = Depends(get_db),
 ):
     """Get the latest yield forecast for a specific county and crop."""
@@ -62,6 +75,10 @@ async def get_yield_forecast(
         .order_by(YieldForecast.week.desc(), YieldForecast.created_at.desc())
         .limit(1)
     )
+    if week is not None:
+        stmt = stmt.where(YieldForecast.week == week)
+    if as_of is not None:
+        stmt = stmt.where(YieldForecast.created_at <= as_of)
     result = await db.execute(stmt)
     forecast = result.scalar_one_or_none()
 
@@ -111,6 +128,10 @@ async def get_yield_map(
     crop: str = Depends(crop_param),
     week: int | None = Query(None, ge=1, le=20, description="Week of season"),
     year: int | None = Query(None, description="Crop year"),
+    as_of: date | None = Query(
+        None,
+        description="Point-in-time mode: only consider forecasts with created_at <= as_of.",
+    ),
     db: AsyncSession = Depends(get_db),
 ):
     """Get all county forecasts for choropleth map rendering.
@@ -128,6 +149,8 @@ async def get_yield_map(
                 YieldForecast.crop_year == crop_year,
             )
         )
+        if as_of is not None:
+            max_week_stmt = max_week_stmt.where(YieldForecast.created_at <= as_of)
         max_week_result = await db.execute(max_week_stmt)
         week = max_week_result.scalar()
         if week is None:
@@ -147,6 +170,8 @@ async def get_yield_map(
         )
         .group_by(YieldForecast.fips)
     )
+    if as_of is not None:
+        latest_stmt = latest_stmt.where(YieldForecast.created_at <= as_of)
     latest = await db.execute(latest_stmt)
     latest_map = {row.fips: row.max_created for row in latest}
 
@@ -162,6 +187,8 @@ async def get_yield_map(
             YieldForecast.week == week,
         )
     )
+    if as_of is not None:
+        stmt = stmt.where(YieldForecast.created_at <= as_of)
     result = await db.execute(stmt)
     forecasts = result.scalars().all()
 
@@ -193,6 +220,9 @@ async def get_yield_history(
     fips: str = Query(..., min_length=5, max_length=5),
     crop: str = Depends(crop_param),
     start_year: int = Query(2015, description="First year to include"),
+    as_of: date | None = Query(
+        None, description="Point-in-time mode: only forecasts with created_at <= as_of."
+    ),
     db: AsyncSession = Depends(get_db),
 ):
     """Get historical forecast vs actual yield for a county.
@@ -210,6 +240,8 @@ async def get_yield_history(
         )
         .order_by(YieldForecast.crop_year, YieldForecast.week.desc())
     )
+    if as_of is not None:
+        stmt = stmt.where(YieldForecast.created_at <= as_of)
     result = await db.execute(stmt)
     all_forecasts = result.scalars().all()
 
@@ -237,6 +269,10 @@ async def get_yield_history(
 async def get_yield_accuracy(
     crop: str = Depends(crop_param),
     split: str = Query("test", pattern="^(val|test)$", description="Walk-forward split"),
+    as_of: date | None = Query(
+        None,
+        description="Point-in-time mode: only consider accuracy rows with updated_at <= as_of.",
+    ),
     db: AsyncSession = Depends(get_db),
 ):
     """Aggregated yield accuracy by week for the accuracy panel (§5.3.D).
@@ -269,6 +305,8 @@ async def get_yield_accuracy(
         .group_by(YieldAccuracy.week)
         .order_by(YieldAccuracy.week)
     )
+    if as_of is not None:
+        stmt = stmt.where(YieldAccuracy.updated_at <= as_of)
     result = await db.execute(stmt)
     rows = result.all()
 

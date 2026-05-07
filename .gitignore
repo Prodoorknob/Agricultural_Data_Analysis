@@ -58,6 +58,9 @@ survey_datasets/
 census_datasets/
 *.parquet
 !web_app/public/data/**
+
+# Module 05: agent calibration scratch — operator-local labelling material
+backend/agent/data/
 UI/
 data/                          # GHCN bulk archive (~8GB)
 backend/artifacts/             # Model pickle files (on S3)

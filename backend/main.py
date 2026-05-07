@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.config import get_settings
-from backend.routers import acreage, crops, market, meta, price, yield_forecast
+from backend.routers import acreage, agent, crops, market, meta, price, yield_forecast
 
 settings = get_settings()
 logger = logging.getLogger("uvicorn.error")
@@ -191,12 +191,20 @@ app.include_router(yield_forecast.router, prefix="/api/v1/predict/yield", tags=[
 app.include_router(market.router, prefix="/api/v1/market", tags=["market"])
 app.include_router(meta.router, prefix="/api/v1/meta", tags=["meta"])
 app.include_router(crops.router, prefix="/api/v1/crops", tags=["crops"])
+app.include_router(agent.router, prefix="/api/v1/agent", tags=["agent"])
 
 
 @app.get("/health")
 async def health():
     return {
         "status": "ok",
-        "modules": ["price-forecasting", "acreage-prediction", "yield-forecasting", "market-data", "meta"],
-        "version": "0.5.0",
+        "modules": [
+            "price-forecasting",
+            "acreage-prediction",
+            "yield-forecasting",
+            "market-data",
+            "meta",
+            "fieldpulse-agent",
+        ],
+        "version": "0.6.0",
     }

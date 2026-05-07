@@ -18,6 +18,7 @@
 #   0 10 15 3 * /home/ec2-user/Agricultural_Data_Analysis/pipeline/cron_runner.sh --annual-rma     # Annual RMA insured acres (March 15)
 #   0 10 1 4 *  /home/ec2-user/Agricultural_Data_Analysis/pipeline/cron_runner.sh --annual-crp     # Annual CRP enrollment (April 1)
 #   0 14 * * 4  /home/ec2-user/Agricultural_Data_Analysis/pipeline/cron_runner.sh --weekly-exports  # Weekly FAS export sales (Thursday 2 PM)
+#   0 18 * * 0  /home/ec2-user/Agricultural_Data_Analysis/pipeline/cron_runner.sh --weekly-fieldpulse  # FieldPulse Weekly analyst agent (Sunday 6 PM ET)
 #
 # Concurrency: each invocation acquires a per-mode flock on /tmp. Two runs
 # with the same mode will queue; different modes run independently. This
@@ -36,6 +37,7 @@
 #   --annual-rma           RMA crop insurance insured acres (March)
 #   --annual-crp           FSA CRP enrollment/expirations (April)
 #   --weekly-exports       FAS weekly export sales (Thursdays)
+#   --weekly-fieldpulse    Module 05 analyst agent — runs the full mood/editor/researcher pipeline (Sundays)
 #
 # Flow (default mode):
 #   1. Activate virtual environment
@@ -387,6 +389,35 @@ if [ "${RUN_MODE}" = "--weekly-exports" ]; then
     fi
 
     echo "Weekly FAS export sales ingest completed at $(date)"
+    exit 0
+fi
+
+# ---------------------------------------------------------------------------
+# Mode: --weekly-fieldpulse  (Module 05 analyst agent — Sundays 18:00 ET)
+# ---------------------------------------------------------------------------
+if [ "${RUN_MODE}" = "--weekly-fieldpulse" ]; then
+    echo "Running FieldPulse Weekly analyst agent..."
+    activate_backend_venv
+    cd "${PROJECT_ROOT}"
+
+    set +e
+    python -m backend.agent.runner
+    AGENT_EXIT=$?
+    set -e
+
+    if [ ${AGENT_EXIT} -ne 0 ]; then
+        # The runner already fired Slack + email failure alerts via notify.py.
+        # This SNS is the operational fallback in case Slack credentials are
+        # busted at the same time the agent is.
+        aws sns publish \
+            --topic-arn "${SNS_TOPIC_ARN}" \
+            --subject "FieldPulse Weekly: agent run FAILED" \
+            --message "Agent runner exited ${AGENT_EXIT} at $(date). See log: ${LOGFILE}" \
+            --region "${AWS_REGION}" 2>/dev/null || true
+        exit 1
+    fi
+
+    echo "FieldPulse Weekly run completed at $(date)"
     exit 0
 fi
 

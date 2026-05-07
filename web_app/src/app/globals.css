@@ -363,3 +363,102 @@ a:focus-visible {
   .crops-panelcard, .crops-peerscard { clear: both; }
   .crops-methcard > div { grid-template-columns: 1fr !important; }
 }
+
+
+/* =============================================================
+   FIELDPULSE WEEKLY (Module 05) — /insights pages + IssueRenderer
+   ============================================================= */
+.fp-insights-shell {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 64px 24px 96px;
+  color: var(--text);
+  font-family: var(--font-plus-jakarta), system-ui, sans-serif;
+}
+.fp-insights-hero { margin-bottom: 48px; padding-bottom: 28px; border-bottom: 1px solid var(--border); }
+.fp-insights-hero-eyebrow {
+  font-family: var(--font-barlow), system-ui, sans-serif;
+  text-transform: uppercase; letter-spacing: 0.14em; font-weight: 700;
+  font-size: 11px; color: var(--field); margin-bottom: 8px;
+}
+.fp-insights-hero-title {
+  font-family: var(--font-barlow), system-ui, sans-serif;
+  font-weight: 800; font-size: 44px; line-height: 1.05; letter-spacing: -0.01em;
+  color: var(--text); margin: 0 0 16px;
+}
+.fp-insights-hero-dek {
+  font-size: 17px; line-height: 1.55; color: var(--text2); max-width: 580px; margin: 0;
+}
+.fp-insights-list-heading {
+  font-family: var(--font-barlow), system-ui, sans-serif;
+  font-weight: 700; font-size: 13px; text-transform: uppercase;
+  letter-spacing: 0.12em; color: var(--text2);
+  margin: 0 0 16px;
+}
+.fp-insights-list-items { list-style: none; padding: 0; margin: 0; }
+.fp-insights-row { border-bottom: 1px solid var(--border); }
+.fp-insights-row:last-child { border-bottom: none; }
+.fp-insights-link {
+  display: flex; align-items: baseline; gap: 24px;
+  padding: 16px 0; text-decoration: none; color: inherit;
+  transition: padding-left 0.15s ease;
+}
+.fp-insights-link:hover { padding-left: 8px; }
+.fp-insights-row-date {
+  font-family: var(--font-jetbrains), monospace;
+  font-size: 13px; color: var(--text3); min-width: 110px;
+}
+.fp-insights-row-slug { font-size: 16px; color: var(--text); font-weight: 500; }
+.fp-insights-empty { color: var(--text3); font-style: italic; }
+.fp-insights-nav { display: flex; align-items: baseline; gap: 16px; margin-bottom: 32px; padding-bottom: 16px; border-bottom: 1px solid var(--border); }
+.fp-insights-nav-back { color: var(--text2); text-decoration: none; font-size: 14px; }
+.fp-insights-nav-back:hover { color: var(--field); }
+.fp-insights-nav-slug { font-family: var(--font-jetbrains), monospace; font-size: 12px; color: var(--text3); }
+.fp-insights-draft-banner {
+  display: flex; justify-content: space-between; align-items: center;
+  background: var(--harvest-subtle); border: 1px solid var(--harvest); border-radius: 6px;
+  padding: 14px 18px; margin-bottom: 32px;
+}
+.fp-insights-draft-banner--locked { display: block; color: var(--text2); }
+.fp-insights-draft-pill {
+  background: var(--harvest); color: white; font-family: var(--font-barlow), system-ui, sans-serif;
+  font-weight: 700; font-size: 11px; letter-spacing: 0.1em;
+  padding: 3px 8px; border-radius: 3px;
+}
+.fp-insights-draft-meta { color: var(--text2); font-size: 13px; margin-left: 8px; }
+.fp-insights-draft-actions { display: flex; gap: 8px; align-items: center; }
+.fp-insights-btn {
+  border: 1px solid var(--border2); background: var(--surface);
+  padding: 6px 14px; font-size: 13px; font-weight: 600; border-radius: 4px;
+  cursor: pointer; transition: background 0.15s, border 0.15s;
+}
+.fp-insights-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.fp-insights-btn-approve { border-color: var(--field); color: var(--field); }
+.fp-insights-btn-approve:hover:not(:disabled) { background: var(--field); color: white; }
+.fp-insights-btn-reject { border-color: var(--text3); color: var(--text2); }
+.fp-insights-btn-reject:hover:not(:disabled) { background: var(--surface2); }
+.fp-insights-draft-msg { font-size: 13px; color: var(--text2); margin-left: 12px; }
+.prose-fp { font-size: 17px; line-height: 1.7; color: var(--text); }
+.fp-issue-title {
+  font-family: var(--font-barlow), system-ui, sans-serif;
+  font-weight: 800; font-size: 38px; line-height: 1.1; letter-spacing: -0.01em;
+  margin: 0 0 12px; color: var(--text);
+}
+.fp-issue-dek {
+  font-style: italic; color: var(--text2); font-size: 18px; line-height: 1.5;
+  margin: 0 0 40px; padding-bottom: 20px; border-bottom: 1px solid var(--border);
+}
+.fp-issue-h2 {
+  font-family: var(--font-barlow), system-ui, sans-serif;
+  font-weight: 700; font-size: 26px; margin: 48px 0 16px; color: var(--text);
+}
+.fp-issue-h3 {
+  font-family: var(--font-barlow), system-ui, sans-serif;
+  font-weight: 700; font-size: 19px; margin: 32px 0 12px; color: var(--text);
+}
+.fp-issue-p { margin: 0 0 18px; }
+.fp-issue-chart {
+  display: block; width: 100%; max-width: 100%; height: auto;
+  margin: 28px 0; border: 1px solid var(--border); border-radius: 6px;
+}
+.fp-issue-hr { border: none; border-top: 1px solid var(--border); margin: 56px 0 20px; }

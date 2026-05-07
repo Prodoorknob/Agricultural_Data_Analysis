@@ -59,8 +59,51 @@ async def get_price_forecast(
     request: Request,
     commodity: str = Depends(commodity_param),
     horizon_months: int = Query(default=3, ge=1, le=6),
+    as_of: date | None = Query(
+        None,
+        description="Point-in-time mode (Module 05 backfill). When set, returns "
+        "the most recent stored forecast with created_at <= as_of instead of "
+        "generating a fresh one. No model invocation, no DB write.",
+    ),
     db: AsyncSession = Depends(get_db),
 ):
+    # Point-in-time read for the analyst-agent backfill.
+    if as_of is not None:
+        # Compute the horizon_month string the agent is asking for, relative
+        # to the as_of date (not today). This way a backfill for 2025-09-15
+        # at horizon=3 reads the row whose horizon_month == "2025-12".
+        import pandas as pd
+
+        target_hm = (pd.Timestamp(as_of) + pd.DateOffset(months=horizon_months)).strftime("%Y-%m")
+        result = await db.execute(
+            select(PriceForecast)
+            .where(
+                PriceForecast.commodity == commodity,
+                PriceForecast.horizon_month == target_hm,
+                PriceForecast.created_at <= as_of,
+            )
+            .order_by(PriceForecast.created_at.desc())
+            .limit(1)
+        )
+        row = result.scalar()
+        if row is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No stored forecast for {commodity} h={horizon_months} as of {as_of}",
+            )
+        return PriceForecastResponse(
+            commodity=commodity,
+            run_date=row.run_date,
+            horizon_month=row.horizon_month,
+            p10=float(row.p10),
+            p50=float(row.p50),
+            p90=float(row.p90),
+            key_driver=row.key_driver,
+            divergence_flag=bool(row.divergence_flag),
+            regime_anomaly=bool(row.regime_anomaly),
+            model_ver=row.model_ver,
+        )
+
     ensemble = _get_ensemble(request, commodity, horizon_months)
 
     try:
@@ -145,15 +188,22 @@ async def get_price_probability(
 @router.get("/wasde-signal", response_model=WasdeSignalResponse)
 async def get_wasde_signal(
     commodity: str = Depends(commodity_param),
+    as_of: date | None = Query(
+        None,
+        description="Point-in-time mode: only consider WASDE releases with release_date <= as_of.",
+    ),
     db: AsyncSession = Depends(get_db),
 ):
     # Get the two most recent WASDE releases for this commodity
-    result = await db.execute(
+    base_query = (
         select(WasdeRelease)
         .where(WasdeRelease.commodity == commodity)
         .where(WasdeRelease.stocks_to_use.isnot(None))
-        .order_by(WasdeRelease.release_date.desc())
-        .limit(2)
+    )
+    if as_of is not None:
+        base_query = base_query.where(WasdeRelease.release_date <= as_of)
+    result = await db.execute(
+        base_query.order_by(WasdeRelease.release_date.desc()).limit(2)
     )
     releases = result.scalars().all()
 
@@ -211,14 +261,17 @@ async def get_wasde_signal(
 async def get_price_history(
     commodity: str = Depends(commodity_param),
     horizon_months: int = Query(default=3, ge=1, le=6),
+    as_of: date | None = Query(
+        None, description="Point-in-time mode: only forecasts with created_at <= as_of."
+    ),
     db: AsyncSession = Depends(get_db),
 ):
     # Get all past forecasts
+    base = select(PriceForecast).where(PriceForecast.commodity == commodity)
+    if as_of is not None:
+        base = base.where(PriceForecast.created_at <= as_of)
     result = await db.execute(
-        select(PriceForecast)
-        .where(PriceForecast.commodity == commodity)
-        .order_by(PriceForecast.run_date.desc())
-        .limit(100)
+        base.order_by(PriceForecast.run_date.desc()).limit(100)
     )
     forecasts = result.scalars().all()
 

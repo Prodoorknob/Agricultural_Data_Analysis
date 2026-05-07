@@ -47,6 +47,11 @@ async def get_acreage_forecast(
     year: Optional[int] = Query(default=None),
     level: str = Query(default="national", pattern="^(national|state)$"),
     state_fips: Optional[str] = Query(default=None),
+    as_of: date | None = Query(
+        None,
+        description="Point-in-time mode (Module 05 backfill): only consider "
+        "forecasts with created_at <= as_of.",
+    ),
     db: AsyncSession = Depends(get_db),
 ):
     """Get planted acreage forecast (national or state-level)."""
@@ -71,6 +76,8 @@ async def get_acreage_forecast(
         .order_by(AcreageForecast.created_at.desc())
         .limit(1)
     )
+    if as_of is not None:
+        stmt = stmt.where(AcreageForecast.created_at <= as_of)
     result = await db.execute(stmt)
     row = result.scalar_one_or_none()
 
@@ -92,6 +99,8 @@ async def get_acreage_forecast(
         .order_by(AcreageForecast.created_at.desc())
         .limit(1)
     )
+    if as_of is not None:
+        stmt_prior = stmt_prior.where(AcreageForecast.created_at <= as_of)
     prior = await db.execute(stmt_prior)
     prior_acres = prior.scalar_one_or_none()
 
@@ -145,6 +154,9 @@ async def get_acreage_forecast(
 async def get_states_forecast(
     commodity: str = Depends(commodity_param),
     year: Optional[int] = Query(default=None),
+    as_of: date | None = Query(
+        None, description="Point-in-time mode: only forecasts with created_at <= as_of."
+    ),
     db: AsyncSession = Depends(get_db),
 ):
     """Get all state-level forecasts for a commodity/year.
@@ -168,6 +180,8 @@ async def get_states_forecast(
         )
         .order_by(AcreageForecast.state_fips, AcreageForecast.created_at.desc())
     )
+    if as_of is not None:
+        stmt = stmt.where(AcreageForecast.created_at <= as_of)
     result = await db.execute(stmt)
     all_rows = result.scalars().all()
 
@@ -194,6 +208,8 @@ async def get_states_forecast(
         )
         .order_by(AcreageForecast.state_fips, AcreageForecast.created_at.desc())
     )
+    if as_of is not None:
+        stmt_prior = stmt_prior.where(AcreageForecast.created_at <= as_of)
     prior_result = await db.execute(stmt_prior)
     prior_map: dict[str, float] = {}
     for r in prior_result.scalars().all():
@@ -224,6 +240,9 @@ async def get_states_forecast(
 @router.get("/accuracy", response_model=list[AcreageAccuracyItem])
 async def get_accuracy(
     commodity: Optional[str] = Query(default=None, pattern="^(corn|soybean|wheat)$"),
+    as_of: date | None = Query(
+        None, description="Point-in-time mode: only accuracy rows with updated_at <= as_of."
+    ),
     db: AsyncSession = Depends(get_db),
 ):
     """Get historical model accuracy vs USDA reports."""
@@ -232,6 +251,8 @@ async def get_accuracy(
     stmt = select(AcreageAccuracy).order_by(AcreageAccuracy.forecast_year.desc())
     if commodity:
         stmt = stmt.where(AcreageAccuracy.commodity == commodity)
+    if as_of is not None:
+        stmt = stmt.where(AcreageAccuracy.updated_at <= as_of)
 
     result = await db.execute(stmt)
     rows = result.scalars().all()
@@ -253,23 +274,28 @@ async def get_accuracy(
 
 @router.get("/price-ratio", response_model=PriceRatioResponse)
 async def get_price_ratio(
+    as_of: date | None = Query(
+        None, description="Point-in-time mode: latest futures with trade_date <= as_of."
+    ),
     db: AsyncSession = Depends(get_db),
 ):
     """Get current corn/soy price ratio with historical context."""
     # Get most recent corn December and soybean November futures
-    corn_stmt = text("""
+    where_clause = "" if as_of is None else "AND trade_date <= :as_of"
+    corn_stmt = text(f"""
         SELECT trade_date, settlement FROM futures_daily
-        WHERE commodity = 'corn'
+        WHERE commodity = 'corn' {where_clause}
         ORDER BY trade_date DESC LIMIT 1
     """)
-    soy_stmt = text("""
+    soy_stmt = text(f"""
         SELECT trade_date, settlement FROM futures_daily
-        WHERE commodity = 'soybean'
+        WHERE commodity = 'soybean' {where_clause}
         ORDER BY trade_date DESC LIMIT 1
     """)
 
-    corn_result = await db.execute(corn_stmt)
-    soy_result = await db.execute(soy_stmt)
+    bind = {"as_of": as_of} if as_of is not None else {}
+    corn_result = await db.execute(corn_stmt, bind)
+    soy_result = await db.execute(soy_stmt, bind)
 
     corn_row = corn_result.fetchone()
     soy_row = soy_result.fetchone()
