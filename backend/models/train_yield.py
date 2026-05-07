@@ -714,9 +714,14 @@ def attach_drought_features(
     year_to_date = {int(y): _safe_target_date(int(y)) for y in unique_years}
     out["target_date"] = out["year"].astype(int).map(year_to_date)
 
-    # merge_asof requires both sides sorted on the on-key.
+    # Force consistent datetime64[ns] resolution on both sides — pandas 2.x
+    # on Python 3.12 sometimes lands on datetime64[s] for one side and
+    # datetime64[ns] for the other, which makes merge_asof reject with
+    # "incompatible merge keys" even though the values are identical.
+    out["target_date"] = pd.to_datetime(out["target_date"]).astype("datetime64[ns]")
+
     drought = drought_df[["fips", "date", "d3d4_pct"]].copy()
-    drought["date"] = pd.to_datetime(drought["date"])
+    drought["date"] = pd.to_datetime(drought["date"]).astype("datetime64[ns]")
     drought = drought.sort_values(["date"])
 
     out_sorted = out.sort_values(["target_date", "fips"])
