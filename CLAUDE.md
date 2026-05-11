@@ -506,11 +506,9 @@ Frontend interactivity pass on the Forecasts tab county yield map. Commit `ca05f
 - `web_app/src/components/forecasts/StateYieldCard.tsx` (new): right-panel state aggregate. Computes county count, p50 median/min/max, and mean `vs_avg_pct` anomaly across counties whose FIPS starts with the selected 2-digit state. Shown when a state is selected but no county is.
 - `web_app/src/components/forecasts/CountyYieldForecast.tsx`: adds `selectedState` and `userWeek` state. State dropdown in the controls row enumerates only states present in the current `mapData` (alphabetical, full state names from a new `STATE_FIPS_TO_NAME` map). Week slider (1-20) below the map; `userWeek` is null until touched, so the API picks the latest available week and the slider mirrors `mapWeek` from the response. Once moved, a `Latest` reset chip appears. Crop/year change resets `selectedFips`, `selectedState`, and `userWeek` to null. Selecting a county auto-syncs `selectedState` to its prefix so the dim follows the drill.
 
-#### Known limitation: single-county yield endpoint is week-agnostic
+#### Resolved 2026-05-06: single-county yield endpoint now week-aware
 
-The map endpoint `GET /api/v1/predict/yield/map?crop=X&year=Y&week=N` accepts a week, but the single-county endpoint `GET /api/v1/predict/yield/?fips=...&crop=X&year=Y` does NOT. So when the slider is at e.g. week 5 and the user clicks a county, the right-side `CountyYieldCard` shows the latest stored forecast (e.g. week 20) for that county, not week 5. Cosmetic only — the map and card disagree on `week` while showing the same crop/year/county.
-
-To fix: extend `backend/routers/yield_forecast.py::get_forecast` to accept an optional `week: int = Query(None)` and filter `yield_forecasts` rows to that week before falling back to "latest". Then update `web_app/src/hooks/useYieldForecast.ts::fetchAll` to forward the `week` param to the `/?fips=` URL. Frontend already threads `userWeek` through the hook signature (`useYieldForecast(fips, crop, year, week)`) — only the URL construction needs to change.
+`backend/routers/yield_forecast.py::get_yield_forecast` accepts an optional `week: int | None = Query(None)`. When set, the query filters `yield_forecasts` to that exact week before falling back to "latest". Picked up as a freebie during the Module 05 `as_of_date` router patches — same code path needed for the agent's point-in-time backfill. Map slider and county card now stay in sync as long as the frontend's `useYieldForecast` hook forwards the `week` param (it already threads it through the hook signature).
 
 ### Module 05: FieldPulse Weekly Analyst Agent (LIVE)
 
@@ -530,3 +528,25 @@ To fix: extend `backend/routers/yield_forecast.py::get_forecast` to accept an op
   - Montana wheat_spring acreage model gap is +137% vs USDA Prospective Plantings — same flavor of unit/training-data issue as the NC yield 2024 outliers. The writer's draft actually surfaced this as a brief and explained the likely root cause. Real model investigation pending.
   - `backend/agent/sql/agent_reader_role.sql` (defense-in-depth Postgres role + read-only views) not yet applied to RDS. The sqlglot guard is the actual enforcement; the role is belt-and-suspenders.
 - **Cron:** `0 17 * * 0 /home/ubuntu/Agricultural_Data_Analysis/pipeline/cron_runner.sh --weekly-fieldpulse` (TZ=America/Chicago). First scheduled run: next Sunday.
+
+#### Frontend design pass (2026-05-11, commit `2ea8cac`)
+
+After the first dry-run produced a real 4-story draft, refined the `/insights` reader so the first published issue would feel like a finished product.
+
+- **Nav integration:** "Insights" added to `TABS` between Ogallala and About. `app/insights/layout.tsx` mounts the global Header but skips the `FilterRail` (newsletter has no state/year/commodity filters). `FilterRail` returns `null` when `currentTab === 'insights'`.
+- **Dev preview route** `/insights/preview`: reads `backend/agent/data/last_draft.md` + `last_factcheck.json` directly from disk. Disabled in production. Lets us iterate on the reader UI without a live `agent_runs` row + S3 upload. Surfaces fact-check issues in a collapsible disclosure.
+- **Reader typography hierarchy:**
+  - Lead H2 renders a green "LEAD" pill (Barlow caps) above a 30px title; briefs use 21px H3. Reader can scan lead vs briefs without reading prose.
+  - Dek paragraph at 19px italic with bottom border.
+  - Body 17.5px / 1.7 line-height. First paragraph after a heading gets `::first-line { font-weight: 500 }`.
+  - Chart placeholder `{{chart_N}}` renders as a dashed-border block with the chart id + italic hint, no longer literal text. Resolved images use a figure+figcaption layout.
+- **"What to watch" callouts:** the writer prompt asks for a forward-looking sentence at the end of each story. `IssueRenderer.tsx` detects these via a heuristic ("Watch …", "The reconciliation signal …", future-modal + USDA report names) and:
+  - For multi-paragraph sections (lead): tags the last paragraph as `is-watch`.
+  - For single-paragraph sections (briefs): splits the trailing sentence off into a new watch block via `_splitTrailingWatchSentence`, so the callout treatment applies even when the story is one paragraph. Hit all 4 stories in the test draft.
+  - Visual: harvest-orange left accent stripe + `harvest-subtle` background + small-caps "WHAT TO WATCH" Barlow tag.
+- **Issue metadata footer:** new `components/insights/IssueMeta.tsx` renders cost / generation time / tool calls / signals scanned / approved_by in JetBrains mono after the issue body. Wired into both the published reader and the dev preview. Transparency about how each issue was generated.
+- **Verified both light + dark mode** against the 2026-05-03 dry-run draft.
+
+**Two gotchas worth remembering for future CSS work:**
+- Turbopack's CSS cache survives `preview_stop` + `preview_start`. When adding new CSS rules to `globals.css`, wipe `.next/` if the rules aren't appearing in the compiled stylesheet (verify via `getComputedStyle` on the target element).
+- The watch-sentence detector is heuristic. It catches all 4 stories in this draft but may miss future writer phrasings. Patterns live in `IssueRenderer.tsx::_looksLikeWatch` — add new regex patterns as we see them.
