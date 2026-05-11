@@ -1,4 +1,4 @@
-export type Tab = 'overview' | 'market' | 'forecasts' | 'crops' | 'land-economy' | 'livestock' | 'aquifer' | 'about';
+export type Tab = 'overview' | 'market' | 'forecasts' | 'crops' | 'land-economy' | 'livestock' | 'aquifer' | 'insights' | 'about';
 
 export interface Filters {
   state: string | null;       // 2-letter code or null (national)

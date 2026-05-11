@@ -31,5 +31,6 @@ export const TABS = [
   { id: 'land-economy' as const, label: 'Land & Economy' },
   { id: 'livestock' as const, label: 'Livestock' },
   { id: 'aquifer' as const, label: 'Ogallala Report' },
+  { id: 'insights' as const, label: 'Insights' },
   { id: 'about' as const, label: 'About' },
 ] as const;

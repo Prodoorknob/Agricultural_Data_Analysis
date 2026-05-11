@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation';
 import { fetchIssueMarkdown, fetchRunBySlug } from '@/lib/insights';
 import IssueRenderer from '@/components/insights/IssueRenderer';
+import IssueMeta from '@/components/insights/IssueMeta';
 
 export const dynamic = 'force-dynamic';
 
@@ -43,6 +44,13 @@ export default async function IssuePage({ params }: Params) {
         <span className="fp-insights-nav-slug">{slug}</span>
       </nav>
       <IssueRenderer markdown={rewritten} />
+      <IssueMeta
+        run_date={run.run_date}
+        cost_usd={run.cost_usd}
+        duration_sec={run.duration_sec}
+        n_tool_calls={run.n_tool_calls}
+        approved_by={run.approved_by}
+      />
     </main>
   );
 }

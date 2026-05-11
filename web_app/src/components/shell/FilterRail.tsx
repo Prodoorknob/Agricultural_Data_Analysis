@@ -11,6 +11,10 @@ const STATE_CODES = Object.keys(US_STATES).sort();
 
 export default function FilterRail() {
   const { filters, setState, setYear, setCommodity, currentTab } = useFilters();
+
+  // Newsletter tab has no per-tab filters — render nothing.
+  if (currentTab === 'insights') return null;
+
   const showCommodity = COMMODITY_TABS.has(currentTab);
   const showYear = currentTab !== 'market'; // Market uses range chips instead
   const showState = currentTab !== 'market'; // Market is national-only

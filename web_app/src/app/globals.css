@@ -438,27 +438,218 @@ a:focus-visible {
 .fp-insights-btn-reject { border-color: var(--text3); color: var(--text2); }
 .fp-insights-btn-reject:hover:not(:disabled) { background: var(--surface2); }
 .fp-insights-draft-msg { font-size: 13px; color: var(--text2); margin-left: 12px; }
-.prose-fp { font-size: 17px; line-height: 1.7; color: var(--text); }
+/* Issue reader typography */
+.fp-issue {
+  font-size: 17.5px;
+  line-height: 1.7;
+  color: var(--text);
+  font-family: var(--font-plus-jakarta), system-ui, sans-serif;
+}
 .fp-issue-title {
   font-family: var(--font-barlow), system-ui, sans-serif;
-  font-weight: 800; font-size: 38px; line-height: 1.1; letter-spacing: -0.01em;
-  margin: 0 0 12px; color: var(--text);
+  font-weight: 800; font-size: 40px; line-height: 1.08;
+  letter-spacing: -0.015em;
+  margin: 0 0 18px; color: var(--text);
 }
 .fp-issue-dek {
-  font-style: italic; color: var(--text2); font-size: 18px; line-height: 1.5;
-  margin: 0 0 40px; padding-bottom: 20px; border-bottom: 1px solid var(--border);
+  font-style: italic; color: var(--text2);
+  font-size: 19px; line-height: 1.55;
+  margin: 0 0 48px; padding-bottom: 24px;
+  border-bottom: 1px solid var(--border);
+  font-family: var(--font-plus-jakarta), system-ui, sans-serif;
 }
+
+/* Lead H2 — bigger + with a "LEAD" pill on the left */
 .fp-issue-h2 {
   font-family: var(--font-barlow), system-ui, sans-serif;
-  font-weight: 700; font-size: 26px; margin: 48px 0 16px; color: var(--text);
+  font-weight: 700; font-size: 26px; line-height: 1.2;
+  margin: 56px 0 18px; color: var(--text);
+  letter-spacing: -0.005em;
 }
+.fp-issue-h2--lead {
+  font-size: 30px;
+  margin-top: 0;
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.fp-issue-lead-pill {
+  display: inline-block;
+  background: var(--field);
+  color: white;
+  font-family: var(--font-barlow), system-ui, sans-serif;
+  font-weight: 800;
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  padding: 3px 8px;
+  border-radius: 3px;
+  vertical-align: middle;
+  position: relative;
+  top: -3px;
+}
+
+/* Briefs H3 */
 .fp-issue-h3 {
   font-family: var(--font-barlow), system-ui, sans-serif;
-  font-weight: 700; font-size: 19px; margin: 32px 0 12px; color: var(--text);
+  font-weight: 700; font-size: 21px; line-height: 1.25;
+  margin: 36px 0 14px; color: var(--text);
 }
-.fp-issue-p { margin: 0 0 18px; }
+.fp-issue [data-h3-after-hr] { margin-top: 24px; }
+
+/* Body paragraphs */
+.fp-issue-p { margin: 0 0 20px; }
+
+/* First paragraph after a heading — drop-cap-lite via larger first line */
+.fp-issue-p--first::first-line {
+  font-weight: 500;
+}
+
+/* "What to watch" — last sentence of each story, called out with a left
+   accent stripe and a small caps prefix tag. The writer prompt requires
+   this forward-looking line per story, so we surface it visually. */
+.fp-issue-p--watch {
+  position: relative;
+  padding: 14px 16px 14px 18px;
+  margin: 28px 0 24px;
+  border-left: 3px solid var(--harvest);
+  background: var(--harvest-subtle);
+  border-radius: 0 6px 6px 0;
+  font-size: 16.5px;
+  line-height: 1.6;
+  color: var(--text);
+}
+.fp-issue-watch-tag {
+  display: block;
+  font-family: var(--font-barlow), system-ui, sans-serif;
+  font-weight: 800;
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  color: var(--harvest-dark);
+  margin-bottom: 6px;
+  text-transform: uppercase;
+}
+
+/* Chart figures */
 .fp-issue-chart {
-  display: block; width: 100%; max-width: 100%; height: auto;
-  margin: 28px 0; border: 1px solid var(--border); border-radius: 6px;
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  margin: 32px 0;
+  padding: 0;
 }
-.fp-issue-hr { border: none; border-top: 1px solid var(--border); margin: 56px 0 20px; }
+.fp-issue-chart img {
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  display: block;
+}
+.fp-issue-chart figcaption {
+  font-family: var(--font-plus-jakarta), system-ui, sans-serif;
+  font-size: 13px;
+  color: var(--text3);
+  margin-top: 8px;
+  text-align: center;
+  font-style: italic;
+}
+
+/* Chart placeholder (dev preview when no PNG resolved) */
+.fp-issue-chart--placeholder {
+  background: var(--surface2);
+  border: 1px dashed var(--border2);
+  border-radius: 6px;
+  padding: 36px 24px;
+  text-align: center;
+}
+.fp-issue-chart-label {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+.fp-issue-chart-id {
+  font-family: var(--font-jetbrains), monospace;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--field);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.fp-issue-chart-hint {
+  font-size: 13px;
+  color: var(--text3);
+  font-style: italic;
+}
+
+.fp-issue-hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 56px 0 8px;
+}
+
+/* Fact-check disclosure (dev preview) */
+.fp-insights-factcheck-callout {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 14px 18px;
+  margin-bottom: 32px;
+  font-size: 14px;
+}
+.fp-insights-factcheck-callout summary {
+  font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+  font-family: var(--font-plus-jakarta), system-ui, sans-serif;
+}
+.fp-insights-factcheck-callout summary:hover { color: var(--field); }
+.fp-insights-factcheck-callout ul {
+  list-style: none;
+  padding: 12px 0 0 0;
+  margin: 0;
+}
+.fp-insights-factcheck-callout li {
+  padding: 6px 0;
+  border-top: 1px solid var(--border);
+  color: var(--text2);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.fp-factcheck-tag {
+  font-family: var(--font-jetbrains), monospace;
+  font-size: 11px;
+  color: var(--text3);
+  margin-right: 8px;
+}
+.fp-factcheck-major .fp-factcheck-tag { color: var(--harvest-dark); }
+
+/* Issue metadata footer */
+.fp-issue-meta {
+  margin-top: 28px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+  font-family: var(--font-jetbrains), monospace;
+  font-size: 12px;
+  color: var(--text3);
+  letter-spacing: 0.03em;
+}
+.fp-issue-meta-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.fp-issue-meta-label {
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 10px;
+  color: var(--text3);
+}
+.fp-issue-meta-value {
+  color: var(--text2);
+  font-size: 13px;
+  font-weight: 500;
+}
