@@ -91,7 +91,7 @@ def run(as_of_date: date | None = None, *, dry_run: bool = False) -> int:
         ("editor", _step_editor),
         ("researcher", _step_researcher),
         ("writer", _step_writer),
-        ("fact_checker", _step_fact_check),
+        ("fact_checker", lambda c: _step_fact_check(c, dry_run=dry_run)),
         ("publisher", lambda c: _step_publish(c, dry_run=dry_run)),
     ]
 
@@ -159,20 +159,55 @@ def _step_writer(ctx: StepCtx) -> None:
     ctx.draft = write_issue(
         ctx.dossier, mood=ctx.mood, as_of_date=ctx.as_of, stats=ctx.stats
     )
+    _save_dry_run_artifact(ctx, "last_draft.md", ctx.draft.markdown)
 
 
-def _step_fact_check(ctx: StepCtx) -> None:
+def _step_fact_check(ctx: StepCtx, *, dry_run: bool = False) -> None:
     if ctx.draft is None or ctx.dossier is None:
         raise RuntimeError("fact_check: draft or dossier missing")
     ctx.fact_result = fact_check(
         ctx.draft.markdown, dossier=ctx.dossier, stats=ctx.stats
     )
+    # Always persist the fact-check report on dry-runs so the operator can
+    # iterate on writer prompt + dossier structure.
+    if dry_run:
+        import json as _json
+        payload = {
+            "passed": ctx.fact_result.passed,
+            "issues": [
+                {
+                    "severity": i.severity, "source": i.source,
+                    "detail": i.detail, "quote": i.quote,
+                }
+                for i in ctx.fact_result.all_issues
+            ],
+        }
+        _save_dry_run_artifact(ctx, "last_factcheck.json", _json.dumps(payload, indent=2))
     if not ctx.fact_result.passed:
         majors = ctx.fact_result.major_issues
-        raise RuntimeError(
+        msg = (
             f"fact_check failed with {len(majors)} major issue(s): "
             + "; ".join(m.detail for m in majors[:3])
         )
+        if dry_run:
+            # On dry-run, log + continue — the draft is the artifact, the
+            # fact-check report is the diagnostic.
+            logger.warning("DRY RUN: %s (continuing to publisher noop)", msg)
+            return
+        raise RuntimeError(msg)
+
+
+def _save_dry_run_artifact(ctx: StepCtx, name: str, content: str) -> None:
+    """Best-effort write of a dry-run intermediate to backend/agent/data/."""
+    try:
+        from pathlib import Path
+
+        out = Path(__file__).parent / "data" / name
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(content, encoding="utf-8")
+        logger.info("wrote dry-run artifact: %s", out)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("could not save %s: %s", name, exc)
 
 
 def _step_publish(ctx: StepCtx, *, dry_run: bool) -> None:

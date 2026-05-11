@@ -359,6 +359,7 @@ def _export_pace(as_of: date) -> list[dict[str, Any]]:
             out.append(
                 {
                     "commodity": row.commodity,
+                    "marketing_year": row.marketing_year,
                     "as_of_date": str(row.as_of_date),
                     "outstanding_sales_mt": cur_v,
                     "pace_pct_vs_5yr": pace_pct,

@@ -170,18 +170,34 @@ def _recent_picks_index(as_of_iso: str) -> dict[tuple[str, str], dict]:
     return index
 
 
+# Continuous slow-moving variables (week-to-week trajectories). Their
+# anomaly readings drift gradually, so a stricter novelty knock prevents the
+# same narrative from filling consecutive weeks unless the magnitude has
+# truly accelerated. Step-change variables (price-regime, futures-move,
+# accuracy outliers) keep the default 25-point knock.
+CONTINUOUS_DOMAINS: frozenset[str] = frozenset({
+    "exports", "drought", "weather",
+})
+
+
 def novelty_score(domain: str, scope: str, current_score: float, as_of: date) -> float:
     """100 if (domain, scope) has not been published in last 8 weeks; else
     fall off. Re-publish allowed if magnitude has materially increased
-    (>1.5x prior published score), per §4.3."""
+    (>1.5x prior published score), per §4.3.
+
+    Continuous domains (slow-moving trajectories) get a tighter 40-point
+    knock per fire instead of 25 — the underlying variable drifts smoothly
+    week-to-week, so repeats are usually noise unless the trajectory has
+    materially shifted.
+    """
     index = _recent_picks_index(as_of.isoformat())
     prior = index.get((domain, scope))
     if prior is None:
         return 100.0
     if current_score > 1.5 * prior["max_score"]:
         return 80.0  # diminished but allowed
-    # Each prior fire knocks 25 points off, floor at 10.
-    return max(10.0, 100.0 - 25.0 * prior["n"])
+    knock_per_fire = 40.0 if domain in CONTINUOUS_DOMAINS else 25.0
+    return max(10.0, 100.0 - knock_per_fire * prior["n"])
 
 
 # ---------------------------------------------------------------------------

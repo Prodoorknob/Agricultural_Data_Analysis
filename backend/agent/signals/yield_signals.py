@@ -141,20 +141,29 @@ def _collect_accuracy_outliers(as_of: date) -> list[Signal]:
     on. Without this dedup the same outlier county fires 20+ duplicate
     signals.
     """
+    # NOTE: DISTINCT ON requires its ORDER BY to start with the partition
+    # columns. We need worst-miss-first for the actual selection, so we wrap
+    # the dedup in a CTE, then sort by ABS(pct_error) DESC at the outer
+    # SELECT before LIMIT. Previously the LIMIT 50 was slicing the
+    # fips-alphabetical-first 50, which concentrated headlines in AL/AR.
     sql = text(
         """
-        SELECT DISTINCT ON (fips, crop, forecast_year)
-               fips, crop, forecast_year, week,
-               actual_yield, model_p50, pct_error
-        FROM yield_accuracy
-        WHERE pct_error IS NOT NULL
-          AND ABS(pct_error) >= :trigger
-          AND updated_at <= :as_of
-          AND forecast_year = (
-              SELECT MAX(forecast_year) FROM yield_accuracy
-              WHERE pct_error IS NOT NULL AND updated_at <= :as_of
-          )
-        ORDER BY fips, crop, forecast_year, week DESC, updated_at DESC
+        WITH dedup AS (
+            SELECT DISTINCT ON (fips, crop, forecast_year)
+                   fips, crop, forecast_year, week,
+                   actual_yield, model_p50, pct_error
+            FROM yield_accuracy
+            WHERE pct_error IS NOT NULL
+              AND ABS(pct_error) >= :trigger
+              AND updated_at <= :as_of
+              AND forecast_year = (
+                  SELECT MAX(forecast_year) FROM yield_accuracy
+                  WHERE pct_error IS NOT NULL AND updated_at <= :as_of
+              )
+            ORDER BY fips, crop, forecast_year, week DESC, updated_at DESC
+        )
+        SELECT * FROM dedup
+        ORDER BY ABS(pct_error) DESC
         LIMIT 50
         """
     )

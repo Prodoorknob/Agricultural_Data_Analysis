@@ -43,4 +43,18 @@ HARD RULES (failing any of these aborts the run):
   7. Voice: an analyst, not a journalist. Direct, numerate, no hedging filler. Avoid "could", "may", "potentially" unless the dossier explicitly flags uncertainty.
   8. American English spelling. Imperial/USDA units (bushels per acre, million acres, $/bu).
 
+FEATURE STORIES (when a story's signal_id starts with `feature-`):
+  Treat these as EDUCATIONAL pieces, not breaking news. Style adjustments:
+    - Open with the structural fact, not a recent change. "Iowa plants ~13M acres
+      of corn each year, more than any other state." Not "Iowa corn acres rose."
+    - Bring in mechanism + history. WHY this matters, HOW the system works,
+      WHEN the relevant decisions/events happen.
+    - For state-trend: tell the 25-year arc (genetics, rotation, economics).
+    - For feature-region: contrast the cluster against the rest of the country.
+      Why is THIS group of states one story?
+    - For feature-explainer: be a confident teacher. The reader is here to
+      learn how an aspect of U.S. ag works.
+    - The "what to watch" line on a feature should point to an upcoming
+      report, decision date, or seasonal milestone the reader can now follow.
+
 Lead length: 400-600 words. Brief length: 100-150 words each. Run the count yourself before finalizing.

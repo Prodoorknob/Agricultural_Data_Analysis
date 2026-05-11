@@ -80,17 +80,25 @@ def build_candidates(
     top_n: int = 20,
     biases: dict[str, float] | None = None,
 ) -> list[Signal]:
-    """Run all signal sources, apply mood biases, return top-N candidates.
+    """Run all signal sources, fold in composites, apply mood, return top-N.
 
-    Sources are imported lazily so a missing dependency in one source
-    doesn't break startup for the others.
+    Phases:
+      1. gather() runs the 8 per-source collectors in parallel-tolerant
+         fashion (one source's failure is logged and skipped).
+      2. composite_signals.build_composites groups same-domain
+         multi-commodity narratives into single composite Signals and
+         returns the constituent ids to suppress.
+      3. apply_mood_boost weighs domains per the week's mood JSON.
+      4. rank() takes the top N by final_score.
     """
     import logging
 
     from backend.agent.signals import (
         acreage_signals,
         calendar_signals,
+        composite_signals,
         exports_signals,
+        feature_signals,
         price_signals,
         trend_signals,
         wasde_signals,
@@ -110,10 +118,22 @@ def build_candidates(
         exports_signals.collect,
         trend_signals.collect,
         calendar_signals.collect,
+        feature_signals.collect,
     ]
 
     signals = gather(sources, as_of_date)
-    log.info("signal_board: gathered %d candidates from %d sources", len(signals), len(sources))
+    log.info(
+        "signal_board: gathered %d candidates from %d sources",
+        len(signals), len(sources),
+    )
+
+    composites, suppress_ids = composite_signals.build_composites(signals, as_of_date)
+    if composites:
+        signals = [s for s in signals if s.id not in suppress_ids] + composites
+        log.info(
+            "signal_board: bundled %d composites, suppressed %d singletons",
+            len(composites), len(suppress_ids),
+        )
 
     if biases:
         apply_mood_boost(signals, biases)

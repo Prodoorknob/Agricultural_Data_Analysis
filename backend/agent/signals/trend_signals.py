@@ -185,6 +185,7 @@ def _collect_yield_trend_breaks(as_of: date) -> list[Signal]:
         JOIN history USING (fips, crop)
         WHERE history.hist_std > 0
           AND ABS((latest.actual_yield - history.hist_mean) / history.hist_std) >= :z_trigger
+        ORDER BY ABS((latest.actual_yield - history.hist_mean) / history.hist_std) DESC
         LIMIT 200
         """
     )

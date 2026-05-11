@@ -49,11 +49,23 @@ def write_issue(
 
 
 def _scrub_em_dashes(md: str) -> str:
-    """Replace any em dashes the model snuck in. Project convention (§8.1)."""
+    """Replace any em dashes the model snuck in. Project convention (§8.1).
+
+    Three context-aware replacements:
+      - " — "  (spaced em-dash, parenthetical):   becomes ", "
+      - "X—Y"  (no spaces, range or compound):     becomes " "
+      - " —" / "— " (one-sided):                   collapse to single space
+    Avoid producing double-comma artifacts like ", , generated".
+    """
     if "—" not in md:
         return md
     logger.warning("writer: model emitted em dashes; scrubbing")
-    return md.replace("—", ", ")
+    import re as _re
+    md = _re.sub(r"\s+—\s+", ", ", md)   # spaced parenthetical
+    md = _re.sub(r"—", " ", md)            # any remaining: single space
+    md = _re.sub(r" {2,}", " ", md)        # collapse double-spaces
+    md = _re.sub(r",\s*,", ",", md)        # cleanup double-commas
+    return md
 
 
 def _gather_chart_specs(dossier: FullDossier) -> list[dict[str, Any]]:

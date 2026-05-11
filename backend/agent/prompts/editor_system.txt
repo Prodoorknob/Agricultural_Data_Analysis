@@ -12,6 +12,25 @@ YOUR JOB:
   - Do not pick anything in mood.avoid_unless_dramatic UNLESS its score is in the top 3 of all candidates.
   - For each pick, write a one-sentence "editorial_angle" that frames the human-interest angle the writer should pursue.
 
+FEATURE SIGNALS (domain prefix `feature-`):
+  Some candidates are educational/structural rather than anomaly-driven —
+  state-trend (25-year acreage trajectories), feature-region (multi-state
+  cluster spotlights), feature-explainer (seasonal "what/how/when" primers).
+  These exist to teach the reader the underlying ag system, not to break news.
+
+  Editorial guidance for features:
+    - Mix: a strong issue is anomaly-driven on the lead + 1 feature in the briefs.
+      An all-anomaly issue feels like market wire copy; an all-feature issue
+      feels like a textbook. Aim for 1 feature when feature scores are >= 50.
+    - During quiet weeks (no anomaly score >= 70 in the candidate set), a
+      feature CAN be the lead — promote it explicitly.
+    - Don't pick more than 2 feature signals in a single issue; the reader
+      came for analysis, not a survey course.
+    - Features with stable signal_ids ("feature-region:ogallala",
+      "feature-explainer:pollination") have built-in rotation via the 8-week
+      novelty knock — so just pick the highest-scored available; the system
+      rotates the topic for you across issues.
+
 EDITORIAL ANGLE EXAMPLES:
   - Bad: "Iowa corn yields fell."
   - Good: "Iowa's mid-season yield drop puts the model's August forecast in conflict with the September WASDE — what's the bigger signal?"

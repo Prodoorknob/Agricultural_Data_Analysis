@@ -70,6 +70,13 @@ def cmd_seed(args: argparse.Namespace) -> int:
             return state_label(scope.split(":", 1)[1])
         if scope.startswith("county:"):
             return county_label(scope.split(":", 1)[1])
+        if scope.startswith("region:"):
+            # Render as "Region: Ogallala Aquifer states" so it's scannable.
+            from backend.agent.signals.feature_signals import REGIONAL_CLUSTERS
+
+            cid = scope.split(":", 1)[1]
+            cfg = REGIONAL_CLUSTERS.get(cid)
+            return f"Region: {cfg['label']}" if cfg else scope
         return scope
 
     for sunday in sundays:
@@ -101,6 +108,20 @@ def cmd_seed(args: argparse.Namespace) -> int:
     if not rows:
         logger.error("seed: no candidates produced. Check that signal sources work.")
         return 1
+
+    raw_count = len(rows)
+    if not args.keep_duplicates:
+        # Dedup by signal_id, keeping the highest-scoring instance. Identical
+        # signals fire across consecutive Sundays because novelty doesn't
+        # decay until agent_picks has published rows. Labelling 8 identical
+        # rows is tedious and adds nothing the fitter can use.
+        seen: dict[str, dict] = {}
+        for r in rows:
+            sid = r["signal_id"]
+            if sid not in seen or float(r["score"]) > float(seen[sid]["score"]):
+                seen[sid] = r
+        rows = sorted(seen.values(), key=lambda r: (-float(r["score"]), r["domain"], r["scope_label"]))
+        logger.info("seed: deduped %d -> %d rows by signal_id", raw_count, len(rows))
 
     fieldnames = list(rows[0].keys())
     with out_path.open("w", encoding="utf-8", newline="") as f:
@@ -210,6 +231,15 @@ def main() -> int:
     seed.add_argument(
         "--out", default="backend/agent/data/calibration_unlabelled.csv",
         help="Output CSV path.",
+    )
+    seed.add_argument(
+        "--keep-duplicates",
+        action="store_true",
+        help=(
+            "Don't dedup by signal_id. Default behavior keeps only the "
+            "highest-scoring instance per signal_id, which makes labelling "
+            "tractable when novelty doesn't decay (no published picks yet)."
+        ),
     )
 
     fit = sub.add_parser("fit", help="Fit weights from a labelled CSV.")

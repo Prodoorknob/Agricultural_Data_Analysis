@@ -88,31 +88,38 @@ def fact_check(
 
 
 # Each pattern captures a numeric value plus its semantic unit.
-# Order matters — most specific first.
+# Order matters, most specific first.
+#
+# Sign-handling: `(?<![\w.])` before the optional `-` rejects the dash when
+# it's a range separator (e.g. "27.7M-32.9M" should NOT tokenize -32.9).
+# A literal sign requires either start-of-string or non-word/non-dot char
+# immediately preceding.
+_SIGN = r"(?<![\w.])\-?"
+
 _TOKEN_PATTERNS: list[tuple[re.Pattern, str]] = [
-    (re.compile(r"(?<!\w)\$(\-?\d{1,3}(?:,\d{3})*(?:\.\d+)?)\s*(million|M|billion|B|thousand|K)?(?!\w)"),
+    (re.compile(rf"(?<!\w)\$({_SIGN}\d{{1,3}}(?:,\d{{3}})*(?:\.\d+)?)\s*(million|M|billion|B|thousand|K)?(?!\w)"),
      "dollars_scale"),
-    (re.compile(r"(\-?\d{1,3}(?:,\d{3})*(?:\.\d+)?)\s*(?:percentage points|pp)(?!\w)"),
+    (re.compile(rf"({_SIGN}\d{{1,3}}(?:,\d{{3}})*(?:\.\d+)?)\s*(?:percentage points|pp)(?!\w)"),
      "percentage_points"),
-    (re.compile(r"(\-?\d{1,3}(?:,\d{3})*(?:\.\d+)?)\s*(?:basis points|bps)(?!\w)"),
+    (re.compile(rf"({_SIGN}\d{{1,3}}(?:,\d{{3}})*(?:\.\d+)?)\s*(?:basis points|bps)(?!\w)"),
      "basis_points"),
-    (re.compile(r"(\-?\d{1,3}(?:,\d{3})*(?:\.\d+)?)\s*%"),
+    (re.compile(rf"({_SIGN}\d{{1,3}}(?:,\d{{3}})*(?:\.\d+)?)\s*%"),
      "percent"),
-    (re.compile(r"(\-?\d{1,3}(?:,\d{3})*(?:\.\d+)?)\s*(?:bu/ac|bu/acre|bushels/acre|bu per ac)"),
+    (re.compile(rf"({_SIGN}\d{{1,3}}(?:,\d{{3}})*(?:\.\d+)?)\s*(?:bu/ac|bu/acre|bushels/acre|bu per ac)"),
      "bu_per_ac"),
-    (re.compile(r"(\-?\d{1,3}(?:,\d{3})*(?:\.\d+)?)\s*cwt/ac"),
+    (re.compile(rf"({_SIGN}\d{{1,3}}(?:,\d{{3}})*(?:\.\d+)?)\s*cwt/ac"),
      "cwt_per_ac"),
-    (re.compile(r"(\-?\d{1,3}(?:,\d{3})*(?:\.\d+)?)\s*lb/ac"),
+    (re.compile(rf"({_SIGN}\d{{1,3}}(?:,\d{{3}})*(?:\.\d+)?)\s*lb/ac"),
      "lb_per_ac"),
-    (re.compile(r"(\-?\d{1,3}(?:,\d{3})*(?:\.\d+)?)\s*[xX×]\b"),
+    (re.compile(rf"({_SIGN}\d{{1,3}}(?:,\d{{3}})*(?:\.\d+)?)\s*[xX×]\b"),
      "ratio"),
     (re.compile(r"\b(\d{4})\b"),
      "year"),
-    (re.compile(r"(\-?\d{1,3}(?:,\d{3})*(?:\.\d+)?)\s*(million|billion|M|B|thousand|K)\s*(?:acres|bushels|tons|head|metric tons|mt)\b", re.IGNORECASE),
+    (re.compile(rf"({_SIGN}\d{{1,3}}(?:,\d{{3}})*(?:\.\d+)?)\s*(million|billion|M|B|thousand|K)\s*(?:acres|bushels|tons|head|metric tons|mt)\b", re.IGNORECASE),
      "scaled_count"),
-    (re.compile(r"(\-?\d{1,3}(?:,\d{3})*(?:\.\d+)?)\s*(?:million|billion|M|B|thousand|K)\b", re.IGNORECASE),
+    (re.compile(rf"({_SIGN}\d{{1,3}}(?:,\d{{3}})*(?:\.\d+)?)\s*(?:million|billion|M|B|thousand|K)\b", re.IGNORECASE),
      "scaled_number"),
-    (re.compile(r"(\-?\d{1,3}(?:,\d{3})*\.\d+)"),
+    (re.compile(rf"({_SIGN}\d{{1,3}}(?:,\d{{3}})*\.\d+)"),
      "decimal"),
 ]
 
