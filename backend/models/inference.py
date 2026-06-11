@@ -80,7 +80,7 @@ def run_inference() -> int:
                             VALUES
                                 (:commodity, :run_date, :horizon_month, :p10, :p50, :p90,
                                  :key_driver, :divergence_flag, :regime_anomaly, :model_ver)
-                            ON CONFLICT (commodity, run_date, horizon_month)
+                            ON CONFLICT ON CONSTRAINT uq_price_forecasts
                             DO UPDATE SET
                                 p10 = EXCLUDED.p10, p50 = EXCLUDED.p50, p90 = EXCLUDED.p90,
                                 key_driver = EXCLUDED.key_driver,
