@@ -1,102 +1,42 @@
 'use client';
 
 import KpiCard from '@/components/shared/KpiCard';
-import { formatCompact, formatCurrency } from '@/lib/format';
 
-interface CropHeroRowProps {
-  yieldThisYear: number;
-  yieldUnit: string;
-  yield5yrAvg: number;
-  yieldDeltaVs5yr: number;
-  areaPlanted: number;
-  areaYoyDelta: number;
-  operationsCount: number;
-  operationsDeltaSince2010: number;
-  operationsYearUsed?: number | null;
-  operationsBaselineYear?: number | null;
-  totalSales: number;
-  salesYoyDelta: number;
-  salesShareOfState: number;
-  stateName: string;
-  commodity: string;
+export interface HeroCard {
+  /** Pre-formatted hero value (e.g. "198", "$4.3B", "5.2M"). */
+  value: string;
+  label: string;
+  unit?: string;
+  caption?: string;
+  delta?: number;
 }
 
-const CENSUS_YEARS = new Set([2002, 2007, 2012, 2017, 2022]);
+interface CropHeroRowProps {
+  cards: HeroCard[];
+}
 
-export default function CropHeroRow({
-  yieldThisYear,
-  yieldUnit,
-  yield5yrAvg,
-  yieldDeltaVs5yr,
-  areaPlanted,
-  areaYoyDelta,
-  operationsCount,
-  operationsDeltaSince2010,
-  operationsYearUsed,
-  operationsBaselineYear,
-  totalSales,
-  salesYoyDelta,
-  salesShareOfState,
-  stateName,
-  commodity,
-}: CropHeroRowProps) {
-  const yieldCaption = yieldThisYear > 0
-    ? `${yieldThisYear.toFixed(0)} ${yieldUnit} — ${yieldDeltaVs5yr >= 0 ? 'above' : 'below'} the 5-year average of ${yield5yrAvg.toFixed(0)}.`
-    : '';
-
-  const areaCaption = areaPlanted > 0
-    ? `${formatCompact(areaPlanted)} acres — ${areaYoyDelta >= 0 ? 'up' : 'down'} ${Math.abs(areaYoyDelta).toFixed(1)}% from last year.`
-    : '';
-
-  const opsYearLabel = operationsYearUsed
-    ? `(${CENSUS_YEARS.has(operationsYearUsed) ? 'Census ' : ''}${operationsYearUsed})`
-    : undefined;
-  const baselineClause = operationsBaselineYear
-    ? `since ${CENSUS_YEARS.has(operationsBaselineYear) ? 'the ' + operationsBaselineYear + ' Census' : operationsBaselineYear}`
-    : 'over time';
-  const opsCaption = operationsCount > 0
-    ? `${formatCompact(operationsCount)} operations — ${operationsDeltaSince2010 >= 0 ? 'up' : 'down'} ${Math.abs(operationsDeltaSince2010).toFixed(0)}% ${baselineClause}.`
-    : '';
-
-  const salesCaption = totalSales > 0
-    ? `${formatCurrency(totalSales)}, ${salesShareOfState.toFixed(0)}% of ${stateName}'s total farm sales.`
-    : '';
-
+/**
+ * Adaptive KPI row. The page builds the card list so it can vary per crop:
+ * field crops show Yield (bu/ac) + Area Planted, while specialty crops fall
+ * back to Production (native unit), Area Bearing/Harvested, and Value of
+ * Production when those are what NASS actually publishes. Empty metrics are
+ * dropped upstream, so this just renders whatever it's given.
+ */
+export default function CropHeroRow({ cards }: CropHeroRowProps) {
+  if (!cards.length) return null;
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-      <KpiCard
-        value={yieldThisYear > 0 ? yieldThisYear.toFixed(0) : 'N/A'}
-        label="Yield"
-        unit={yieldUnit}
-        caption={yieldCaption}
-        delta={yieldDeltaVs5yr}
-        size="md"
-      />
-      <KpiCard
-        value={areaPlanted > 0 ? formatCompact(areaPlanted) : 'N/A'}
-        label="Area Planted"
-        unit="acres"
-        caption={areaCaption}
-        delta={areaYoyDelta}
-        size="md"
-      />
-      {operationsCount > 0 && (
+      {cards.map((c) => (
         <KpiCard
-          value={formatCompact(operationsCount)}
-          label="Operations"
-          unit={opsYearLabel}
-          caption={opsCaption}
-          delta={operationsDeltaSince2010 !== 0 ? operationsDeltaSince2010 : undefined}
+          key={c.label}
+          value={c.value}
+          label={c.label}
+          unit={c.unit}
+          caption={c.caption}
+          delta={c.delta}
           size="md"
         />
-      )}
-      <KpiCard
-        value={totalSales > 0 ? formatCurrency(totalSales) : 'N/A'}
-        label="Total Sales"
-        caption={salesCaption}
-        delta={salesYoyDelta}
-        size="md"
-      />
+      ))}
     </div>
   );
 }

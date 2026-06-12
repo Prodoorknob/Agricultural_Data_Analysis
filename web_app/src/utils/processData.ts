@@ -1,4 +1,5 @@
 import * as d3 from 'd3-array';
+import { CROP_COMMODITIES } from '@/lib/constants';
 
 export interface CropData {
     state_alpha: string;
@@ -457,13 +458,35 @@ export function getCommodityStory(data: any[], commodity: string) {
 
     yearGroups.forEach((rows, year) => {
         // Production: pick the dominant production unit for this commodity
-        // (usually BU for grains, LB for cotton, TONS for hay). Filter to that
-        // unit and take max so biotech-pct rows never sneak in.
+        // (usually BU for grains, LB for cotton, TONS for hay, TONS/BOXES/CWT
+        // for specialty). A commodity can report PRODUCTION in two physical
+        // units in the same year (oranges: TONS and BOXES); taking max across
+        // both mixes scales, so pick the unit with the most rows, then max
+        // within that unit. PCT rows are excluded via the BU_UNITS gate.
         const prodRows = rows.filter(r =>
             r.statisticcat_desc === 'PRODUCTION' &&
             BU_UNITS.has(String(r.unit_desc || '').toUpperCase())
         );
-        const production = d3.max(prodRows, r => cleanValue(r.value_num || r.Value)) || 0;
+        let production = 0;
+        let prodUnit = '';
+        if (prodRows.length) {
+            const byUnit = d3.group(prodRows, r => String(r.unit_desc || '').toUpperCase());
+            let bestUnit = '';
+            let bestCount = -1;
+            byUnit.forEach((rs, u) => {
+                if (rs.length > bestCount) { bestCount = rs.length; bestUnit = u; }
+            });
+            production = d3.max(byUnit.get(bestUnit) || [], r => cleanValue(r.value_num || r.Value)) || 0;
+            prodUnit = bestUnit;
+        }
+
+        // Value of production ($) — specialty crops often report
+        // "PRODUCTION ... $" instead of a SALES $ row. Captured so the dollar
+        // KPI can fall back to it when SALES is absent.
+        const valueOfProduction = d3.max(
+            rows.filter(r => r.statisticcat_desc === 'PRODUCTION' && r.unit_desc === '$'),
+            r => cleanValue(r.value_num || r.Value),
+        ) || 0;
 
         // Yield: average across utility slices is meaningless (bu/ac ≠ tons/ac).
         // Prefer the primary utility (GRAIN for corn, LINT for cotton, etc.) —
@@ -488,6 +511,17 @@ export function getCommodityStory(data: any[], commodity: string) {
             ACRE_UNITS.has(String(r.unit_desc || '').toUpperCase())
         );
         const areaPlanted = d3.max(areaPlantedRows, r => cleanValue(r.value_num || r.Value)) || 0;
+
+        // Area bearing — tree fruits and nuts (oranges, grapes, almonds) report
+        // AREA BEARING in acres rather than AREA PLANTED/HARVESTED. Gate to
+        // ACRES so the "OPERATIONS" unit variant (a count, not an area) is
+        // excluded.
+        const areaBearingRows = rows.filter(r =>
+            r.statisticcat_desc === 'AREA BEARING' &&
+            ACRE_UNITS.has(String(r.unit_desc || '').toUpperCase())
+        );
+        const areaBearing = d3.max(areaBearingRows, r => cleanValue(r.value_num || r.Value)) || 0;
+
         // Revenue: use only $ SALES, take max per year to get the aggregate total
         const salesRows = rows.filter(r =>
             r.statisticcat_desc === 'SALES' &&
@@ -495,8 +529,8 @@ export function getCommodityStory(data: any[], commodity: string) {
         );
         const revenue = d3.max(salesRows, r => cleanValue(r.value_num || r.Value)) || undefined;
 
-        const prodUnit = rows.find(r => r.statisticcat_desc === 'PRODUCTION')?.unit_desc || '';
-        const yieldUnit = rows.find(r => r.statisticcat_desc === 'YIELD')?.unit_desc || '';
+        // yieldUnit reflects the non-PCT yield row actually used for yieldVal.
+        const yieldUnit = yieldRows[0]?.unit_desc || '';
 
         mergedMap.set(year, {
             year,
@@ -504,7 +538,9 @@ export function getCommodityStory(data: any[], commodity: string) {
             yield: yieldVal,
             areaHarvested,
             areaPlanted,
+            areaBearing,
             revenue,
+            valueOfProduction,
             prodUnit,
             yieldUnit,
         });
@@ -519,7 +555,8 @@ export function getCommodityStory(data: any[], commodity: string) {
         } else {
             mergedMap.set(r.year, {
                 year: r.year, production: 0, yield: 0,
-                areaHarvested: 0, areaPlanted: 0, revenue: r.revenue,
+                areaHarvested: 0, areaPlanted: 0, areaBearing: 0,
+                revenue: r.revenue, valueOfProduction: 0,
                 prodUnit: '', yieldUnit: '',
             });
         }
@@ -547,6 +584,112 @@ export function getCommodityStory(data: any[], commodity: string) {
     });
 
     return { story, anomalies, anomalyYears: Array.from(anomalyYears) };
+}
+
+// ─── Dynamic Commodity Options (per loaded dataset) ──────────────
+export interface CropOption { id: string; label: string; color: string; }
+export interface CropOptionGroup { id: string; label: string; color: string; options: CropOption[]; }
+
+// Groups surfaced in the Crops tab. HORTICULTURE (cut flowers, bedding plants,
+// Christmas trees) is intentionally excluded — it's $-sales-only and doesn't
+// fit a yield/acreage view. CROP TOTALS is an aggregate, not a commodity.
+const CROP_GROUP_META: { id: string; label: string; color: string }[] = [
+    { id: 'FIELD CROPS', label: 'Field Crops', color: 'var(--chart-corn)' },
+    { id: 'FRUIT & TREE NUTS', label: 'Fruits & Nuts', color: 'var(--harvest)' },
+    { id: 'VEGETABLES', label: 'Vegetables', color: 'var(--field)' },
+];
+
+// Stat categories that count as renderable presence. Area stats must be in
+// ACRES (the "OPERATIONS" unit variant is a count); the rest must not be a $
+// or PCT sub-row for the value/yield gate.
+const PRESENCE_AREA_STATS = new Set(['AREA PLANTED', 'AREA HARVESTED', 'AREA BEARING']);
+const PRESENCE_VALUE_STATS = new Set(['YIELD', 'PRODUCTION', 'SALES']);
+
+// NASS catch-all / aggregate commodity_desc values that have data but aren't a
+// specific crop a user would pick. Excluded from the picker.
+const COMMODITY_DENYLIST = new Set([
+    'FIELD CROPS, OTHER', 'GRAIN', 'HAY & HAYLAGE', 'GRASSES', 'GRASSES & LEGUMES, OTHER',
+    'VEGETABLES, OTHER', 'BERRIES, OTHER', 'FRUIT & TREE NUTS, OTHER',
+]);
+
+function titleCaseCommodity(desc: string): string {
+    return desc
+        .toLowerCase()
+        .replace(/\b([a-z])/g, (_, c: string) => c.toUpperCase());
+}
+
+/**
+ * Build the grouped commodity picker options from whatever dataset is loaded
+ * (a state parquet or NATIONAL). A commodity is listed only if it has real,
+ * renderable data (yield / production / area in acres / $ sales) in the recent
+ * window, so the picker never offers a crop the page can't render. Field crops
+ * reuse their canonical CROP_COMMODITIES label + color; fruits/nuts/vegetables
+ * are title-cased and colored by group, sorted by economic weight ($ value).
+ */
+export function deriveCropOptions(data: any[]): CropOptionGroup[] {
+    const rows = filterData(data).filter(d => d.sector_desc === 'CROPS');
+    if (!rows.length) return [];
+
+    const maxYear = d3.max(rows, (d: any) => Number(d.year)) || 0;
+    const windowStart = maxYear - 7; // catches recent surveys + 2017/2022 Census
+
+    // Canonical field-crop metadata by uppercased commodity_desc.
+    const canonical = new Map<string, CropOption>();
+    CROP_COMMODITIES.forEach((c) => {
+        canonical.set(c.label.toUpperCase(), { id: c.id, label: c.label, color: c.color });
+        // a couple of NASS plural/singular mismatches
+        canonical.set(c.label.toUpperCase().replace(/S$/, ''), { id: c.id, label: c.label, color: c.color });
+    });
+
+    // group -> commodity_desc -> economic weight
+    const present = new Map<string, Map<string, number>>();
+    for (const r of rows) {
+        const group = String(r.group_desc || '');
+        if (!CROP_GROUP_META.some((g) => g.id === group)) continue;
+        const com = String(r.commodity_desc || '');
+        if (!com || com.includes('TOTAL') || com.includes('ALL CLASSES')) continue;
+        if (COMMODITY_DENYLIST.has(com)) continue;
+        if (Number(r.year) < windowStart) continue;
+        const stat = String(r.statisticcat_desc || '');
+        const unit = String(r.unit_desc || '').toUpperCase();
+        const val = cleanValue(r.value_num || r.Value);
+        if (!(val > 0)) continue;
+
+        const isArea = PRESENCE_AREA_STATS.has(stat) && unit === 'ACRES';
+        const isValue = PRESENCE_VALUE_STATS.has(stat) && unit !== 'OPERATIONS' && !unit.includes('PCT');
+        if (!isArea && !isValue) continue;
+
+        if (!present.has(group)) present.set(group, new Map());
+        const inner = present.get(group)!;
+        // Economic weight for ordering: $ magnitude dominates; crops with no $
+        // row fall back to a tiny physical-scale proxy so they still order
+        // sensibly among themselves but below any $-reporting crop.
+        const weight = unit === '$' ? val : val * 1e-9;
+        inner.set(com, Math.max(inner.get(com) || 0, weight));
+    }
+
+    const groups: CropOptionGroup[] = [];
+    for (const meta of CROP_GROUP_META) {
+        const inner = present.get(meta.id);
+        if (!inner || inner.size === 0) continue;
+
+        const options: CropOption[] = Array.from(inner.entries())
+            .sort((a, b) => b[1] - a[1])
+            .map(([com]) => {
+                const known = canonical.get(com.toUpperCase());
+                if (known) return known;
+                return { id: com.toLowerCase(), label: titleCaseCommodity(com), color: meta.color };
+            });
+
+        // Field crops read more naturally in their canonical order than by $.
+        if (meta.id === 'FIELD CROPS') {
+            const order = new Map<string, number>(CROP_COMMODITIES.map((c, i) => [c.id as string, i]));
+            options.sort((a, b) => (order.get(a.id) ?? 999) - (order.get(b.id) ?? 999));
+        }
+
+        groups.push({ id: meta.id, label: meta.label, color: meta.color, options });
+    }
+    return groups;
 }
 
 // ─── Crop Condition Trends ───────────────────────────────────────

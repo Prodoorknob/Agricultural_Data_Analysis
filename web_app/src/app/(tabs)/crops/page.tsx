@@ -2,14 +2,15 @@
 
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useFilters } from '@/hooks/useFilters';
-import { LATEST_NASS_YEAR, CROP_COMMODITIES } from '@/lib/constants';
+import { LATEST_NASS_YEAR } from '@/lib/constants';
 import {
   US_STATES, fetchStateData, fetchNationalCrops, fetchCountyData, fetchCountyPrecip, fetchIrrigatedCountyAcres,
 } from '@/utils/serviceData';
-import { filterData, getCommodityStory, detectAnomalies, getTopCrops, getCropConditionTrends } from '@/utils/processData';
+import { filterData, getCommodityStory, getCropConditionTrends, deriveCropOptions } from '@/utils/processData';
+import { formatCompact, formatCurrency } from '@/lib/format';
 import BandShell from '@/components/shared/BandShell';
 import CommodityPicker from '@/components/shared/CommodityPicker';
-import CropHeroRow from '@/components/crops/CropHeroRow';
+import CropHeroRow, { type HeroCard } from '@/components/crops/CropHeroRow';
 import YieldTrendChart from '@/components/crops/YieldTrendChart';
 import ProfitChart from '@/components/crops/ProfitChart';
 import HarvestEfficiency from '@/components/crops/HarvestEfficiency';
@@ -53,6 +54,19 @@ interface ProfitHistoryResponse {
   cost_source: string | null;
   note: string | null;
   points: ProfitPoint[];
+}
+
+const CENSUS_YEARS = new Set([2002, 2007, 2012, 2017, 2022]);
+
+// Title-case a NASS commodity_desc for display ("SWEET CORN" -> "Sweet Corn").
+function titleCase(desc: string): string {
+  return desc.toLowerCase().replace(/\b([a-z])/g, (_, c: string) => c.toUpperCase());
+}
+
+// Yield values span bushels/acre (150+) down to tons/acre (~8); format with a
+// decimal only when the magnitude is small enough to need it.
+function fmtYield(v: number): string {
+  return v >= 100 ? v.toFixed(0) : v.toFixed(1);
 }
 
 export default function CropsPage() {
@@ -150,14 +164,18 @@ export default function CropsPage() {
   const storyResult = useMemo(() => getCommodityStory(activeData, commodity), [activeData, commodity]);
   const story = storyResult?.story || [];
 
-  // Hero KPI data
+  // Hero KPI data — adaptive per crop. Field crops show Yield (bu/ac) + Area
+  // Planted; specialty crops (fruits/nuts/vegetables) fall back to Production
+  // in native units, Area Bearing/Harvested, and Value of Production when those
+  // are what NASS publishes. The page builds the card list and CropHeroRow just
+  // renders it.
   const heroData = useMemo(() => {
     const thisYear = story.find((s: any) => s.year === year);
     const priorYear = story.find((s: any) => s.year === year - 1);
-    // 5-year average: exclude years where yield is 0/missing. Census years
-    // (2017, 2012) don't always have a SURVEY yield row for every commodity —
-    // averaging 0s in drags the baseline down ~20% and makes the delta card
-    // lie about how the current year compares.
+
+    // --- Primary metric: yield, else production ---
+    // 5-year average yield excludes 0/missing years. Census years don't always
+    // carry a SURVEY yield row, and averaging 0s drags the baseline down ~20%.
     const fiveYearYields = story
       .filter((s: any) => s.year >= year - 5 && s.year <= year - 1)
       .map((s: any) => s.yield || 0)
@@ -165,21 +183,25 @@ export default function CropsPage() {
     const avg5yr = fiveYearYields.length > 0
       ? fiveYearYields.reduce((s: number, v: number) => s + v, 0) / fiveYearYields.length
       : 0;
-
     const yieldNow = thisYear?.yield || 0;
+    const yieldUnit = thisYear?.yieldUnit || 'BU / ACRE';
     const yieldDelta = avg5yr > 0 ? ((yieldNow - avg5yr) / avg5yr) * 100 : 0;
 
-    const areaNow = thisYear?.areaPlanted || 0;
-    const areaPrior = priorYear?.areaPlanted || 0;
-    const areaDelta = areaPrior > 0 ? ((areaNow - areaPrior) / areaPrior) * 100 : 0;
+    const prodNow = thisYear?.production || 0;
+    const prodPrior = priorYear?.production || 0;
+    const prodUnit = thisYear?.prodUnit || '';
+    const prodDelta = prodPrior > 0 ? ((prodNow - prodPrior) / prodPrior) * 100 : 0;
 
-    // Operations count — NASS OPERATIONS is dense only in Census years
-    // (2002, 2007, 2012, 2017, 2022). Walk a fallback chain so the card
-    // still shows something reasonable in non-Census years.
-    //
-    // Use the pre-filter raw dataset: filterData() drops CENSUS rows that
-    // aren't SALES+$, so CENSUS-sourced OPERATIONS rows would otherwise
-    // vanish.
+    // --- Area: planted -> harvested -> bearing (perennials) ---
+    const areaChoices: { label: string; now: number; prior: number }[] = [
+      { label: 'Area Planted', now: thisYear?.areaPlanted || 0, prior: priorYear?.areaPlanted || 0 },
+      { label: 'Area Harvested', now: thisYear?.areaHarvested || 0, prior: priorYear?.areaHarvested || 0 },
+      { label: 'Area Bearing', now: thisYear?.areaBearing || 0, prior: priorYear?.areaBearing || 0 },
+    ];
+    const area = areaChoices.find((a) => a.now > 0);
+
+    // --- Operations count (Census-dense). Raw dataset because filterData drops
+    // non-SALES CENSUS rows where OPERATIONS lives. ---
     const rawForOps = stateCode ? stateData : nationalData;
     const sumOpsForYear = (y: number) =>
       rawForOps
@@ -199,55 +221,106 @@ export default function CropsPage() {
     let opsYearUsed: number | null = null;
     for (const y of latestCandidates) {
       const v = sumOpsForYear(y);
-      if (v > 0) {
-        opsCount = v;
-        opsYearUsed = y;
-        break;
-      }
+      if (v > 0) { opsCount = v; opsYearUsed = y; break; }
     }
-
-    // Baseline: first available Census year to ground the delta.
     const baselineCandidates = [2002, 2007, 2012];
     let opsCountBaseline = 0;
     let opsBaselineYear: number | null = null;
     for (const y of baselineCandidates) {
-      if (y >= (opsYearUsed ?? 9999)) break; // baseline must be strictly before latest
+      if (y >= (opsYearUsed ?? 9999)) break;
       const v = sumOpsForYear(y);
-      if (v > 0) {
-        opsCountBaseline = v;
-        opsBaselineYear = y;
-        break;
-      }
+      if (v > 0) { opsCountBaseline = v; opsBaselineYear = y; break; }
     }
     const opsDelta = opsCountBaseline > 0 ? ((opsCount - opsCountBaseline) / opsCountBaseline) * 100 : 0;
 
+    // --- Dollars: SALES $ total, else Value of Production ($) ---
     const salesNow = thisYear?.revenue || 0;
     const salesPrior = priorYear?.revenue || 0;
     const salesDelta = salesPrior > 0 ? ((salesNow - salesPrior) / salesPrior) * 100 : 0;
+    const vopNow = thisYear?.valueOfProduction || 0;
+    const vopPrior = priorYear?.valueOfProduction || 0;
+    const vopDelta = vopPrior > 0 ? ((vopNow - vopPrior) / vopPrior) * 100 : 0;
 
-    // Total state sales for share calculation
     const totalStateSales = activeData
       .filter((r: any) => r.year === year && r.statisticcat_desc === 'SALES' && r.unit_desc === '$')
       .reduce((s: number, r: any) => s + (r.value_num || 0), 0);
     const salesShare = totalStateSales > 0 ? (salesNow / totalStateSales) * 100 : 0;
 
-    return {
-      yieldThisYear: yieldNow,
-      yieldUnit: thisYear?.yieldUnit || 'BU / ACRE',
-      yield5yrAvg: avg5yr,
-      yieldDeltaVs5yr: yieldDelta,
-      areaPlanted: areaNow,
-      areaYoyDelta: areaDelta,
-      operationsCount: opsCount,
-      operationsDeltaSince2010: opsDelta,
-      operationsYearUsed: opsYearUsed,
-      operationsBaselineYear: opsBaselineYear,
-      totalSales: salesNow,
-      salesYoyDelta: salesDelta,
-      salesShareOfState: salesShare,
-      stateName,
-      commodity: commodity.charAt(0) + commodity.slice(1).toLowerCase(),
-    };
+    // --- Assemble cards (drop empties) ---
+    const cards: HeroCard[] = [];
+
+    if (yieldNow > 0) {
+      cards.push({
+        label: 'Yield',
+        value: fmtYield(yieldNow),
+        unit: yieldUnit,
+        delta: avg5yr > 0 ? yieldDelta : undefined,
+        caption: avg5yr > 0
+          ? `${fmtYield(yieldNow)} ${yieldUnit}, ${yieldDelta >= 0 ? 'above' : 'below'} the 5-year average of ${fmtYield(avg5yr)}.`
+          : `${fmtYield(yieldNow)} ${yieldUnit} in ${year}.`,
+      });
+    } else if (prodNow > 0) {
+      cards.push({
+        label: 'Production',
+        value: formatCompact(prodNow),
+        unit: prodUnit,
+        delta: prodPrior > 0 ? prodDelta : undefined,
+        caption: prodPrior > 0
+          ? `${formatCompact(prodNow)} ${prodUnit}, ${prodDelta >= 0 ? 'up' : 'down'} ${Math.abs(prodDelta).toFixed(1)}% from last year.`
+          : `${formatCompact(prodNow)} ${prodUnit} produced in ${year}.`,
+      });
+    }
+
+    if (area) {
+      const ad = area.prior > 0 ? ((area.now - area.prior) / area.prior) * 100 : 0;
+      cards.push({
+        label: area.label,
+        value: formatCompact(area.now),
+        unit: 'acres',
+        delta: area.prior > 0 ? ad : undefined,
+        caption: area.prior > 0
+          ? `${formatCompact(area.now)} acres, ${ad >= 0 ? 'up' : 'down'} ${Math.abs(ad).toFixed(1)}% from last year.`
+          : `${formatCompact(area.now)} acres in ${year}.`,
+      });
+    }
+
+    if (opsCount > 0) {
+      const opsYearLabel = opsYearUsed
+        ? `(${CENSUS_YEARS.has(opsYearUsed) ? 'Census ' : ''}${opsYearUsed})`
+        : undefined;
+      const baselineClause = opsBaselineYear
+        ? `since ${CENSUS_YEARS.has(opsBaselineYear) ? 'the ' + opsBaselineYear + ' Census' : opsBaselineYear}`
+        : 'over time';
+      cards.push({
+        label: 'Operations',
+        value: formatCompact(opsCount),
+        unit: opsYearLabel,
+        delta: opsDelta !== 0 ? opsDelta : undefined,
+        caption: `${formatCompact(opsCount)} operations, ${opsDelta >= 0 ? 'up' : 'down'} ${Math.abs(opsDelta).toFixed(0)}% ${baselineClause}.`,
+      });
+    }
+
+    if (salesNow > 0) {
+      cards.push({
+        label: 'Total Sales',
+        value: formatCurrency(salesNow),
+        delta: salesPrior > 0 ? salesDelta : undefined,
+        caption: salesShare > 0
+          ? `${formatCurrency(salesNow)}, ${salesShare.toFixed(0)}% of ${stateName}'s total farm sales.`
+          : `${formatCurrency(salesNow)} in reported sales.`,
+      });
+    } else if (vopNow > 0) {
+      cards.push({
+        label: 'Value of Production',
+        value: formatCurrency(vopNow),
+        delta: vopPrior > 0 ? vopDelta : undefined,
+        caption: vopPrior > 0
+          ? `${formatCurrency(vopNow)} value of production, ${vopDelta >= 0 ? 'up' : 'down'} ${Math.abs(vopDelta).toFixed(1)}% from last year.`
+          : `${formatCurrency(vopNow)} value of production in ${year}.`,
+      });
+    }
+
+    return { cards, yieldUnit };
   }, [story, activeData, stateData, nationalData, stateCode, year, commodity, stateName]);
 
   // Yield trend data with anomalies
@@ -354,33 +427,17 @@ export default function CropsPage() {
     })();
   }, [stateCode]);
 
-  const commodityLabel = commodity.charAt(0) + commodity.slice(1).toLowerCase();
+  const commodityLabel = titleCase(commodity);
 
-  // When a state is selected, restrict the picker to commodities actually
-  // grown there in the last 3 years (AREA PLANTED > 0). National view keeps
-  // the full list. Mapping between NASS `commodity_desc` (uppercase, plural
-  // only for a few crops) and the frontend `CROP_COMMODITIES` keys is
-  // looser than exact match — we compare uppercased frontend labels.
-  const grownInStateCommodities = useMemo(() => {
-    if (!stateCode) return CROP_COMMODITIES;
-    const latest = LATEST_NASS_YEAR;
-    const threeYears = new Set([latest, latest - 1, latest - 2]);
-    const grown = new Set<string>();
-    for (const r of stateData) {
-      if (!threeYears.has(r.year)) continue;
-      if (r.statisticcat_desc !== 'AREA PLANTED') continue;
-      if (!(r.value_num > 0)) continue;
-      if (r.commodity_desc) grown.add(String(r.commodity_desc).toUpperCase());
-    }
-    if (grown.size === 0) return CROP_COMMODITIES;
-    const filtered = CROP_COMMODITIES.filter((c) => {
-      const upper = c.label.toUpperCase();
-      // NASS uses "SOYBEANS" plural; a few commodities drop 's' vs frontend
-      // (peanuts → PEANUT). Check both variants.
-      return grown.has(upper) || grown.has(upper.replace(/S$/, '')) || grown.has(upper + 'S');
-    });
-    return filtered.length > 0 ? filtered : CROP_COMMODITIES;
-  }, [stateCode, stateData]);
+  // Grouped commodity options derived from the loaded dataset (state parquet or
+  // NATIONAL). Includes field crops, fruits & nuts, and vegetables — every crop
+  // with real renderable data in the recent window. Replaces the old
+  // AREA-PLANTED-only filter, which silently dropped all specialty crops (most
+  // report AREA BEARING / PRODUCTION rather than AREA PLANTED).
+  const cropGroups = useMemo(
+    () => deriveCropOptions(stateCode ? stateData : nationalData),
+    [stateCode, stateData, nationalData],
+  );
 
   return (
     <div>
@@ -389,7 +446,7 @@ export default function CropsPage() {
         <CommodityPicker
           selected={filters.commodity || 'corn'}
           onSelect={setCommodity}
-          commodities={grownInStateCommodities}
+          groups={cropGroups}
         />
       </div>
 
@@ -410,8 +467,8 @@ export default function CropsPage() {
       </div>
 
       <BandShell loading={loading} error={error} onRetry={retry}>
-        {/* Band B — Hero KPI row (state-level KPIs) */}
-        <CropHeroRow {...heroData} />
+        {/* Band B — Hero KPI row (adaptive per crop) */}
+        <CropHeroRow cards={heroData.cards} />
 
         {/* Band B2 — Inverted-L: map + drill-down panel. Only shown when a
             state is selected and we successfully loaded county data. */}
@@ -513,17 +570,25 @@ export default function CropsPage() {
           />
         )}
 
-        {/* Band D — Profit + Harvest efficiency side by side */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-8">
-          <ProfitChart
-            data={profitData}
-            commodity={commodityLabel}
-            stateName={stateName}
-            note={profitNote}
-            iowaFallback={profitIowaFallback}
-          />
-          <HarvestEfficiency data={efficiencyData} commodity={commodityLabel} stateName={stateName} />
-        </div>
+        {/* Band D — Profit + Harvest efficiency. Both rely on ERS cost data and
+            planted/harvested acres, which exist for field crops but not most
+            specialty crops, so render only the panels that have data. */}
+        {(profitData.length > 0 || efficiencyData.length > 0) && (
+          <div className={`grid grid-cols-1 ${profitData.length > 0 && efficiencyData.length > 0 ? 'lg:grid-cols-2' : ''} gap-4 mb-8`}>
+            {profitData.length > 0 && (
+              <ProfitChart
+                data={profitData}
+                commodity={commodityLabel}
+                stateName={stateName}
+                note={profitNote}
+                iowaFallback={profitIowaFallback}
+              />
+            )}
+            {efficiencyData.length > 0 && (
+              <HarvestEfficiency data={efficiencyData} commodity={commodityLabel} stateName={stateName} />
+            )}
+          </div>
+        )}
 
         {/* Band E — Crop progress / condition strip (seasonal) */}
         <CropProgressStrip
