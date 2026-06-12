@@ -43,6 +43,11 @@ from backend.etl.common import get_sync_session
 
 logger = logging.getLogger(__name__)
 
+# Max corrective passes the reviser gets before the fact-check gate is final.
+# Each pass is one Sonnet call + one re-check; 2 is enough to clear the common
+# case (a single inconsistent derived figure) without unbounded cost.
+MAX_REVISIONS = 2
+
 
 def _setup_logging() -> None:
     logging.basicConfig(
@@ -165,28 +170,57 @@ def _step_writer(ctx: StepCtx) -> None:
 def _step_fact_check(ctx: StepCtx, *, dry_run: bool = False) -> None:
     if ctx.draft is None or ctx.dossier is None:
         raise RuntimeError("fact_check: draft or dossier missing")
+    from backend.agent.reviser import revise_draft
+
     ctx.fact_result = fact_check(
         ctx.draft.markdown, dossier=ctx.dossier, stats=ctx.stats
     )
-    # Always persist the fact-check report on dry-runs so the operator can
-    # iterate on writer prompt + dossier structure.
-    if dry_run:
-        import json as _json
-        payload = {
-            "passed": ctx.fact_result.passed,
-            "issues": [
-                {
-                    "severity": i.severity, "source": i.source,
-                    "detail": i.detail, "quote": i.quote,
-                }
-                for i in ctx.fact_result.all_issues
-            ],
-        }
-        _save_dry_run_artifact(ctx, "last_factcheck.json", _json.dumps(payload, indent=2))
+
+    # Reviser loop: when the gate flags major (blocking) issues, hand the draft
+    # plus the flagged claims plus the dossier to the corrections editor, then
+    # re-check. The reviser is grounded in dossier numbers only, so it corrects
+    # or drops bad figures rather than inventing new ones. Bounded retries keep
+    # cost predictable; if it still fails we fall through to the gate below.
+    revisions = 0
+    while not ctx.fact_result.passed and revisions < MAX_REVISIONS:
+        revisions += 1
+        majors = ctx.fact_result.major_issues
+        logger.info(
+            "fact_check: %d major issue(s); reviser pass %d/%d (%s)",
+            len(majors), revisions, MAX_REVISIONS,
+            "; ".join(m.detail for m in majors[:3]),
+        )
+        ctx.draft = revise_draft(
+            ctx.draft, ctx.fact_result, dossier=ctx.dossier, stats=ctx.stats
+        )
+        _save_dry_run_artifact(ctx, "last_draft.md", ctx.draft.markdown)
+        ctx.fact_result = fact_check(
+            ctx.draft.markdown, dossier=ctx.dossier, stats=ctx.stats
+        )
+    if revisions and ctx.fact_result.passed:
+        logger.info("fact_check: passed after %d reviser pass(es)", revisions)
+
+    # Persist the fact-check report (and the possibly-revised draft) so the
+    # operator can always inspect the final gate decision, dry-run or not.
+    import json as _json
+    payload = {
+        "passed": ctx.fact_result.passed,
+        "revisions": revisions,
+        "issues": [
+            {
+                "severity": i.severity, "source": i.source,
+                "detail": i.detail, "quote": i.quote,
+            }
+            for i in ctx.fact_result.all_issues
+        ],
+    }
+    _save_dry_run_artifact(ctx, "last_factcheck.json", _json.dumps(payload, indent=2))
+
     if not ctx.fact_result.passed:
         majors = ctx.fact_result.major_issues
         msg = (
-            f"fact_check failed with {len(majors)} major issue(s): "
+            f"fact_check failed after {revisions} reviser pass(es) with "
+            f"{len(majors)} major issue(s): "
             + "; ".join(m.detail for m in majors[:3])
         )
         if dry_run:
@@ -194,7 +228,19 @@ def _step_fact_check(ctx: StepCtx, *, dry_run: bool = False) -> None:
             # fact-check report is the diagnostic.
             logger.warning("DRY RUN: %s (continuing to publisher noop)", msg)
             return
-        raise RuntimeError(msg)
+        # Surface-with-annotation: in draft mode (force_manual, or the trust
+        # streak not yet earned) a human approves every issue, so a residual
+        # flag the reviser could not auto-clear should annotate the draft, not
+        # discard the whole run. The publisher attaches the issues (S3 sidecar +
+        # Slack) and stages a draft for review. Only the auto-publish path (no
+        # human in the loop) hard-blocks on a failed gate.
+        from backend.agent.publisher import should_auto_publish
+
+        if should_auto_publish():
+            raise RuntimeError(
+                msg + " [auto-publish gate: refusing to publish unverified content]"
+            )
+        logger.warning("%s — surfacing as annotated draft for manual review", msg)
 
 
 def _save_dry_run_artifact(ctx: StepCtx, name: str, content: str) -> None:

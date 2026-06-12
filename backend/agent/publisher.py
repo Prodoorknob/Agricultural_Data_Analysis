@@ -124,6 +124,12 @@ def stage_issue(
     for chart_id, png_bytes in chart_pngs.items():
         _upload_bytes(draft_prefix + f"{chart_id}.png", png_bytes, "image/png")
 
+    # Surface the fact-check verdict alongside the draft so a reviewer can see
+    # any residual flags the reviser could not auto-clear (a draft can be staged
+    # with open flags in manual mode; the auto-publish path never reaches here
+    # with a failing check).
+    _upload_factcheck(draft_prefix, fact_check)
+
     one_shot_token: str | None = None
     final_prefix = draft_prefix
     if auto:
@@ -148,6 +154,9 @@ def stage_issue(
             cost_usd=stats.cost_usd,
             n_tool_calls=stats.n_tool_calls,
             one_shot_token=one_shot_token or "",
+            fact_issues=[
+                f"{i.severity}: {i.detail}" for i in fact_check.major_issues
+            ],
         )
 
     return StageResult(
@@ -418,6 +427,31 @@ def _upload_bytes(key: str, data: bytes, content_type: str) -> None:
 
 def _upload_markdown(key: str, markdown: str) -> None:
     _upload_bytes(key, markdown.encode("utf-8"), "text/markdown; charset=utf-8")
+
+
+def _upload_factcheck(prefix: str, fact_check: CheckResult) -> None:
+    """Write a factcheck.json sidecar next to the draft markdown in S3.
+
+    Durable record of the gate decision; the /insights/draft reader can render
+    these as inline annotations for the human approver.
+    """
+    payload = {
+        "passed": fact_check.passed,
+        "issues": [
+            {
+                "severity": i.severity,
+                "source": i.source,
+                "detail": i.detail,
+                "quote": i.quote,
+            }
+            for i in fact_check.all_issues
+        ],
+    }
+    _upload_bytes(
+        prefix + "factcheck.json",
+        json.dumps(payload, indent=2).encode("utf-8"),
+        "application/json",
+    )
 
 
 # ---------------------------------------------------------------------------

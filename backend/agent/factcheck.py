@@ -117,7 +117,7 @@ _TOKEN_PATTERNS: list[tuple[re.Pattern, str]] = [
      "year"),
     (re.compile(rf"({_SIGN}\d{{1,3}}(?:,\d{{3}})*(?:\.\d+)?)\s*(million|billion|M|B|thousand|K)\s*(?:acres|bushels|tons|head|metric tons|mt)\b", re.IGNORECASE),
      "scaled_count"),
-    (re.compile(rf"({_SIGN}\d{{1,3}}(?:,\d{{3}})*(?:\.\d+)?)\s*(?:million|billion|M|B|thousand|K)\b", re.IGNORECASE),
+    (re.compile(rf"({_SIGN}\d{{1,3}}(?:,\d{{3}})*(?:\.\d+)?)\s*(million|billion|M|B|thousand|K)\b", re.IGNORECASE),
      "scaled_number"),
     (re.compile(rf"({_SIGN}\d{{1,3}}(?:,\d{{3}})*\.\d+)"),
      "decimal"),
@@ -213,10 +213,19 @@ def _numeric_check(markdown: str, dossier: FullDossier) -> list[CheckIssue]:
     """Match every numeric token in the markdown to a dossier token."""
     md_tokens = _extract_tokens(markdown)
     dossier_tokens = _dossier_tokens(dossier)
+    magnitudes = _magnitude_pool(dossier_tokens)
 
     issues: list[CheckIssue] = []
     for tok in md_tokens:
         if _has_match(tok, dossier_tokens):
+            continue
+        # Not a verbatim match. Before flagging, check whether it is a correctly
+        # *derived* figure: a gap, sum, ratio, %-change, or %-of two dossier
+        # numbers (e.g. "a gap of 1.19M" = 6.24M - 5.05M). Such numbers never
+        # appear verbatim in the dossier, so the exact matcher misses them even
+        # though they are fully supported. Accepting them removes a whole class
+        # of false-positive failures that no reviser pass can fix.
+        if _is_derivable(tok, magnitudes):
             continue
         # Unmatched.
         # Year tokens are common false positives for run-of-mill prose
@@ -232,6 +241,73 @@ def _numeric_check(markdown: str, dossier: FullDossier) -> list[CheckIssue]:
             )
         )
     return issues
+
+
+def _magnitude_pool(dossier_tokens: list[dict[str, Any]]) -> list[float]:
+    """Distinct non-zero, non-year magnitudes from the dossier.
+
+    Unit-agnostic on purpose: the tokenizer assigns "6.24 million acres" and
+    "6.24 million" to different canonical units (count vs number), so a
+    derivation check keyed on units would miss valid pairings. Years are
+    excluded so they cannot spuriously satisfy ratio/percent derivations.
+    """
+    mags: list[float] = []
+    for d in dossier_tokens:
+        if d["unit"] == "year":
+            continue
+        v = float(d["value"])
+        if v == 0:
+            continue
+        if not any(abs(v - m) <= abs(m) * 1e-6 for m in mags):
+            mags.append(v)
+    return mags
+
+
+def _is_derivable(tok: dict[str, Any], magnitudes: list[float]) -> bool:
+    """True if tok's value is a common analyst derivation of two dossier
+    magnitudes within tolerance. Scoped by the token's unit so the check stays
+    tight (a difference for magnitudes, a %-change/%-of for percents, a quotient
+    for ratios) rather than becoming a match-anything escape hatch.
+    """
+    unit = tok["unit"]
+    if unit == "year":
+        return False
+    av = abs(tok["value"])
+    if av == 0:
+        return False
+    tol = 0.05 if tok.get("fuzzy") else 0.02
+
+    def _ops(a: float, b: float) -> list[float]:
+        if unit == "percent":
+            out: list[float] = []
+            if b != 0:
+                out.append((a - b) / b * 100.0)  # % change
+                out.append(a / b * 100.0)        # % of
+            if a != 0:
+                out.append((a - b) / a * 100.0)
+            return out
+        if unit == "ratio":
+            return [a / b] if b != 0 else []
+        if unit == "percentage_points":
+            return [abs(a - b)]
+        # magnitude units (number/count/dollars/decimal/yields): gap, sum, ratio
+        out = [abs(a - b), a + b]
+        if b != 0:
+            out.append(a / b)
+        return out
+
+    n = len(magnitudes)
+    for i in range(n):
+        a = magnitudes[i]
+        for j in range(n):
+            if i == j:
+                continue
+            for c in _ops(a, magnitudes[j]):
+                if c == 0:
+                    continue
+                if abs(abs(c) - av) / av <= tol:
+                    return True
+    return False
 
 
 def _has_match(tok: dict[str, Any], dossier: list[dict[str, Any]]) -> bool:

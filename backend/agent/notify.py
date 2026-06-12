@@ -106,15 +106,20 @@ def notify_draft_ready(
     cost_usd: float,
     n_tool_calls: int,
     one_shot_token: str,
+    fact_issues: list[str] | None = None,
 ) -> NotifyResult:
     """Slack ping when a draft is ready for human review.
 
     Includes a magic-link URL with the one-shot token (§9.3) — clicking
     sets the signed cookie that auths /insights/draft/<slug>.
+
+    `fact_issues`, when non-empty, are residual fact-check flags the reviser
+    could not auto-clear; they are listed in the ping so the approver knows
+    exactly what to verify before clicking Approve.
     """
     settings = get_settings()
     base = settings.PUBLIC_BASE_URL.rstrip("/")
-    draft_url = f"{base}/insights/draft/{slug}?t={one_shot_token}"
+    draft_url = f"{base}/insights/draft/{slug}/auth?t={one_shot_token}"
 
     blocks = [
         {
@@ -145,6 +150,19 @@ def notify_draft_ready(
             ],
         },
     ]
+    if fact_issues:
+        flagged = "\n".join(f"• {line}" for line in fact_issues[:8])
+        # Insert before the actions block so the buttons stay at the bottom.
+        blocks.insert(-1, {
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": (
+                    "*Please verify before approving* — fact-check flags the "
+                    f"reviser could not auto-clear:\n{flagged}"
+                ),
+            },
+        })
     slack_ok, slack_err = _post_slack(blocks, f"FieldPulse draft ready: {headline}")
     return NotifyResult(slack_ok=slack_ok, slack_error=slack_err, email_ok=True, email_error=None)
 
