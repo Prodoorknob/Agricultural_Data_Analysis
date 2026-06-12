@@ -47,7 +47,9 @@ export async function GET(
     sameSite: 'lax',
     secure: process.env.NODE_ENV === 'production',
     maxAge: 60 * 60 * 24 * COOKIE_TTL_DAYS,
-    path: '/insights',
+    // Site-wide so the cookie also reaches the /api/insights/{approve,reject}
+    // routes (a /insights-scoped cookie would not be sent there).
+    path: '/',
   });
   return res;
 }
