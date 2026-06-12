@@ -82,7 +82,10 @@ export async function setDraftSession(session: DraftSession): Promise<void> {
     sameSite: 'lax',
     secure: process.env.NODE_ENV === 'production',
     maxAge: 60 * 60 * 24 * COOKIE_TTL_DAYS,
-    path: '/insights',
+    // Site-wide path: the reader lives under /insights but the approve/reject
+    // API routes are under /api/insights, so a /insights-scoped cookie would
+    // not be sent to them (browser path-match), breaking the action buttons.
+    path: '/',
   });
 }
 
