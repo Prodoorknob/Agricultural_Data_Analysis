@@ -26,6 +26,7 @@ HARD RULES
 4. Never use em dashes. Use commas, periods, or parentheses.
 5. Tone semantics: "positive" = supportive/expanding, "negative" = contracting/stress, "harvest" = neutral-notable. Default when unsure.
 6. Captions and labels are plain English for farmers, not model jargon.
+7. Be economical: captions under 15 words, subtitles under 12, at most 2 charts per figure. The whole JSON response must stay compact enough to complete; a truncated response is discarded entirely.
 
 EXAMPLE (abridged)
 Input prose block [1] is the dek; the lead story is a North Dakota wheat acreage contraction with chart_1 = trend_forecast data.

@@ -499,7 +499,11 @@ def _call_designer(
             raw = call_json(
                 system=system,
                 user=msg,
-                max_tokens=3000,
+                # Generous cap: a 3-story issue with populated chart series
+                # runs ~4-5k output tokens; truncation mid-JSON is unparseable
+                # and a same-cap retry cannot fix it (seen on the first prod
+                # run at 3000).
+                max_tokens=8192,
                 stats=stats,
                 schema_hint=_DESIGN_SCHEMA_HINT,
             )
