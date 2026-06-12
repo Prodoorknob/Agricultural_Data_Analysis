@@ -17,6 +17,10 @@
  *   - `{{chart_N}}` placeholders are detected and rendered as a styled
  *     block, even when the publisher hasn't resolved them to images yet
  *     (e.g. in the dev preview route).
+ *
+ * NOTE: the parsing + watch heuristics here are mirrored in Python by
+ * backend/agent/composer.py (parse_markdown_blocks) for the IssueSpec
+ * publishing path. Keep the two in sync when changing either.
  */
 
 import React from 'react';

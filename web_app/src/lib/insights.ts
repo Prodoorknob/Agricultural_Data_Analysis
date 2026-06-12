@@ -8,6 +8,7 @@
 
 import { cookies } from 'next/headers';
 import { createHmac, timingSafeEqual } from 'crypto';
+import type { IssueSpec } from '@/components/insights/model/types';
 
 export const COOKIE_NAME = 'fp_draft_auth';
 const COOKIE_TTL_DAYS = 7;
@@ -136,6 +137,24 @@ export async function fetchIssueMarkdown(
     const res = await fetch(url, { cache: 'no-store' });
     if (!res.ok) return null;
     return await res.text();
+  } catch {
+    return null;
+  }
+}
+
+export async function fetchIssueSpec(
+  slug: string,
+  options: { draft?: boolean } = {}
+): Promise<IssueSpec | null> {
+  // Issues that predate the composer step have no spec; the backend 404s
+  // and the caller falls back to the markdown renderer.
+  try {
+    const url =
+      `${backendBaseUrl()}/api/v1/agent/spec/${encodeURIComponent(slug)}` +
+      (options.draft ? '?draft=1' : '');
+    const res = await fetch(url, { cache: 'no-store' });
+    if (!res.ok) return null;
+    return (await res.json()) as IssueSpec;
   } catch {
     return null;
   }

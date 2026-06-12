@@ -11,6 +11,8 @@ import fs from 'fs';
 import { notFound } from 'next/navigation';
 import IssueRenderer from '@/components/insights/IssueRenderer';
 import IssueMeta from '@/components/insights/IssueMeta';
+import ModelIssue from '@/components/insights/model/ModelIssue';
+import type { IssueSpec } from '@/components/insights/model/types';
 
 export const dynamic = 'force-dynamic';
 
@@ -21,6 +23,7 @@ export const metadata = {
 
 async function loadDraft(): Promise<{
   markdown: string;
+  spec: IssueSpec | null;
   factcheck: { passed: boolean; issues: Array<{ severity: string; source: string; detail: string }> } | null;
   mtime: string;
 } | null> {
@@ -30,6 +33,7 @@ async function loadDraft(): Promise<{
     const root = path.resolve(process.cwd(), '..');
     const draftPath = path.join(root, 'backend', 'agent', 'data', 'last_draft.md');
     const factPath = path.join(root, 'backend', 'agent', 'data', 'last_factcheck.json');
+    const specPath = path.join(root, 'backend', 'agent', 'data', 'last_spec.json');
     const markdown = await fs.promises.readFile(draftPath, 'utf-8');
     const stat = await fs.promises.stat(draftPath);
     let factcheck = null;
@@ -39,7 +43,19 @@ async function loadDraft(): Promise<{
     } catch {
       // factcheck.json optional
     }
-    return { markdown, factcheck, mtime: stat.mtime.toISOString() };
+    let spec: IssueSpec | null = null;
+    try {
+      // Staleness guard: the reviser can rewrite last_draft.md after an
+      // aborted run left an old spec behind. Only trust the spec when it is
+      // at least as new as the draft it was composed from.
+      const specStat = await fs.promises.stat(specPath);
+      if (specStat.mtime >= stat.mtime) {
+        spec = JSON.parse(await fs.promises.readFile(specPath, 'utf-8'));
+      }
+    } catch {
+      // last_spec.json optional
+    }
+    return { markdown, spec, factcheck, mtime: stat.mtime.toISOString() };
   } catch {
     return null;
   }
@@ -55,7 +71,8 @@ export default async function PreviewPage() {
         <div>
           <span className="fp-insights-draft-pill">PREVIEW</span>{' '}
           <span className="fp-insights-draft-meta">
-            local dry-run draft · last modified{' '}
+            local dry-run draft · rendered from{' '}
+            {draft.spec ? 'spec (composer)' : 'markdown'} · last modified{' '}
             {new Date(draft.mtime).toLocaleString('en-US', {
               dateStyle: 'medium',
               timeStyle: 'short',
@@ -80,7 +97,11 @@ export default async function PreviewPage() {
           </ul>
         </details>
       )}
-      <IssueRenderer markdown={draft.markdown} />
+      {draft.spec ? (
+        <ModelIssue spec={draft.spec} />
+      ) : (
+        <IssueRenderer markdown={draft.markdown} />
+      )}
       <IssueMeta
         run_date={draft.mtime}
         cost_usd={0.5}

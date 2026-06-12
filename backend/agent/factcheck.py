@@ -393,6 +393,14 @@ def _llm_critique(
     return issues
 
 
+# Public aliases for the composer's numeric guard (backend/agent/composer.py).
+extract_tokens = _extract_tokens
+dossier_tokens = _dossier_tokens
+has_match = _has_match
+is_derivable = _is_derivable
+magnitude_pool = _magnitude_pool
+
+
 def _dossier_summary(dossier: FullDossier) -> str:
     out: list[str] = []
     for story in dossier.all():

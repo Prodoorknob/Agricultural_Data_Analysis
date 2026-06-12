@@ -89,6 +89,7 @@ def stage_issue(
     fact_check: CheckResult,
     stats: CallStats,
     duration_sec: int,
+    spec: dict[str, Any] | None = None,
 ) -> StageResult:
     """Top-level entrypoint after fact-check passes.
 
@@ -129,6 +130,23 @@ def stage_issue(
     # with open flags in manual mode; the auto-publish path never reaches here
     # with a failing check).
     _upload_factcheck(draft_prefix, fact_check)
+
+    # Typed IssueSpec (chart-enabled reader). Meta is finalized here because
+    # cost/duration aren't known at compose time. Must land before promote()
+    # below so the auto-publish copy picks it up.
+    if spec is not None:
+        spec = dict(spec)
+        spec["meta"] = {
+            **(spec.get("meta") or {}),
+            "cost_usd": round(stats.cost_usd, 4),
+            "duration_sec": duration_sec,
+            "n_tool_calls": stats.n_tool_calls,
+        }
+        _upload_bytes(
+            draft_prefix + f"{slug}.spec.json",
+            json.dumps(spec, indent=2).encode("utf-8"),
+            "application/json",
+        )
 
     one_shot_token: str | None = None
     final_prefix = draft_prefix
@@ -551,6 +569,21 @@ def _render_one(spec: dict[str, Any]) -> bytes:
     data = spec.get("data") or []
     x_label = spec.get("x", "")
     y_label = spec.get("y", "")
+
+    # Adapt the IssueSpec-era researcher kinds so the PNG fallback stays
+    # useful when the composer step doesn't produce a spec.
+    if kind == "bars":
+        kind = "bar"
+        data = [{"x": d.get("label"), "y": d.get("value")} for d in data]
+    elif kind == "trend_forecast":
+        kind = "line"
+        data = [
+            {"x": p.get("year"), "y": p.get("value")}
+            for p in (spec.get("actuals") or [])
+        ]
+        fc = spec.get("forecast") or {}
+        if fc.get("year") is not None and fc.get("p50") is not None:
+            data.append({"x": fc["year"], "y": fc["p50"]})
 
     fig, ax = plt.subplots(figsize=(7, 4), dpi=150)
 

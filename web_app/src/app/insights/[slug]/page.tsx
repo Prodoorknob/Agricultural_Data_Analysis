@@ -1,7 +1,8 @@
 import { notFound } from 'next/navigation';
-import { fetchIssueMarkdown, fetchRunBySlug } from '@/lib/insights';
+import { fetchIssueMarkdown, fetchIssueSpec, fetchRunBySlug } from '@/lib/insights';
 import IssueRenderer from '@/components/insights/IssueRenderer';
 import IssueMeta from '@/components/insights/IssueMeta';
+import ModelIssue from '@/components/insights/model/ModelIssue';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,14 +23,19 @@ export default async function IssuePage({ params }: Params) {
   if (!run || run.status !== 'published') {
     notFound();
   }
-  const markdown = await fetchIssueMarkdown(slug);
-  if (!markdown) {
+  // Spec-rendered issues (composer era) carry their charts inline; older
+  // issues fall back to markdown with PNG chart proxies.
+  const [spec, markdown] = await Promise.all([
+    fetchIssueSpec(slug),
+    fetchIssueMarkdown(slug),
+  ]);
+  if (!spec && !markdown) {
     notFound();
   }
 
   // Rewrite chart URLs from the publisher's `/insights/charts/<slug>/<id>.png`
   // to our backend proxy that streams from S3.
-  const rewritten = markdown.replace(
+  const rewritten = (markdown ?? '').replace(
     /\/insights\/charts\/(?:draft\/)?([^/]+)\/([^)]+\.png)/g,
     (_match, chartSlug, name) =>
       `${process.env.NEXT_PUBLIC_BACKEND_BASE_URL || ''}/api/v1/agent/chart/${chartSlug}/${name}`
@@ -43,7 +49,7 @@ export default async function IssuePage({ params }: Params) {
         </a>
         <span className="fp-insights-nav-slug">{slug}</span>
       </nav>
-      <IssueRenderer markdown={rewritten} />
+      {spec ? <ModelIssue spec={spec} /> : <IssueRenderer markdown={rewritten} />}
       <IssueMeta
         run_date={run.run_date}
         cost_usd={run.cost_usd}

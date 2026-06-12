@@ -9,6 +9,8 @@ Endpoints (all under /api/v1/agent):
                                    return a short-lived signed token suitable
                                    for the frontend cookie.
     GET  /chart/{slug}/{name}    - Proxy chart PNG from S3 (draft or published).
+    GET  /spec/{slug}            - Proxy the typed IssueSpec JSON from S3
+                                   (404 when an issue predates the composer).
 
 The promote/reject endpoints expect a server-side shared secret in the
 `X-Agent-Token` header (FIELDPULSE_DRAFT_SECRET). The Next.js API route
@@ -233,6 +235,46 @@ async def markdown_proxy(
         content=obj["Body"].read(),
         media_type="text/markdown; charset=utf-8",
     )
+
+
+@router.get("/spec/{slug}")
+async def spec_proxy(
+    slug: str,
+    draft: bool = Query(False),
+    db: AsyncSession = Depends(get_db),
+):
+    """Stream the typed IssueSpec JSON for the given slug from S3.
+
+    /api/v1/agent/spec/<slug>            → published path
+    /api/v1/agent/spec/<slug>?draft=1    → draft path
+
+    404s for issues that predate the composer step (the frontend falls
+    back to the markdown renderer). Same trust boundary as the markdown
+    proxy: the Next.js layer validates draft sessions.
+    """
+    settings = get_settings()
+    if "/" in slug or "\\" in slug or ".." in slug:
+        raise HTTPException(400, "invalid slug")
+    if draft:
+        key = f"{settings.NEWSLETTER_S3_PREFIX}draft/{slug}/{slug}.spec.json"
+    else:
+        row = (
+            await db.execute(
+                text("SELECT newsletter_path FROM agent_runs WHERE slug = :s"),
+                {"s": slug},
+            )
+        ).first()
+        if row is None or not row.newsletter_path:
+            raise HTTPException(404, "no published path for slug")
+        key = f"{row.newsletter_path}{slug}.spec.json"
+
+    s3 = boto3.client("s3", region_name=settings.AWS_REGION)
+    try:
+        obj = s3.get_object(Bucket=settings.S3_BUCKET, Key=key)
+    except Exception as exc:  # noqa: BLE001
+        logger.info("spec fetch %s failed: %s", key, exc)
+        raise HTTPException(404, "spec not found")
+    return Response(content=obj["Body"].read(), media_type="application/json")
 
 
 @router.get("/chart/{slug}/{name}")

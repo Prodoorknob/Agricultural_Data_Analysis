@@ -7,7 +7,9 @@ Pipeline (§3 of analyst-agent-tech-spec.md):
     4. Researcher           (LLM with tools, capped at 30 calls)
     5. Writer               (LLM, dossier only)
     6. FactChecker          (deterministic + LLM critique)
-    7. Publisher            (deterministic — S3, DB, Slack)
+    7. Composer             (deterministic prose + one LLM design call;
+                             best-effort — failure falls back to markdown)
+    8. Publisher            (deterministic — S3, DB, Slack)
 
 Failure mode: each step is wrapped in try/except. On exception we record
 `agent_runs.failed_at_step`, emit a Slack + email failure notification,
@@ -26,7 +28,10 @@ import time
 import traceback
 from dataclasses import dataclass, field
 from datetime import date
-from typing import Any, Callable
+from typing import TYPE_CHECKING, Any, Callable
+
+if TYPE_CHECKING:
+    from backend.agent.composer import ComposedIssue
 
 from sqlalchemy import text
 
@@ -68,6 +73,7 @@ class StepCtx:
     dossier: FullDossier | None = None
     draft: WrittenDraft | None = None
     fact_result: CheckResult | None = None
+    composed: "ComposedIssue | None" = None
     stage: StageResult | None = None
     started_at: float = field(default_factory=time.time)
 
@@ -97,6 +103,7 @@ def run(as_of_date: date | None = None, *, dry_run: bool = False) -> int:
         ("researcher", _step_researcher),
         ("writer", _step_writer),
         ("fact_checker", lambda c: _step_fact_check(c, dry_run=dry_run)),
+        ("composer", _step_compose),
         ("publisher", lambda c: _step_publish(c, dry_run=dry_run)),
     ]
 
@@ -243,6 +250,41 @@ def _step_fact_check(ctx: StepCtx, *, dry_run: bool = False) -> None:
         logger.warning("%s — surfacing as annotated draft for manual review", msg)
 
 
+def _step_compose(ctx: StepCtx) -> None:
+    """Assemble the typed IssueSpec from the fact-checked draft.
+
+    Best-effort by design: any composer failure logs and leaves
+    ctx.composed = None so the publisher falls back to the markdown + PNG
+    path. The inner try/except matters — letting an exception reach the
+    step loop would call _record_failure and abort the whole run.
+    """
+    if ctx.draft is None or ctx.dossier is None:
+        raise RuntimeError("compose: draft or dossier missing")
+    try:
+        from backend.agent.composer import compose_issue
+
+        ctx.composed = compose_issue(
+            ctx.draft, dossier=ctx.dossier, as_of_date=ctx.as_of, stats=ctx.stats
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("composer failed (%s); will publish markdown-only", exc)
+        ctx.composed = None
+        return
+    if ctx.composed is None:
+        logger.info("composer produced no spec; will publish markdown-only")
+        return
+    if ctx.composed.dropped:
+        logger.info(
+            "composer dropped %d rich block(s): %s",
+            len(ctx.composed.dropped), "; ".join(ctx.composed.dropped[:3]),
+        )
+    import json as _json
+
+    _save_dry_run_artifact(
+        ctx, "last_spec.json", _json.dumps(ctx.composed.spec, indent=2)
+    )
+
+
 def _save_dry_run_artifact(ctx: StepCtx, name: str, content: str) -> None:
     """Best-effort write of a dry-run intermediate to backend/agent/data/."""
     try:
@@ -278,6 +320,7 @@ def _step_publish(ctx: StepCtx, *, dry_run: bool) -> None:
         fact_check=ctx.fact_result,
         stats=ctx.stats,
         duration_sec=duration,
+        spec=ctx.composed.spec if ctx.composed else None,
     )
 
 

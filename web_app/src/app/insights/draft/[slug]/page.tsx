@@ -1,6 +1,7 @@
 import { notFound, redirect } from 'next/navigation';
-import { fetchIssueMarkdown, readDraftSession } from '@/lib/insights';
+import { fetchIssueMarkdown, fetchIssueSpec, readDraftSession } from '@/lib/insights';
 import IssueRenderer from '@/components/insights/IssueRenderer';
+import ModelIssue from '@/components/insights/model/ModelIssue';
 import DraftActions from './DraftActions';
 
 export const dynamic = 'force-dynamic';
@@ -42,14 +43,17 @@ export default async function DraftPage({ params, searchParams }: Params) {
     );
   }
 
-  const markdown = await fetchIssueMarkdown(slug, { draft: true });
-  if (!markdown) {
+  const [spec, markdown] = await Promise.all([
+    fetchIssueSpec(slug, { draft: true }),
+    fetchIssueMarkdown(slug, { draft: true }),
+  ]);
+  if (!spec && !markdown) {
     notFound();
   }
 
   // Rewrite chart URLs to the FastAPI proxy with ?draft=1 (charts live in
   // newsletters/draft/<slug>/ until promote).
-  const rewritten = markdown.replace(
+  const rewritten = (markdown ?? '').replace(
     /\/insights\/charts\/(?:draft\/)?([^/]+)\/([^)]+\.png)/g,
     (_match, chartSlug, name) =>
       `${process.env.NEXT_PUBLIC_BACKEND_BASE_URL || ''}/api/v1/agent/chart/${chartSlug}/${name}?draft=1`
@@ -66,7 +70,7 @@ export default async function DraftPage({ params, searchParams }: Params) {
         </div>
         <DraftActions slug={slug} />
       </header>
-      <IssueRenderer markdown={rewritten} />
+      {spec ? <ModelIssue spec={spec} /> : <IssueRenderer markdown={rewritten} />}
     </main>
   );
 }

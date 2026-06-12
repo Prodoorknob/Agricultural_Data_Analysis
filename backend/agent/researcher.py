@@ -121,7 +121,9 @@ def _research_one(
         user=user_msg,
         tools=tool_specs,
         tool_handlers=tool_handlers,
-        max_tokens=2048,
+        # 3000 (was 2048): fully populated chart series in CHART_SPECS are
+        # single-line JSON; truncation mid-line silently drops the chart.
+        max_tokens=3000,
         max_tool_calls=story_cap,
         stats=stats,
     )

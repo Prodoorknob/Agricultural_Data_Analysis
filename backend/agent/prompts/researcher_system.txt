@@ -39,6 +39,14 @@ After your tool calls, finalize by returning a single text block (NOT JSON) stru
   - [one sentence about the next 1-2 weeks]
 
   CHART_SPECS (optional, max 2)
-  - { "id": "chart_1", "kind": "line"|"bar"|"choropleth", "title": "...", "x": "...", "y": "...", "data": [...] }
+  Each spec is ONE JSON object on a SINGLE line (the runtime parses line by line). Every spec needs "id" ("chart_1", "chart_2") and "kind". Use one of these three kinds, with the data series FULLY POPULATED from your tool results:
+  - { "id": "chart_1", "kind": "bars", "title": "...", "unit": "M acres", "value_format": "abs", "data": [{"label": "Model", "value": 6.24}, {"label": "USDA", "value": 5.05}] }
+    (value_format "abs" for magnitudes, "signed_pct" when values are +/- percent changes)
+  - { "id": "chart_1", "kind": "trend_forecast", "title": "...", "unit": "M acres", "actuals": [{"year": 2021, "value": 6.92}, {"year": 2022, "value": 6.55}], "forecast": {"year": 2026, "p50": 5.16, "p10": 4.57, "p90": 5.75} }
+    (actuals = the historical series you pulled, forecast = the model row; include every year you have)
+  - { "id": "chart_1", "kind": "region_map", "title": "...", "metric_label": "2026 forecast vs 2021-24 avg", "unit": "M ac", "states": [{"fips": "38", "forecast": 5.16, "baseline": 6.68}] }
+    (2-digit state fips + numbers only; the runtime fills state names. 3+ states or skip the map.)
+
+  CHART RULES: every number in a chart spec must come verbatim from a tool result in this conversation. Do not round beyond what the tool returned, do not interpolate missing years, do not estimate. If you cannot fill a complete series from tool output, omit the chart entirely.
 
 The runtime parses CLAIMS / PEER_CONTEXT / WHAT_TO_WATCH / CHART_SPECS sections, so use them as literal section headers.
