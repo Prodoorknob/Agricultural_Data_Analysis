@@ -7,8 +7,8 @@ aliases:
   - Ag Dashboard
   - Agricultural Dashboard
 owner: Raj Vedire
-status: spec-complete-plus
-last-updated: 2026-04-27
+status: complete-maintenance
+last-updated: 2026-06-12
 tags:
   - project/agricultural-data-analysis
   - domain/agriculture
@@ -34,18 +34,24 @@ production:
 
 # Agricultural Data Analysis (FieldPulse), Master Context
 
-> Single source of truth for project structure, decisions, deployment, modules, conventions, and collaboration preferences. Generated 2026-04-27 by consolidating `CLAUDE.md` + Claude Code memory files.
+> Single source of truth for project structure, decisions, deployment, modules, conventions, and collaboration preferences. Originally generated 2026-04-27; refreshed 2026-06-12 to cover Module 05 (analyst agent), the chart-enabled issue composer, the post-outage service restorations, and the Crops-tab specialty-crop expansion. Project is now **complete and in maintenance mode**.
+
+## Project status: COMPLETE, maintenance mode (2026-06-12)
+
+All five modules are built, deployed, and operating. The project is no longer in active feature development. Work from here is **maintenance only**: keeping the scheduled pipelines and the weekly agent running, applying small fixes, and the optional/deferred cleanup items tracked in [Known limitations and open items]. There is no open roadmap of new modules.
 
 ## TL;DR
 
-FieldPulse is an interactive dashboard for exploring long-term U.S. agriculture trends (USDA QuickStats) and serving model-driven forecasts for commodity prices, planted acreage, and county-level crop yields. Frontend is Next.js 16 on Vercel; backend is FastAPI on EC2 backed by RDS Postgres; ML training runs locally and ships pickles to S3 which the API hot-loads. All four planned modules (M01 dashboard, M02 price, M03 acreage, M04 yield) are spec-complete and deployed; additional artifacts (devpost article, presentations, cloud-arch doc) extend beyond original scope.
+FieldPulse is an interactive dashboard for exploring long-term U.S. agriculture trends (USDA QuickStats) and serving model-driven forecasts for commodity prices, planted acreage, and county-level crop yields, plus a weekly AI analyst agent that writes and publishes an agriculture newsletter. Frontend is Next.js 16 on Vercel; backend is FastAPI on EC2 backed by RDS Postgres; ML training runs locally and ships pickles to S3 which the API hot-loads. All five modules (M01 dashboard, M02 price, M03 acreage, M04 yield, M05 FieldPulse Weekly analyst agent) are complete and deployed. The project is in maintenance mode.
 
-## Status snapshot (2026-04-27)
+## Status snapshot (2026-06-12)
 
-- **Modules shipped:** M01 dashboard, M02 commodity price (18 ensembles), M03 planted acreage (4 ensembles), M04 county yield (60 quantile models).
-- **Frontend rebuild v1:** complete, 6 URL-routed tabs, FieldPulse light-first design system, deployed on Vercel.
-- **Latest commit (`70ea315`, 2026-04-27):** doc refresh + retrained yield artifacts (`model_ver: 2026-04-21`).
-- **Open items:** 4 small uncommitted aquifer-tab tweaks, optional UNCLASSIFIED-county labeling, audit script literal bump (11 commodities to 12), single-county yield endpoint is week-agnostic (cosmetic).
+- **Modules complete:** M01 dashboard, M02 commodity price (18 ensembles), M03 planted acreage (4 ensembles), M04 county yield (60 quantile models), **M05 FieldPulse Weekly analyst agent (live in prod, cron Sun 17:00 CT)**.
+- **Service restorations (post-outage recovery, 2026-06-11/12):** three latent failures that had silently broken core workflows are fixed, see [Service restorations]. Cron is runnable again, price inference writes to `price_forecasts`, and a FieldPulse issue now reaches an approvable draft for the first time.
+- **Agent / Insights:** Module 05 runs the full mood / editor / researcher / writer / fact-check / reviser / compose / publish pipeline. A deterministic **composer** step now emits a typed `IssueSpec` so issues render as live Recharts charts + KPI strips at `/insights` (reference design at `/insights/model`).
+- **Crops tab (2026-06-12, commit `6344c06`):** expanded beyond 11 field crops to fruits, nuts, and vegetables (the served state parquet already carried them); grouped dropdown picker; per-crop adaptive KPIs (yield/production, area planted/harvested/bearing, sales/value of production). Frontend only.
+- **Latest commit (`6344c06`, 2026-06-12):** Crops-tab specialty-crop expansion.
+- **Open items:** maintenance/cleanup only, see [Known limitations and open items]. No feature roadmap.
 - **Out-of-scope deliverables also present locally:** devpost article, V2 pitch deck + speaker notes, yield-forecasting Word report, cloud-architecture doc + diagram, analyst-agent tech spec.
 
 ## What this project is
@@ -63,10 +69,13 @@ Python Pipeline (EC2 cron) -> USDA API -> Parquet -> S3
          |
 FastAPI Backend (EC2, port 8000) -> PostgreSQL (RDS)
          |
-Production: Vercel (frontend) + https://agri-intel.rvedire.com (API)
+FieldPulse Weekly Agent (EC2 cron, Sun 17:00 CT) -> signal board -> LLM pipeline
+         |                                          -> S3 + RDS + Slack -> /insights
+         |
+Production: Vercel (frontend + /insights) + https://agri-intel.rvedire.com (API + /api/v1/agent)
 ```
 
-Local PC trains models, EC2 serves predictions. Cost target ~$22/mo (RDS $15 + EC2 serving $6 + S3/Athena <$1).
+Local PC trains models, EC2 serves predictions and runs the weekly agent. Cost target ~$22/mo (RDS $15 + EC2 serving $6 + S3/Athena <$1); the agent adds ~$0.50 per weekly run in LLM cost.
 
 ## Tech stack
 
@@ -146,11 +155,22 @@ Agricultural_Data_Analysis/
 │   ├── main.py                         # App entry, CORS, lifespan model loading
 │   ├── config.py                       # pydantic-settings
 │   ├── database.py                     # SQLAlchemy async
-│   ├── alembic/                        # 7 migrations
+│   ├── alembic/                        # migrations through 012 (agent tables)
 │   ├── routers/
 │   │   ├── price.py
 │   │   ├── acreage.py
-│   │   └── yield_forecast.py
+│   │   ├── yield_forecast.py
+│   │   └── agent.py                    # /api/v1/agent/* (runs, promote, draft auth, spec)
+│   ├── agent/                          # Module 05 FieldPulse Weekly analyst agent
+│   │   ├── runner.py                   # Orchestrates the 8-step pipeline
+│   │   ├── signal_board.py             # Deterministic 10-source signal scan
+│   │   ├── researcher.py               # Sonnet + 5 SQL-guarded tools
+│   │   ├── factcheck.py                # Tokenizer + Haiku critique
+│   │   ├── reviser.py                  # Corrective check -> revise -> re-check loop
+│   │   ├── composer.py                 # Markdown -> typed IssueSpec (1 design call)
+│   │   ├── issue_spec.py               # Pydantic IssueSpec contract
+│   │   ├── publisher.py                # S3 + RDS + Slack + magic-link tokens
+│   │   └── prompts/                    # System prompts per step
 │   ├── etl/                            # Ingestion scripts
 │   ├── features/                       # Feature engineering per module
 │   ├── models/
@@ -222,6 +242,12 @@ NEXT_PUBLIC_PREDICTION_API_URL=https://agri-intel.rvedire.com
 # Optional pickle signing
 MODEL_SIGNING_KEY=<hmac-secret>
 MODEL_REQUIRE_SIGNED=1     # Refuse unverified loads at startup
+
+# Module 05 FieldPulse agent
+ANTHROPIC_API_KEY=...               # LLM pipeline (Sonnet 4.6 + Haiku 4.5)
+FIELDPULSE_DRAFT_SECRET=...         # Shared secret gating /api/v1/agent promote + reject
+AGENT_TRUST_STREAK_REQUIRED=6       # Approved runs before auto-publish flips on
+# Slack webhook / signing for draft pings also configured on EC2
 ```
 
 ## Data flow
@@ -308,7 +334,29 @@ Wheat gate failure surfaces with EXPERIMENTAL annotation per the surface-with-an
 
 **Endpoints:** `GET /api/v1/predict/yield/`, `/map`, `/history`, `/metadata`, `/accuracy`.
 
-**Known limitation (2026-04-26):** `GET /api/v1/predict/yield/?fips=...&crop=X&year=Y` does not accept `week`. So when the slider on the forecasts tab is at week 5 and the user clicks a county, the right-side card shows the latest stored week (e.g. week 20) for that county. Cosmetic only. Fix: extend `routers/yield_forecast.py::get_forecast` to accept `week: int | None = Query(None)`, filter the `yield_forecasts` query before the latest-week fallback, then thread `&week=${week}` into `useYieldForecast.ts::fetchAll` for the `/?fips=` URL. Hook signature already accepts week.
+**Resolved 2026-05-06:** the single-county yield endpoint is now week-aware. `routers/yield_forecast.py::get_yield_forecast` accepts `week: int | None = Query(None)` and filters `yield_forecasts` to that exact week before the latest-week fallback, so the forecasts-tab slider and county card stay in sync. (Was a cosmetic known-limitation in the 2026-04-27 doc.)
+
+### Module 05: FieldPulse Weekly Analyst Agent
+
+**Spec:** `research/analyst-agent-tech-spec.md` (v0.3). **Status:** live in production, cron Sun 17:00 CT (= 18:00 ET). First scheduled runs validated; the project's flagship "agent" deliverable.
+
+A weekly AI analyst that scans the data warehouse for anomalies, researches the interesting ones, writes a newsletter, fact-checks itself, and publishes to `/insights`. Deterministic where it can be, LLM where it must be.
+
+**Pipeline (8 steps):** `signal_board` (deterministic, 10 anomaly-driven sources: yield, acreage, price, WASDE, weather, exports, trend-break, calendar, plus composites and feature/explainer signals) -> `mood` (Sonnet 4.6, JSON) -> `editor` (Sonnet 4.6, JSON) -> `researcher` (Sonnet 4.6 + 5 SQL-guarded tools, 30-call cap) -> `writer` (Sonnet 4.6) -> `fact-checker` (deterministic tokenizer + Haiku 4.5 critique) -> **reviser** (bounded check -> revise -> re-check, max 2 passes) -> **composer** (deterministic prose conversion + 1 Sonnet design call -> typed `IssueSpec`) -> `publisher` (S3 + RDS + Slack + magic-link tokens). ~$0.50 per run.
+
+**SQL guard (§7.1):** every researcher tool takes a runtime-injected `as_of_date` the LLM cannot override; the SQL tool rejects DML/DDL and unknown tables via sqlglot AST traversal and injects `<col> <= :as_of` predicates per allowlisted table. Point-in-time correctness by construction.
+
+**Composer + IssueSpec (2026-06-12):** prose is **never** touched by an LLM in the composer step. `composer.py::parse_markdown_blocks` is a Python port of the frontend `IssueRenderer.tsx` parsing so spec prose is byte-identical to the fact-checked markdown; the design call only emits rich blocks (one KPI strip, stat callouts, figures whose chart data is copied from the researcher's chart specs). A numeric guard re-verifies every number in rich blocks against the dossier (factcheck tokenizer + scale tolerance + derivation check); ungroundable blocks are dropped, not revised. Degradation chain: composer/designer failure or zero surviving figures -> `spec=None` -> markdown+PNG publish. Contract mirrored in `backend/agent/issue_spec.py` (pydantic) and `web_app/src/components/insights/model/types.ts`. Reference issue at `/insights/model`.
+
+**Trust period:** auto-publish flips on after 6 consecutive `approved` runs with no `failed_at_step` (`AGENT_TRUST_STREAK_REQUIRED`). Until then every Sunday's draft sits in `newsletters/draft/<slug>/` awaiting Slack-pinged approval. `agent_settings` singleton seeds `force_manual=true` as a kill switch.
+
+**DB (alembic 012):** 5 tables, `agent_runs`, `agent_picks`, `agent_mood`, `agent_settings`, `agent_draft_tokens` (one-shot magic-link tokens).
+
+**Endpoints:** `https://agri-intel.rvedire.com/api/v1/agent/*`: `/runs`, `/promote/{id}`, `/reject/{id}`, `/draft/{slug}/auth`, `/markdown/{slug}`, `/chart/{slug}/{name}`, `/spec/{slug}`. Promote + reject gated by `FIELDPULSE_DRAFT_SECRET`.
+
+**Frontend:** `/insights` (public list), `/insights/{slug}` (reader), `/insights/draft/{slug}` (gated reader with Approve/Reject). Renders `ModelIssue` (live Recharts) when a spec exists, falls back to `IssueRenderer` (markdown) otherwise. Signed-cookie auth via one-shot magic-link tokens posted to Slack.
+
+**Known gaps (non-blocking):** `acreage_accuracy` history is only 5 years deep so state-trend signals show 4-year windows instead of the intended 25-year arcs; calibration weights too imbalanced for a useful AUC fit (running on `DEFAULT_WEIGHTS`); `agent_reader_role.sql` defense-in-depth Postgres role not yet applied to RDS (the sqlglot guard is the actual enforcement).
 
 ## Pipeline operations
 
@@ -353,8 +401,9 @@ Per-commodity row deltas: WHEAT 0 to 418,424; HAY +184K; CORN +166K; SOYBEANS +1
 | weekly | `--weekly-exports` | FAS export commitments |
 | annual | `--annual-rma` | RMA Summary of Business |
 | annual | `--annual-crp` | FSA CRP enrollment + expirations |
+| Sunday 5pm CT | `--weekly-fieldpulse` | Module 05 analyst agent (full mood/editor/researcher/writer/factcheck/revise/compose/publish) |
 
-Per-mode `flock` re-exec guard (non-blocking) added in 2026-04-16 hardening pass.
+Per-mode `flock` re-exec guard (non-blocking) added in 2026-04-16 hardening pass. **Note (2026-06-11):** `cron_runner.sh` must keep its executable bit (mode `100755`); it was committed non-executable and every cron invocation hit "Permission denied" until restored in `f0b4a5a`. See [Service restorations].
 
 ### 5 enrichment ingests (ported from Aquifer Watch, 2026-04-21)
 
@@ -444,6 +493,17 @@ Verified end-to-end with Indiana corn 2024: state KPIs (198 bu/ac, 5.2M ac, $4.3
 
 `CountyYieldForecast.tsx` gained a state dropdown + week slider. `YieldChoroplethMap.tsx` accepts `selectedState` (dims out-of-state counties to 0.35 fill-opacity) and `onStateClick` (clicking gray no-data counties filters to that state). New `StateYieldCard.tsx` is the right-panel state aggregate (county count, p50 median/min/max, mean anomaly). Crop/year change resets all selections. Selecting a county auto-syncs `selectedState` to its prefix.
 
+### Crops tab: specialty crops + grouped dropdown picker (2026-06-12, commit `6344c06`)
+
+The Crops tab was hardcoded to 11 field crops, so states like California (whose output is almonds, grapes, lettuce, strawberries) showed mostly empty cards even though the served state parquet already carried FRUIT & TREE NUTS, VEGETABLES, and HORTICULTURE rows. Root cause was frontend-only: the picker filtered on `AREA PLANTED > 0`, which most specialty crops never report (they use AREA BEARING / PRODUCTION). Frontend only, no pipeline or schema change.
+
+- **`processData.ts::deriveCropOptions()`** builds the picker dynamically from the loaded parquet, grouped Field Crops / Fruits & Nuts / Vegetables (HORTICULTURE excluded as $-sales-only), listing only crops with renderable data in the recent window, ordered by economic weight, with a small denylist for NASS catch-all aggregates ("FIELD CROPS, OTHER", "GRAIN", etc.).
+- **`getCommodityStory()`** extended to capture **area bearing** (tree fruits/nuts), **value of production** ($), and a **dominant production unit** (oranges report both TONS and BOXES in the same year; max across both mixed scales).
+- **`CommodityPicker.tsx`** renders the grouped path as **one compact dropdown per group** (too many crops for chips); the flat chip path is preserved for the Market tab.
+- **`CropHeroRow.tsx`** is now an adaptive card list. Yield (native unit) falls back to Production; Area Planted -> Harvested -> Bearing; Sales -> Value of Production. Empty metrics drop out. Profit/efficiency panels hide for crops without ERS cost data.
+
+Verified in preview: CA oranges (348 BOXES/ACRE + area bearing), grapes (8.5 TONS/ACRE + area bearing + sales), lettuce (CWT/ACRE), and IL corn unchanged (no regression). Specialty crops correctly show no county choropleth / profit / forecast (NASS doesn't survey those at county level and the models are row-crop only). `tsc` + production build clean.
+
 ## End-to-end review and hardening (2026-04-16)
 
 Full-project audit produced 20 findings. All non-deferred items fixed in one pass plus two display bugs and a yield retrospective feature. No retraining or schema migrations required.
@@ -468,6 +528,27 @@ Full-project audit produced 20 findings. All non-deferred items fixed in one pas
 ### Deferred (operator decision)
 
 - `.env` rotation: committed values are placeholder-style. Address before public demo.
+
+## Service restorations (post-outage recovery, 2026-06-11/12)
+
+A post-outage recovery pass surfaced three latent failures that had silently prevented core workflows from ever succeeding. All three are fixed and the corresponding services are restored.
+
+### Cron pipeline restored (commit `f0b4a5a`)
+
+`pipeline/cron_runner.sh` had been committed mode `100644` (non-executable), so **every** scheduled cron invocation hit "Permission denied" and exited, meaning none of the daily/weekly/monthly pipelines (market data, WASDE, yield, drought, exports, FieldPulse) ever ran from cron. Fix: set the executable bit so fresh clones/pulls keep it runnable.
+
+### Price inference restored (commit `f0b4a5a`)
+
+`backend/models/inference.py` upserted with `ON CONFLICT (commodity, run_date, horizon_month)`, but the only unique constraint on `price_forecasts` is `uq_price_forecasts` over four columns (`run_date, commodity, horizon_month, model_ver`). Postgres raised `InvalidColumnReference` on every row, so `price_forecasts` stayed empty since the table was created. Never caught because the price ensembles were never deployed to S3/EC2, so inference had no models to insert with. Fix: switch to `ON CONFLICT ON CONSTRAINT uq_price_forecasts`.
+
+### FieldPulse draft-to-approve flow restored (commits `9164226`, `9ecddc1`)
+
+Two months of FieldPulse runs had hard-failed before reaching an approvable draft. Three coupled fixes closed the loop:
+
+- **Reviser corrective loop.** New `backend/agent/reviser.py` + prompt: a corrections editor that takes the draft, the fact-checker's flagged claims, and the dossier, and corrects or drops each bad figure (grounded in dossier numbers only). `runner.py` runs a bounded check -> revise -> re-check loop (max 2 passes).
+- **Fact-checker refinement.** `factcheck.py`: fixed a tokenizer scale bug ("6.24 million" was read as 6.24, the scale word matched but never multiplied) and now accepts correctly-derived numbers (a gap, sum, ratio, %-change, or %-of two dossier values) that never appear verbatim in the dossier. Removes a class of false-positive failures no reviser pass could fix.
+- **Surface-with-annotation in draft mode.** A residual fact-check failure no longer discards the run; the publisher stages the draft with the issues attached (S3 `factcheck.json` sidecar + Slack flag list) for the human approver. Only the auto-publish path still hard-blocks.
+- **Draft magic-link auth wired.** `consumeDraftToken`/`setDraftSession` existed but nothing called them and there was no auth route, so every draft link showed "Draft not authorized". Added `insights/draft/[slug]/auth/route.ts` to redeem the one-shot token and set the signed cookie. The follow-up `9ecddc1` then scoped the `fp_draft_auth` cookie to `/` (was `/insights`) so it also reaches the `/api/insights/{approve,reject}` action routes, which had been returning 401.
 
 ## Conventions
 
@@ -494,15 +575,19 @@ For the **yield** module, when a model fails its baseline gate, surface it in th
 
 ## Known limitations and open items
 
+The project is in maintenance mode; everything below is optional cleanup or a deferred polish item, not a blocker.
+
 | Severity | Item | Where |
 |---|---|---|
-| cosmetic | Single-county yield endpoint is week-agnostic (slider/card mismatch) | `routers/yield_forecast.py::get_forecast` + `useYieldForecast.ts::fetchAll` |
 | optional | 572 UNCLASSIFIED triples in `county_coverage_allowlist.json` | `pipeline/_county_coverage_audit.py` |
 | optional | Audit script literal still says "11 commodities" (runtime adds WHEAT) | `_county_coverage_audit.py:31`, `:445` |
 | deferred | `.env` rotation (placeholder values committed) | `.env` |
 | deferred | Yield interval coverage under-shoots 80% target | `train_yield.py` calibration |
 | low priority | NASS CENSUS 403 residual: 5 states for irrigated overlay | `enrichments/nass_irrigated_county.py` (rerun at concurrency=2) |
 | low priority | IWMS / ERS / EIA enrichments ingested but not yet bound to UI | Water-productivity KPI is the obvious next hook |
+| deferred | Agent `acreage_accuracy` history only 5 years deep (state-trend signals show 4-yr windows vs intended 25-yr arcs) | backfill historical state NASS |
+| deferred | Agent calibration weights too imbalanced for a useful AUC fit; running on `DEFAULT_WEIGHTS` | `backend/agent/data/weights.degenerate.json`, relabel signals |
+| deferred | Agent reader-role Postgres views (defense-in-depth) not applied to RDS; sqlglot guard is the real enforcement | `backend/agent/sql/agent_reader_role.sql` |
 | housekeeping | Crops mockup artifacts safe to delete | `web_app/public/crops-redesign-mockup.html`, `crops-mockup-data.json`, `_compare_state_vs_county.py` |
 
 ## Reference docs
@@ -605,4 +690,6 @@ This document is regenerated by hand from `CLAUDE.md` + Claude Code memory files
 3. Re-run the consolidation in a Claude Code session: "regenerate `docs/PROJECT_CONTEXT.md` from CLAUDE.md and memory."
 4. Commit the regenerated doc with a dated message.
 
-Last regeneration: 2026-04-27 from commit `70ea315`.
+The project is in **maintenance mode** as of 2026-06-12; this doc should only need light updates from here (operational fixes, deferred-item cleanup), not new module sections.
+
+Last regeneration: 2026-04-27 from commit `70ea315`. Last refresh: 2026-06-12 from commit `6344c06` (added Module 05 agent + composer, service restorations, Crops specialty crops; marked complete / maintenance mode).
