@@ -236,7 +236,8 @@ export interface Story {
   story_title: string | null;
   headline: string | null;
   story_index: number;
-  category: 'educational' | 'performance';
+  // 'model' = accuracy post-mortems; shown inside issues but not in feeds.
+  category: 'educational' | 'performance' | 'model';
 }
 
 export function nextSessionExp(): number {

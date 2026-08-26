@@ -170,11 +170,16 @@ async def list_stories(
     out = []
     for r in rows:
         d = dict(r)
-        d["category"] = (
-            "educational"
-            if str(d["signal_domain"] or "").startswith("feature-")
-            else "performance"
-        )
+        domain = str(d["signal_domain"] or "")
+        if domain.startswith("feature-"):
+            d["category"] = "educational"
+        elif domain == "accuracy":
+            # Model post-mortems serve neither feed (the reader came for
+            # agriculture, not our error bars). They stay reachable through
+            # the issue itself; the landing feeds skip this category.
+            d["category"] = "model"
+        else:
+            d["category"] = "performance"
         out.append(d)
     return out
 
