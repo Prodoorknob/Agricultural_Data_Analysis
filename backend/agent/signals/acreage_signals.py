@@ -27,10 +27,23 @@ logger = logging.getLogger(__name__)
 GAP_TRIGGER_PCT = 5.0
 MAGNITUDE_GAP_CAP_PCT = 15.0
 
+# acreage_accuracy refreshes at two seasonal moments (post-March Prospective
+# Plantings, post-June actuals). Emit gap signals only while a refresh is
+# recent — outside those windows the same static rows would re-fire weekly
+# (same quarantine pattern as the accuracy/trend_break sources, 2026-08-26).
+GAP_FRESHNESS_DAYS = 56
+
 
 def collect(as_of_date: date) -> list[Signal]:
     """Return acreage_accuracy rows where |model_vs_usda_pct| exceeds threshold,
-    scoped to the most recent reported year."""
+    scoped to the most recent reported year, only while that data is fresh."""
+    freshness_sql = text(
+        """
+        SELECT MAX(forecast_year) AS yr, MAX(updated_at) AS last_update
+        FROM acreage_accuracy
+        WHERE updated_at <= :as_of AND model_vs_usda_pct IS NOT NULL
+        """
+    )
     sql = text(
         """
         SELECT forecast_year, state_fips, commodity,
@@ -40,10 +53,7 @@ def collect(as_of_date: date) -> list[Signal]:
         WHERE updated_at <= :as_of
           AND ABS(model_vs_usda_pct) >= :trigger
           AND model_vs_usda_pct IS NOT NULL
-          AND forecast_year = (
-              SELECT MAX(forecast_year) FROM acreage_accuracy
-              WHERE updated_at <= :as_of AND model_vs_usda_pct IS NOT NULL
-          )
+          AND forecast_year = :year
         ORDER BY ABS(model_vs_usda_pct) DESC
         LIMIT 30
         """
@@ -51,7 +61,27 @@ def collect(as_of_date: date) -> list[Signal]:
 
     out: list[Signal] = []
     with get_sync_session() as session:
-        rows = session.execute(sql, {"as_of": as_of_date, "trigger": GAP_TRIGGER_PCT}).all()
+        fresh = session.execute(freshness_sql, {"as_of": as_of_date}).first()
+        if fresh is None or fresh.yr is None or fresh.last_update is None:
+            return []
+        last_update = fresh.last_update
+        if hasattr(last_update, "date"):
+            last_update = last_update.date()
+        if (as_of_date - last_update).days > GAP_FRESHNESS_DAYS:
+            logger.info(
+                "acreage gap source quiet: year %s last refreshed %s",
+                fresh.yr, last_update,
+            )
+            return []
+
+        rows = session.execute(
+            sql,
+            {
+                "as_of": as_of_date,
+                "trigger": GAP_TRIGGER_PCT,
+                "year": int(fresh.yr),
+            },
+        ).all()
 
     for r in rows:
         gap = float(r.model_vs_usda_pct)

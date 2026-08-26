@@ -157,6 +157,7 @@ def build_candidates(
 DOMAIN_CANDIDATE_CAPS = {
     "accuracy": 1,
     "trend_break": 3,
+    "acreage": 3,
 }
 
 
