@@ -138,7 +138,9 @@ def build_candidates(
     if biases:
         apply_mood_boost(signals, biases)
 
-    ranked = rank(signals, top_n=top_n)
+    # Rank the FULL list first; the diet guard caps flooding domains before
+    # the top-N cut so capped-out signals free their slots for other domains.
+    ranked = rank(signals, top_n=len(signals) if signals else 1)
     ranked = _apply_diet_guards(ranked, signals, top_n=top_n)
     log.info(
         "signal_board: top-%d candidates (max final_score=%.1f)",
@@ -148,34 +150,48 @@ def build_candidates(
     return ranked
 
 
+# Per-domain caps on how many candidates may reach the editor's menu.
+# Both capped domains draw on static annual backfills that otherwise flood
+# the board with dozens of same-shaped, same-scored stories (the w24-w31
+# accuracy flood; the trend_break flood behind it).
+DOMAIN_CANDIDATE_CAPS = {
+    "accuracy": 1,
+    "trend_break": 3,
+}
+
+
 def _apply_diet_guards(
     ranked: list[Signal], all_signals: list[Signal], *, top_n: int
 ) -> list[Signal]:
     """Editorial-diet backstops (2026-08-03 review), applied deterministically
     so no prompt drift can undo them:
 
-      1. At most ONE accuracy-domain candidate reaches the editor. The model
-         may be a story; it must never be the menu.
+      1. Per-domain candidate caps (DOMAIN_CANDIDATE_CAPS) so no single
+         static data source can monopolize the editor's menu.
       2. At least one feature-* candidate is always present, so the editor's
          guaranteed educational slot has supply even when anomaly scores
          crowd features out of the top-N.
     """
     import logging
+    from collections import Counter
 
     log = logging.getLogger(__name__)
 
     out: list[Signal] = []
-    accuracy_seen = 0
+    seen: Counter[str] = Counter()
+    dropped: Counter[str] = Counter()
     for s in ranked:
-        if s.domain == "accuracy":
-            accuracy_seen += 1
-            if accuracy_seen > 1:
+        if len(out) >= top_n:
+            break
+        cap = DOMAIN_CANDIDATE_CAPS.get(s.domain)
+        if cap is not None:
+            seen[s.domain] += 1
+            if seen[s.domain] > cap:
+                dropped[s.domain] += 1
                 continue
         out.append(s)
-    if accuracy_seen > 1:
-        log.info(
-            "diet guard: dropped %d extra accuracy candidates", accuracy_seen - 1
-        )
+    for domain, n in dropped.items():
+        log.info("diet guard: dropped %d extra %s candidates", n, domain)
 
     if not any(s.domain.startswith("feature-") for s in out):
         features = [s for s in all_signals if s.domain.startswith("feature-")]

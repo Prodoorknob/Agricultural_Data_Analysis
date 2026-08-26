@@ -36,6 +36,17 @@ Z_TRIGGER = 2.0
 MAGNITUDE_Z_CAP = 4.0
 HISTORY_WINDOW_YEARS = 30
 
+# Guard against degenerate z-scores: a county series with a near-constant
+# history (std < 5% of mean) produces meaningless ±100σ "breaks" that are
+# data artifacts, not agronomy. Real county yield CV runs 10-25%.
+MIN_HISTORY_CV = 0.05
+
+# Yield trend breaks come from the same once-a-year yield_accuracy refresh
+# as the accuracy source. Same quarantine: emit only while the refresh is
+# recent, otherwise the static rows re-fire every Sunday (the post-accuracy
+# firehose observed 2026-08-26: 18/20 candidates were 2024 county rows).
+TREND_FRESHNESS_DAYS = 56
+
 
 def collect(as_of_date: date) -> list[Signal]:
     out: list[Signal] = []
@@ -74,7 +85,8 @@ def _collect_acreage_trend_breaks(as_of: date) -> list[Signal]:
                history.hist_mean, history.hist_std, history.n
         FROM latest
         JOIN history USING (state_fips, commodity)
-        WHERE history.hist_std > 0
+        WHERE history.hist_mean > 0
+          AND history.hist_std >= 0.03 * history.hist_mean
         """
     )
 
@@ -142,30 +154,40 @@ def _collect_acreage_trend_breaks(as_of: date) -> list[Signal]:
 
 
 def _collect_yield_trend_breaks(as_of: date) -> list[Signal]:
-    """Yield trend break: county-level z > 2 vs 30y history of actuals.
+    """Yield trend break: county z > 2 vs 30y history, quarantined like the
+    accuracy source (2026-08-26):
 
-    Restricted to county+crop pairs where yield_accuracy has at least 8
-    observed years inside the window. The history window strictly excludes
-    the year being tested — otherwise that year inflates the std and
-    crushes the z-score.
+      1. Freshness gate — yield_accuracy is refreshed once a year; outside
+         that window the same static rows would re-fire every Sunday.
+      2. CV floor — near-constant county series produce ±100σ artifacts;
+         require hist_std >= 5% of hist_mean.
+      3. One signal per (crop, state) — the worst county anchors, the
+         evidence carries how many counties in the state broke trend, which
+         is the actual regional weather story worth writing.
+
+    The history window strictly excludes the year being tested — otherwise
+    that year inflates the std and crushes the z-score.
     """
     cutoff_year = as_of.year - HISTORY_WINDOW_YEARS
 
+    freshness_sql = text(
+        """
+        SELECT MAX(forecast_year) AS yr, MAX(updated_at) AS last_update
+        FROM yield_accuracy
+        WHERE actual_yield IS NOT NULL AND updated_at <= :as_of
+        """
+    )
+
     sql = text(
         """
-        WITH latest_year AS (
-            SELECT MAX(forecast_year) AS yr
-            FROM yield_accuracy
-            WHERE actual_yield IS NOT NULL AND updated_at <= :as_of
-        ),
-        history AS (
+        WITH history AS (
             SELECT fips, crop,
                    AVG(actual_yield) AS hist_mean,
                    STDDEV_SAMP(actual_yield) AS hist_std,
                    COUNT(*) AS n
             FROM yield_accuracy
             WHERE actual_yield IS NOT NULL
-              AND forecast_year BETWEEN :cutoff AND (SELECT yr - 1 FROM latest_year)
+              AND forecast_year BETWEEN :cutoff AND :prev_year
               AND updated_at <= :as_of
             GROUP BY fips, crop
             HAVING COUNT(*) >= 8
@@ -176,29 +198,62 @@ def _collect_yield_trend_breaks(as_of: date) -> list[Signal]:
             FROM yield_accuracy
             WHERE actual_yield IS NOT NULL
               AND updated_at <= :as_of
-              AND forecast_year = (SELECT yr FROM latest_year)
+              AND forecast_year = :year
             ORDER BY fips, crop, updated_at DESC
+        ),
+        scored AS (
+            SELECT latest.fips, latest.crop, latest.forecast_year,
+                   latest.actual_yield, history.hist_mean, history.hist_std,
+                   history.n,
+                   (latest.actual_yield - history.hist_mean) / history.hist_std AS z
+            FROM latest
+            JOIN history USING (fips, crop)
+            WHERE history.hist_mean > 0
+              AND history.hist_std >= :min_cv * history.hist_mean
+              AND ABS((latest.actual_yield - history.hist_mean) / history.hist_std)
+                  >= :z_trigger
+        ),
+        ranked AS (
+            SELECT *,
+                   ROW_NUMBER() OVER (
+                       PARTITION BY crop, LEFT(fips, 2) ORDER BY ABS(z) DESC
+                   ) AS rn,
+                   COUNT(*) OVER (PARTITION BY crop, LEFT(fips, 2)) AS n_state,
+                   AVG(z) OVER (PARTITION BY crop, LEFT(fips, 2)) AS state_avg_z
+            FROM scored
         )
-        SELECT latest.fips, latest.crop, latest.forecast_year,
-               latest.actual_yield, history.hist_mean, history.hist_std, history.n
-        FROM latest
-        JOIN history USING (fips, crop)
-        WHERE history.hist_std > 0
-          AND ABS((latest.actual_yield - history.hist_mean) / history.hist_std) >= :z_trigger
-        ORDER BY ABS((latest.actual_yield - history.hist_mean) / history.hist_std) DESC
-        LIMIT 200
+        SELECT * FROM ranked
+        WHERE rn = 1
+        ORDER BY ABS(z) DESC
+        LIMIT 12
         """
     )
 
     out: list[Signal] = []
     try:
         with get_sync_session() as session:
+            fresh = session.execute(freshness_sql, {"as_of": as_of}).first()
+            if fresh is None or fresh.yr is None or fresh.last_update is None:
+                return []
+            last_update = fresh.last_update
+            if hasattr(last_update, "date"):
+                last_update = last_update.date()
+            if (as_of - last_update).days > TREND_FRESHNESS_DAYS:
+                logger.info(
+                    "yield trend-break source quiet: year %s last refreshed %s",
+                    fresh.yr, last_update,
+                )
+                return []
+
             rows = session.execute(
                 sql,
                 {
                     "cutoff": cutoff_year,
+                    "prev_year": int(fresh.yr) - 1,
+                    "year": int(fresh.yr),
                     "as_of": as_of,
                     "z_trigger": Z_TRIGGER,
+                    "min_cv": MIN_HISTORY_CV,
                 },
             ).all()
     except Exception as exc:
@@ -206,12 +261,10 @@ def _collect_yield_trend_breaks(as_of: date) -> list[Signal]:
         return []
 
     for r in rows:
-        z = (float(r.actual_yield) - float(r.hist_mean)) / float(r.hist_std)
-        if abs(z) < Z_TRIGGER:
-            continue
-
+        z = float(r.z)
+        state_fips = str(r.fips)[:2]
         magnitude = min(100.0, abs(z) / MAGNITUDE_Z_CAP * 100)
-        scope = f"county:{r.fips}"
+        scope = f"state:{state_fips}"
         domain = "trend_break"
 
         parts = ScoreParts(
@@ -224,17 +277,19 @@ def _collect_yield_trend_breaks(as_of: date) -> list[Signal]:
 
         out.append(
             Signal(
-                id=f"trend-yield:{r.crop}:{r.fips}:{r.forecast_year}",
+                id=f"trend-yield:{r.crop}:{state_fips}:{r.forecast_year}",
                 domain=domain,
                 scope=scope,
                 headline=(
-                    f"{county_label(r.fips)} {r.crop} {r.forecast_year} actual yield was "
-                    f"{z:+.1f}σ from {int(r.n)}-year county history"
+                    f"{state_label(state_fips)} {r.crop} {r.forecast_year}: "
+                    f"{int(r.n_state)} counties broke their {int(r.n)}-year yield "
+                    f"trend (worst: {county_label(r.fips)} at {z:+.1f}σ)"
                 ),
                 score=score,
-                direction="positive" if z > 0 else "negative",
+                direction="positive" if float(r.state_avg_z) > 0 else "negative",
                 evidence={
                     "fips": r.fips,
+                    "state_fips": state_fips,
                     "crop": r.crop,
                     "forecast_year": int(r.forecast_year),
                     "actual_yield": float(r.actual_yield),
@@ -242,6 +297,8 @@ def _collect_yield_trend_breaks(as_of: date) -> list[Signal]:
                     "historical_std": float(r.hist_std),
                     "n_history_years": int(r.n),
                     "z_score": round(z, 2),
+                    "n_state_counties_flagged": int(r.n_state),
+                    "state_avg_z": round(float(r.state_avg_z), 2),
                     "score_parts": parts.__dict__,
                 },
                 sources=["yield_accuracy"],
