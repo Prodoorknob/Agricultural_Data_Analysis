@@ -573,4 +573,46 @@ Implemented the integration path above. New pipeline step between fact-check and
 - **Plumbing:** publisher uploads `{slug}.spec.json` to the draft prefix (before promote, which copies all objects); meta (cost/duration/tool calls) finalized at publish time. New `GET /api/v1/agent/spec/{slug}?draft=1` proxy. Frontend: `fetchIssueSpec` in `lib/insights.ts`; `[slug]`, `draft/[slug]`, and `/insights/preview` all render `ModelIssue` when a spec exists (preview has an mtime staleness guard vs `last_draft.md` and shows "rendered from spec (composer)" in the banner; new artifact `backend/agent/data/last_spec.json`).
 - **Researcher prompt:** CHART_SPECS section now requires fully populated single-line JSON in the three frontend chart shapes (`bars`, `trend_forecast`, `region_map` with 2-digit fips, runtime fills abbr/name from `_fips_label.py`); researcher max_tokens 2048→3000 so series don't truncate. Old `line`/`bar` kinds still render via an adapter in the matplotlib PNG fallback.
 - **Verified:** 17 unit tests (`backend/tests/test_composer.py`: parser fidelity vs the checked-in dry-run draft, watch round-trips, guard drop/keep, fips fill, mocked end-to-end). Full dry run 2026-06-12: 8 steps ok, $0.52 total, spec validates, 1 kpis + 3 figures + 3 stats survived. Browser preview: 3 live Recharts figures, 4 KPIs, lead pill, zero console errors. `tsc` + `npm run build` clean. Spec endpoint 404/sanitization paths verified locally (S3 200 path needs EC2 creds; local SSO expired).
-- **Deploy note:** EC2 needs the new backend code (composer + router) pulled and `ag-prediction` restarted before next Sunday's cron for the spec to ship with the draft.
+- **Deploy note:** EC2 needs the new backend code (composer + router) pulled and `ag-prediction` restarted before next Sunday's cron for the spec to ship with the draft. (Mooted by the Victus migration below — fresh checkout from main.)
+
+### Newsletter editorial-diet + WASDE data fixes (2026-08-26)
+
+Implemented all recommendations from the 2026-08-03 independent review ("Newsletter feed and reports review" session), which found 16 of 20 published stories were model post-mortems and the WASDE numbers were wrong in definition and units. Commits `2d51d8d`, `574d84b`, `753211e`. Deployed to Victus + RDS same day.
+
+**WASDE ingest corrected (`backend/etl/ingest_wasde.py`):**
+- Root causes: PSD attribute `"Total Domestic Cons."` never matched (real name: `"Domestic Consumption"`) so STU was silently ending_stocks/exports (~6x high); commodity `"Soybeans"` never matched (real name: `"Oilseed, Soybean"`) so soybean rows were NEVER ingested at all.
+- Fixes: correct names; missing attributes/commodities now raise; 1000 MT converted to MILLION BUSHELS at ingest (corn 39.368 bu/MT, soy/wheat 36.7437) so stored values match published WASDE; STU = ending_stocks / (total_domestic_use + us_exports); new `total_domestic_use` column (migration 013) makes the ratio auditable.
+- `--backfill` mode ran against RDS: 181 rows corrected in place across all release vintages (so no bogus vintage-delta signals), 63 soybean rows inserted. Verified: corn 2022-23 = 1,360 Mbu / 9.9% STU, soybean 6.1%, wheat 30.4% (match published WASDE).
+- **Consequence flagged, not yet done:** price models were trained on the buggy STU scale; their stocks_to_use/wasde_surprise features are now out-of-distribution. Retrain via `python -m backend.models.train` when convenient (price module is experimental anyway).
+
+**Signal quarantine (the "static backfill firehose" pattern, fixed in 3 sources):**
+All three fire off annual backfills that refresh once a year but were re-firing every Sunday with identical scores. Each now has a 56-day freshness gate (emit only while the underlying table was recently refreshed = an annual/seasonal "report card" moment):
+- `yield_signals._collect_accuracy_outliers`: also collapsed to ONE signal per crop (worst county anchors, evidence carries state aggregates), novelty/dedup keyed on (crop, state, year) instead of county.
+- `trend_signals._collect_yield_trend_breaks`: also collapsed to one per (crop, state), plus a CV floor (hist_std >= 5% of mean) killing the degenerate ±200σ artifacts from near-constant county series. Acreage trend-breaks got a 3% CV floor.
+- `acreage_signals.collect` (model-vs-USDA gap): freshness gate only; fires in the post-March and post-June report windows.
+
+**Deterministic diet guards:**
+- `signal_board.DOMAIN_CANDIDATE_CAPS` = {accuracy: 1, trend_break: 3, acreage: 3}, applied BEFORE the top-20 cut so capped domains free slots. A feature-* candidate is always injected if none survives ranking.
+- `editor._enforce_diet`: accuracy picks can never lead (deterministic demotion swap); exactly one feature-* brief guaranteed per issue (deterministic swap-in if the LLM skips it).
+- `wasde_signals`: lookback 14→8 days so one WASDE release fires exactly one Sunday (w28/w29 repeat fix); STU trigger retuned to corrected scale (0.5pp trigger / 3pp cap, was 2pp/10pp against the inflated ratio).
+
+**Prompt updates:** researcher got a DATA NOTES section (WASDE units = million bushels, STU sanity bands corn 8-18% / soy 5-12% / wheat 35-55%, model output is supporting evidence never subject, implausible quantiles skipped, accuracy stories must research the field event first). Writer got rules 8-11 (never relabel units, model humility, no insane quantiles, "experimental model" labeling). Editor got ACCURACY SIGNALS + required-feature-slot sections.
+
+**Validated:** signal board for 2026-08-30 went from 18/20 static trend-break candidates to {futures 1, yield 9, exports 1, feature 9} with the corn futures +11.8% move leading. Full dry run on Victus (8/8 steps, $0.75, 451s): lead "Weak Dollar and Tight Stocks Drive a 3-Sigma Corn Rally", briefs = soybean exports + High Plains wheat belt feature + WASDE 101 explainer. Zero model post-mortems; fact check passed after 2 reviser passes, 0 residual issues. Watch item recurred: 14 transient `tool query_sql failed` errors in the researcher step (run still succeeded via retries) — same signature as w28, now worth investigating.
+
+**Trust-streak status checked 2026-08-26:** force_manual=true, auto_publish=false, w32 was rejected (streak broken), w33/w34 sit in draft. No auto-publish risk while these fixes bed in.
+
+### Compute migration: EC2 → Victus (2026-07-10)
+
+EC2 (t3.small) OS-hung from an OOM since 2026-06-15; compute moved to the self-hosted "Victus" box (Ubuntu, 14GB RAM, Tailscale host `server-local-ubuntu` / 100.75.64.59, project user `doorknob`). RDS + S3 stay in AWS. RDS reachable from Victus under the existing security-group rule (same home egress IP as the dev PC).
+
+- **Backend:** repo at `/home/doorknob/Agricultural_Data_Analysis`, `ag-prediction.service` on **port 8001** (8000 belongs to an unrelated app on the box). scikit-learn pinned to 1.8.0 to match the pickle artifacts. All 91 pickles + `backend/etl/data` caches (212MB) + `pipeline/output` + `pipeline/manifest.json` copied from the local PC. `.venv` symlinked to `backend/venv` so all cron_runner modes resolve one env.
+- **Static data gotcha:** `station_county_map.csv` and `county_centroids.csv` only ever existed on EC2. Regenerated on Victus via `python -m backend.etl.load_county_centroids` then `python -m backend.etl.build_station_map` (~35 min). Without the map, the weekly-yield GHCN extend step fails (pipeline continues on stale weather).
+- **Crontab:** full 12-entry schedule installed for doorknob, `TZ=America/Chicago`, fieldpulse Sun 17:00 CT. `ingest_futures` / `ingest_fred` accept a lookback-days argv for gap backfills.
+- **Catch-ups run 2026-07-10:** futures + DXY (6/16–7/10 gap closed), weekly-yield end-to-end (2,205 inference rows), weekly-drought (48 rows). FAS exports still 403 (API retired, manual-CSV path pending). July WASDE cron fires 7/12.
+- **Agent validated on Victus:** full dry-run, 8/8 steps ok, $0.58 / 413s / 28 LLM calls. Slack + Anthropic creds verified working from the box.
+- **Completed 2026-07-13 (migration done, nothing pending):**
+  - Public cutover via the pre-existing Cloudflare Tunnel on Victus (serves api/anomaly/mothra.rvedire.com): added ingress rule `agri-intel.rvedire.com -> http://localhost:8001` to `/etc/cloudflared/config.yml` (backup `.bak.20260713`), DNS repointed with `cloudflared tunnel route dns --overwrite-dns`. Vercel unchanged — same domain. `/insights` and `/forecasts` verified healed.
+  - AWS creds: IAM user `victus-ag-service` with scoped inline policy (S3 `usda-analysis-datasets` + `sns:Publish` on the alerts topic), installed at `/home/doorknob/.aws/credentials`. S3 read/write verified via boto3.
+  - Sunday 7/12 cron fired on schedule but failed at publisher (creds didn't exist yet). Deleted the failed run row + children, reran `--weekly-fieldpulse`: run id 10, slug `fieldpulse-2026-w28` (July WASDE lead), status `draft`, $0.64 / 751s, S3 + Slack magic link confirmed. Trust streak 1/6.
+  - Watch item: two transient `tool query_sql failed` errors in the w28 researcher step (retried successfully). Investigate if it recurs.
