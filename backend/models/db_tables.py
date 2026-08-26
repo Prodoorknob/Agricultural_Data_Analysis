@@ -49,6 +49,7 @@ class WasdeRelease(Base):
     us_production: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True)
     us_exports: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True)
     ending_stocks: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True)
+    total_domestic_use: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True)
     stocks_to_use: Mapped[float | None] = mapped_column(Numeric(6, 4), nullable=True)
     world_production: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True)
     source: Mapped[str] = mapped_column(String(30), default="usda_wasde")

@@ -34,6 +34,13 @@ ACCURACY_MISS_TRIGGER_PCT = 15.0   # county model miss > 15%
 # doesn't dominate. Magnitude 0-100 from 0-30 abs %-delta.
 MAGNITUDE_DELTA_CAP_PCT = 30.0
 
+# Accuracy stories are a "report card", not weekly news: yield_accuracy is a
+# static walk-forward backfill refreshed roughly once a year when new-season
+# actuals land. Only emit accuracy signals while that refresh is recent;
+# outside the window the same 2024 rows would re-fire every Sunday (the
+# w24-w31 "model missed county X" flood diagnosed in the 2026-08-03 review).
+ACCURACY_FRESHNESS_DAYS = 56
+
 
 def collect(as_of_date: date) -> list[Signal]:
     """Run yield-domain sources. Returns combined signal list."""
@@ -130,53 +137,94 @@ def _collect_wow_delta(as_of: date) -> list[Signal]:
 
 
 def _collect_accuracy_outliers(as_of: date) -> list[Signal]:
-    """Source 11: yield_accuracy abs(pct_error) > threshold for the most
-    recent forecast year that has actuals.
+    """Source 11: annual model report card, quarantined (2026-08-03 review).
 
-    yield_accuracy has one row per (year, fips, crop, week, model_ver), so
-    a single county-crop-season has up to 20 weeks * N model versions worth
-    of rows. We collapse to one row per (fips, crop, year) using the
-    latest-week, most-recent-model prediction — that's the end-of-season
-    model output, which is what a "model big miss" headline should anchor
-    on. Without this dedup the same outlier county fires 20+ duplicate
-    signals.
+    Three containment rules replace the old "top-50 worst counties" firehose
+    that let a single static 2024 backfill headline four issues in a row:
+
+      1. Freshness gate — emit nothing unless the latest forecast year's
+         rows were refreshed within ACCURACY_FRESHNESS_DAYS. Accuracy is
+         news when new actuals land, once a year, not every Sunday after.
+      2. One signal per crop — the worst county anchors the story, and the
+         evidence carries the state-level aggregate (how many counties in
+         that state missed, average error) so the researcher can tell the
+         "what happened in the field" story instead of one number.
+      3. State-keyed identity — scope/id key on (crop, state, year) rather
+         than county, so 37 outlier counties in one drought event count as
+         one narrative for novelty and dedup purposes.
     """
-    # NOTE: DISTINCT ON requires its ORDER BY to start with the partition
-    # columns. We need worst-miss-first for the actual selection, so we wrap
-    # the dedup in a CTE, then sort by ABS(pct_error) DESC at the outer
-    # SELECT before LIMIT. Previously the LIMIT 50 was slicing the
-    # fips-alphabetical-first 50, which concentrated headlines in AL/AR.
+    freshness_sql = text(
+        """
+        SELECT MAX(forecast_year) AS yr, MAX(updated_at) AS last_update
+        FROM yield_accuracy
+        WHERE pct_error IS NOT NULL AND updated_at <= :as_of
+        """
+    )
+
+    # Collapse to one row per (fips, crop) for the target year using the
+    # latest-week, most-recent-model prediction (end-of-season output), then
+    # keep only the worst county per crop, with state + crop aggregates
+    # computed over the flagged set.
     sql = text(
         """
         WITH dedup AS (
-            SELECT DISTINCT ON (fips, crop, forecast_year)
+            SELECT DISTINCT ON (fips, crop)
                    fips, crop, forecast_year, week,
                    actual_yield, model_p50, pct_error
             FROM yield_accuracy
             WHERE pct_error IS NOT NULL
               AND ABS(pct_error) >= :trigger
               AND updated_at <= :as_of
-              AND forecast_year = (
-                  SELECT MAX(forecast_year) FROM yield_accuracy
-                  WHERE pct_error IS NOT NULL AND updated_at <= :as_of
-              )
-            ORDER BY fips, crop, forecast_year, week DESC, updated_at DESC
+              AND forecast_year = :year
+            ORDER BY fips, crop, week DESC, updated_at DESC
+        ),
+        ranked AS (
+            SELECT *,
+                   ROW_NUMBER() OVER (
+                       PARTITION BY crop ORDER BY ABS(pct_error) DESC
+                   ) AS rn,
+                   COUNT(*) OVER (PARTITION BY crop) AS n_crop_misses,
+                   COUNT(*) OVER (
+                       PARTITION BY crop, LEFT(fips, 2)
+                   ) AS n_state_misses,
+                   AVG(ABS(pct_error)) OVER (
+                       PARTITION BY crop, LEFT(fips, 2)
+                   ) AS state_avg_abs_error
+            FROM dedup
         )
-        SELECT * FROM dedup
-        ORDER BY ABS(pct_error) DESC
-        LIMIT 50
+        SELECT * FROM ranked WHERE rn = 1
         """
     )
 
     out: list[Signal] = []
     with get_sync_session() as session:
+        fresh = session.execute(freshness_sql, {"as_of": as_of}).first()
+        if fresh is None or fresh.yr is None or fresh.last_update is None:
+            return []
+        last_update = fresh.last_update
+        if hasattr(last_update, "date"):
+            last_update = last_update.date()
+        if (as_of - last_update).days > ACCURACY_FRESHNESS_DAYS:
+            logger.info(
+                "accuracy source quiet: yield_accuracy year %s last refreshed "
+                "%s (> %d days before %s)",
+                fresh.yr, last_update, ACCURACY_FRESHNESS_DAYS, as_of,
+            )
+            return []
+
         rows = session.execute(
-            sql, {"trigger": ACCURACY_MISS_TRIGGER_PCT, "as_of": as_of}
+            sql,
+            {
+                "trigger": ACCURACY_MISS_TRIGGER_PCT,
+                "as_of": as_of,
+                "year": int(fresh.yr),
+            },
         ).all()
 
     for r in rows:
+        state_fips = str(r.fips)[:2]
         magnitude = min(100.0, abs(float(r.pct_error)) / MAGNITUDE_DELTA_CAP_PCT * 100)
-        scope = f"county:{r.fips}"
+        scope = f"state:{state_fips}"
         domain = "accuracy"
 
         parts = ScoreParts(
@@ -189,23 +237,28 @@ def _collect_accuracy_outliers(as_of: date) -> list[Signal]:
 
         out.append(
             Signal(
-                id=f"yield-accuracy:{r.crop}:{r.fips}:{r.forecast_year}",
+                id=f"yield-accuracy:{r.crop}:{state_fips}:{r.forecast_year}",
                 domain=domain,
                 scope=scope,
                 headline=(
-                    f"{r.crop.capitalize()} {r.forecast_year} yield model missed "
-                    f"{county_label(r.fips)} by {float(r.pct_error):+.1f}% "
-                    f"(actual {float(r.actual_yield):.1f} vs model {float(r.model_p50):.1f})"
+                    f"{r.crop.capitalize()} {r.forecast_year} season report card: "
+                    f"model missed {county_label(r.fips)} by "
+                    f"{float(r.pct_error):+.1f}% (worst of {int(r.n_state_misses)} "
+                    f"flagged counties in its state; {int(r.n_crop_misses)} nationwide)"
                 ),
                 score=score,
                 direction="negative" if float(r.pct_error) < 0 else "positive",
                 evidence={
                     "fips": r.fips,
+                    "state_fips": state_fips,
                     "crop": r.crop,
                     "forecast_year": int(r.forecast_year),
                     "actual_yield": float(r.actual_yield),
                     "model_p50": float(r.model_p50),
                     "pct_error": round(float(r.pct_error), 2),
+                    "n_state_misses": int(r.n_state_misses),
+                    "state_avg_abs_error": round(float(r.state_avg_abs_error), 2),
+                    "n_crop_misses": int(r.n_crop_misses),
                     "score_parts": parts.__dict__,
                 },
                 sources=["yield_accuracy"],

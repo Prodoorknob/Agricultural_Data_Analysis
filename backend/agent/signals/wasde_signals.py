@@ -27,9 +27,18 @@ from backend.etl.common import get_sync_session
 
 logger = logging.getLogger(__name__)
 
-WASDE_LOOKBACK_DAYS = 14
-STU_DELTA_TRIGGER_PP = 0.02     # 2 percentage points
-MAGNITUDE_DELTA_CAP_PP = 0.10   # ±10 pp -> magnitude 100
+# The agent runs weekly (Sundays), so an 8-day lookback means each WASDE
+# release can fire on exactly one run. The old 14-day window let the same
+# release lead two consecutive issues (w28/w29 repeat, 2026-08-03 review).
+WASDE_LOOKBACK_DAYS = 8
+
+# Thresholds are calibrated to the CORRECT stocks-to-use definition
+# (ending stocks / total use, ~10-15% for corn, ~40% for wheat). A 0.5 pp
+# month-over-month move is a genuine story at that scale; 3 pp is a shock.
+# (The old 2 pp trigger dated from the buggy stocks/exports ratio, which ran
+# ~6x too high.)
+STU_DELTA_TRIGGER_PP = 0.005    # 0.5 percentage points
+MAGNITUDE_DELTA_CAP_PP = 0.03   # ±3 pp -> magnitude 100
 
 
 def collect(as_of_date: date) -> list[Signal]:

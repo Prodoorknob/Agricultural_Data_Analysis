@@ -139,9 +139,55 @@ def build_candidates(
         apply_mood_boost(signals, biases)
 
     ranked = rank(signals, top_n=top_n)
+    ranked = _apply_diet_guards(ranked, signals, top_n=top_n)
     log.info(
         "signal_board: top-%d candidates (max final_score=%.1f)",
         len(ranked),
         ranked[0].final_score if ranked else 0.0,
     )
     return ranked
+
+
+def _apply_diet_guards(
+    ranked: list[Signal], all_signals: list[Signal], *, top_n: int
+) -> list[Signal]:
+    """Editorial-diet backstops (2026-08-03 review), applied deterministically
+    so no prompt drift can undo them:
+
+      1. At most ONE accuracy-domain candidate reaches the editor. The model
+         may be a story; it must never be the menu.
+      2. At least one feature-* candidate is always present, so the editor's
+         guaranteed educational slot has supply even when anomaly scores
+         crowd features out of the top-N.
+    """
+    import logging
+
+    log = logging.getLogger(__name__)
+
+    out: list[Signal] = []
+    accuracy_seen = 0
+    for s in ranked:
+        if s.domain == "accuracy":
+            accuracy_seen += 1
+            if accuracy_seen > 1:
+                continue
+        out.append(s)
+    if accuracy_seen > 1:
+        log.info(
+            "diet guard: dropped %d extra accuracy candidates", accuracy_seen - 1
+        )
+
+    if not any(s.domain.startswith("feature-") for s in out):
+        features = [s for s in all_signals if s.domain.startswith("feature-")]
+        if features:
+            best = max(features, key=lambda s: s.final_score)
+            if len(out) >= top_n:
+                out[-1] = best
+            else:
+                out.append(best)
+            log.info(
+                "diet guard: injected feature candidate %s (score %.1f)",
+                best.id, best.final_score,
+            )
+
+    return out

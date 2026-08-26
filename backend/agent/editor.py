@@ -70,7 +70,8 @@ def pick_stories(
         stats=stats,
     )
 
-    return _validate(raw, by_id)
+    plan = _validate(raw, by_id)
+    return _enforce_diet(plan, candidates)
 
 
 def _validate(raw: dict[str, Any], by_id: dict[str, Signal]) -> EditorPlan:
@@ -113,6 +114,78 @@ def _validate(raw: dict[str, Any], by_id: dict[str, Signal]) -> EditorPlan:
         rationale=str(lead_data.get("rationale", "")).strip(),
     )
     return EditorPlan(lead=lead, briefs=briefs, raw_json=raw)
+
+
+# ---------------------------------------------------------------------------
+# Deterministic editorial-diet enforcement (2026-08-03 review).
+# ---------------------------------------------------------------------------
+
+
+def _enforce_diet(plan: EditorPlan, candidates: list[Signal]) -> EditorPlan:
+    """Post-LLM guardrails the prompt asks for but cannot guarantee:
+
+      1. An accuracy-domain signal never leads. If the LLM leads with one,
+         swap it with the highest-scored non-accuracy brief.
+      2. Exactly-one-feature slot: if any feature-* candidate exists but no
+         feature was picked, replace the lowest-scored non-feature brief
+         with the best feature candidate. The newsletter's educational
+         mission gets a reserved seat, not a lottery ticket.
+    """
+    # --- rule 1: accuracy never leads ---
+    if plan.lead.signal.domain == "accuracy":
+        swap_idx = None
+        best = -1.0
+        for i, b in enumerate(plan.briefs):
+            if b.signal.domain != "accuracy" and b.signal.final_score > best:
+                best = b.signal.final_score
+                swap_idx = i
+        if swap_idx is not None:
+            old_lead, promoted = plan.lead, plan.briefs[swap_idx]
+            logger.info(
+                "diet: demoting accuracy lead %s; promoting %s",
+                old_lead.signal.id, promoted.signal.id,
+            )
+            plan.lead = Pick(
+                role="lead",
+                signal=promoted.signal,
+                editorial_angle=promoted.editorial_angle,
+                rationale="promoted: accuracy stories do not lead",
+            )
+            plan.briefs[swap_idx] = Pick(
+                role="brief",
+                signal=old_lead.signal,
+                editorial_angle=old_lead.editorial_angle,
+                rationale="demoted from lead: accuracy stories do not lead",
+            )
+
+    # --- rule 2: guaranteed feature slot ---
+    has_feature = any(
+        p.signal.domain.startswith("feature-") for p in plan.all_picks()
+    )
+    if not has_feature:
+        features = [s for s in candidates if s.domain.startswith("feature-")]
+        picked_ids = {p.signal.id for p in plan.all_picks()}
+        features = [s for s in features if s.id not in picked_ids]
+        if features:
+            best_feature = max(features, key=lambda s: s.final_score)
+            idx = min(
+                range(len(plan.briefs)),
+                key=lambda i: plan.briefs[i].signal.final_score,
+            )
+            logger.info(
+                "diet: swapping brief %s for feature %s (reserved slot)",
+                plan.briefs[idx].signal.id, best_feature.id,
+            )
+            plan.briefs[idx] = Pick(
+                role="brief",
+                signal=best_feature,
+                editorial_angle=(
+                    "Reserved educational slot: teach the mechanism behind "
+                    "this structural feature and anchor it to the current season."
+                ),
+                rationale="deterministic feature slot (editor picked none)",
+            )
+    return plan
 
 
 # ---------------------------------------------------------------------------

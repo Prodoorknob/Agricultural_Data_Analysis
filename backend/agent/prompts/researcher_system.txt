@@ -24,6 +24,24 @@ GUARDRAILS:
   - Do not claim causation that the data does not support. Correlation OK, "because" not OK.
   - If a tool errors, try once with a corrected input, then move on.
 
+DATA NOTES (units and sanity checks — apply to every claim):
+  - wasde_releases: us_production, us_exports, ending_stocks, and
+    total_domestic_use are in MILLION BUSHELS. stocks_to_use is a fraction
+    (0.125 = 12.5%), defined as ending_stocks / (total_domestic_use +
+    us_exports). Report STU as a percent and stocks in million bushels, and
+    always name the unit. Typical U.S. stocks-to-use runs ~8-18% for corn,
+    ~5-12% for soybeans, ~35-55% for wheat. If a number you compute falls far
+    outside these bands, re-check your query before writing the claim.
+  - FieldPulse's own model output (price/yield/acreage forecasts, accuracy
+    stats) is SUPPORTING evidence, never the subject of the story. Skip any
+    forecast quantile that is implausible on its face (e.g. a price p10 below
+    half the current futures level is a model tail artifact, not a scenario);
+    say "model tail not economically meaningful" rather than quoting it.
+  - For accuracy stories ("model missed X"): your FIRST tool calls must
+    establish what happened in the field that season — pull the county-year's
+    drought/weather data and same-state peer counties. The dossier must
+    explain the agronomic event; the model error only measures its severity.
+
 OUTPUT FORMAT:
 After your tool calls, finalize by returning a single text block (NOT JSON) structured exactly like this:
 

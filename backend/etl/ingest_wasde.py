@@ -3,15 +3,35 @@
 Schedule: Monthly, ~12th of month at 14:00 UTC (day after WASDE release).
 Source: https://apps.fas.usda.gov/psdonline/downloads/psd_alldata_csv.zip (~15MB)
 Target table: wasde_releases
+
+Unit convention (2026-08-26 correction): PSD publishes quantities in 1000 MT;
+we convert to MILLION BUSHELS at ingest so stored values match the numbers
+USDA prints in the WASDE domestic balance sheets (corn ending stocks ~1,360,
+not 34,551). stocks_to_use is a fraction: ending_stocks / (total_domestic_use
++ us_exports), i.e. the standard WASDE stocks-to-use definition.
+
+History of the bug this replaces: TARGET_ATTRS asked for "Total Domestic
+Cons.", which is not a PSD attribute name, and COMMODITY_MAP asked for
+"Soybeans" where PSD says "Oilseed, Soybean". Both misses were silent:
+`df.get("total_domestic_cons", 0)` zero-filled domestic use (so STU became
+stocks / exports, ~6x too high) and soybean rows were never ingested at all.
+Missing attributes and commodities now raise instead.
+
+Usage:
+    python -m backend.etl.ingest_wasde              # normal monthly upsert
+    python -m backend.etl.ingest_wasde --backfill   # correct existing rows
+                                                    # in place + fill missing
+                                                    # (commodity, year) pairs
 """
 
+import argparse
 import io
-import sys
 import zipfile
-from datetime import datetime
+from datetime import date, datetime
 
 import pandas as pd
 import requests
+from sqlalchemy import text
 from sqlalchemy.dialects.postgresql import insert
 
 from backend.etl.common import get_sync_session, setup_logging, log_ingest_summary
@@ -20,21 +40,37 @@ logger = setup_logging("ingest_wasde")
 
 WASDE_URL = "https://apps.fas.usda.gov/psdonline/downloads/psd_alldata_csv.zip"
 
-# Map PSD commodity names to our normalized names
+# Map PSD commodity names to our normalized names. These must match
+# Commodity_Description verbatim (note: PSD calls soybeans "Oilseed, Soybean").
 COMMODITY_MAP = {
     "Corn": "corn",
-    "Soybeans": "soybean",
+    "Oilseed, Soybean": "soybean",
     "Wheat": "wheat",
 }
 
-# PSD attribute names we need
+# PSD attribute names we need, verbatim from Attribute_Description.
+# "Domestic Consumption" is PSD's total domestic use (feed + FSI for grains,
+# crush + food + feed/waste for soybeans) — the WASDE "domestic use" line.
 TARGET_ATTRS = {
-    "Beginning Stocks",
     "Production",
-    "Total Domestic Cons.",
+    "Domestic Consumption",
     "Exports",
     "Ending Stocks",
 }
+
+# Bushels per metric ton (corn 56 lb/bu; soybeans and wheat 60 lb/bu).
+# PSD values are 1000 MT; multiplying by BU_PER_MT / 1000 yields million bu.
+BU_PER_MT = {
+    "corn": 39.368,
+    "soybean": 36.7437,
+    "wheat": 36.7437,
+}
+
+# Columns that must exist after the pivot. A miss means a PSD attribute name
+# changed upstream — fail loudly rather than silently zero-filling.
+REQUIRED_COLS = {"us_production", "us_exports", "ending_stocks", "total_domestic_use"}
+
+QUANTITY_COLS = ["us_production", "us_exports", "ending_stocks", "total_domestic_use"]
 
 
 def fetch_psd_data() -> pd.DataFrame:
@@ -57,7 +93,7 @@ def fetch_psd_data() -> pd.DataFrame:
 
 
 def filter_and_pivot(df: pd.DataFrame) -> pd.DataFrame:
-    """Filter PSD data to US corn/soy/wheat and pivot into wasde_releases schema."""
+    """Filter PSD data to US corn/soy/wheat, pivot, convert to million bu."""
 
     # Filter to United States + target commodities + target attributes
     mask = (
@@ -69,10 +105,20 @@ def filter_and_pivot(df: pd.DataFrame) -> pd.DataFrame:
     logger.info(f"  After filtering: {len(df)} rows")
 
     if df.empty:
-        return pd.DataFrame()
+        raise ValueError(
+            "PSD filter matched 0 rows — Country/Commodity/Attribute names "
+            "may have changed upstream"
+        )
 
     # Normalize commodity name
     df["commodity"] = df["Commodity_Description"].map(COMMODITY_MAP)
+
+    missing_commodities = set(COMMODITY_MAP.values()) - set(df["commodity"].unique())
+    if missing_commodities:
+        raise ValueError(
+            f"PSD data missing commodities {sorted(missing_commodities)} — "
+            "check COMMODITY_MAP against Commodity_Description"
+        )
 
     # Build marketing year string: e.g. "2025/2026" -> "2025-2026"
     df["marketing_year"] = (
@@ -81,8 +127,6 @@ def filter_and_pivot(df: pd.DataFrame) -> pd.DataFrame:
         + (df["Market_Year"].astype(int) + 1).astype(str)
     )
 
-    # The value column in PSD is typically 'Value' (in 1000 MT for most, but
-    # for US domestic we use the unit as-is — convert later as needed)
     df["value"] = pd.to_numeric(df["Value"].astype(str).str.replace(",", ""), errors="coerce")
 
     # Pivot attributes into columns
@@ -98,22 +142,32 @@ def filter_and_pivot(df: pd.DataFrame) -> pd.DataFrame:
         "Production": "us_production",
         "Exports": "us_exports",
         "Ending Stocks": "ending_stocks",
-        "Beginning Stocks": "beginning_stocks",
-        "Total Domestic Cons.": "total_domestic_cons",
+        "Domestic Consumption": "total_domestic_use",
     }
     pivot = pivot.rename(columns=col_renames)
+
+    missing_cols = REQUIRED_COLS - set(pivot.columns)
+    if missing_cols:
+        raise ValueError(
+            f"PSD pivot missing expected columns {sorted(missing_cols)} — "
+            "an Attribute_Description string changed upstream"
+        )
+
+    # 1000 MT -> million bushels, per-commodity conversion factor.
+    factors = pivot["commodity"].map(BU_PER_MT)
+    for col in QUANTITY_COLS:
+        pivot[col] = (pivot[col] * factors / 1000).round(2)
 
     return pivot
 
 
 def compute_stocks_to_use(df: pd.DataFrame) -> pd.DataFrame:
-    """Compute stocks-to-use ratio = ending_stocks / total_use."""
+    """Stocks-to-use ratio = ending_stocks / (domestic use + exports)."""
     if df.empty:
         return df
 
-    # Total use = total domestic consumption + exports
-    total_use = df.get("total_domestic_cons", 0) + df.get("us_exports", 0)
-    # Avoid division by zero
+    # Deliberate KeyError if either column is absent — never zero-fill here.
+    total_use = df["total_domestic_use"] + df["us_exports"]
     df["stocks_to_use"] = df["ending_stocks"] / total_use.replace(0, pd.NA)
     df["stocks_to_use"] = df["stocks_to_use"].round(4)
 
@@ -140,7 +194,6 @@ def build_wasde_rows(df: pd.DataFrame) -> pd.DataFrame:
         if calendar_year >= today.year:
             release_date = today
         else:
-            from datetime import date
             release_date = date(calendar_year, 12, 1)
 
         rows.append({
@@ -150,6 +203,7 @@ def build_wasde_rows(df: pd.DataFrame) -> pd.DataFrame:
             "us_production": row.get("us_production"),
             "us_exports": row.get("us_exports"),
             "ending_stocks": row.get("ending_stocks"),
+            "total_domestic_use": row.get("total_domestic_use"),
             "stocks_to_use": row.get("stocks_to_use"),
             "world_production": None,  # PSD US-only data; world data available separately
             "source": "usda_wasde",
@@ -175,6 +229,7 @@ def upsert_wasde(df: pd.DataFrame) -> int:
                 "us_production": stmt.excluded.us_production,
                 "us_exports": stmt.excluded.us_exports,
                 "ending_stocks": stmt.excluded.ending_stocks,
+                "total_domestic_use": stmt.excluded.total_domestic_use,
                 "stocks_to_use": stmt.excluded.stocks_to_use,
                 "world_production": stmt.excluded.world_production,
             },
@@ -189,14 +244,104 @@ def upsert_wasde(df: pd.DataFrame) -> int:
         session.close()
 
 
-def run():
+def backfill(pivot: pd.DataFrame) -> tuple[int, int]:
+    """One-time correction of historical rows already in wasde_releases.
+
+    The table accumulated rows under the old buggy ingest: STU computed as
+    stocks / exports, values in 1000 MT, and no soybean rows at all. Two
+    passes:
+
+      1. In-place UPDATE of every existing row keyed by (commodity,
+         marketing_year), across ALL release_date vintages. Vintage-specific
+         PSD snapshots are unrecoverable, so all vintages of a marketing year
+         converge on the current PSD values — which also means consecutive
+         releases show a 0.0 STU delta and cannot fire a bogus "STU moved"
+         signal off backfilled data. Real vintage deltas resume with the next
+         monthly ingest.
+      2. INSERT rows for (commodity, marketing_year) pairs with no row at
+         all — this is what backfills soybean history.
+
+    Returns (n_updated, n_inserted).
+    """
+    corrected = compute_stocks_to_use(pivot.copy())
+
+    update_sql = text(
+        """
+        UPDATE wasde_releases
+        SET us_production = :us_production,
+            us_exports = :us_exports,
+            ending_stocks = :ending_stocks,
+            total_domestic_use = :total_domestic_use,
+            stocks_to_use = :stocks_to_use
+        WHERE commodity = :commodity AND marketing_year = :marketing_year
+        """
+    )
+
+    n_updated = 0
+    existing_pairs: set[tuple[str, str]] = set()
+    session = get_sync_session()
+    try:
+        for r in session.execute(
+            text("SELECT DISTINCT commodity, marketing_year FROM wasde_releases")
+        ).all():
+            existing_pairs.add((r.commodity, r.marketing_year))
+
+        for _, row in corrected.iterrows():
+            key = (row["commodity"], row["marketing_year"])
+            if key not in existing_pairs:
+                continue
+            result = session.execute(
+                update_sql,
+                {
+                    "commodity": row["commodity"],
+                    "marketing_year": row["marketing_year"],
+                    "us_production": _num_or_none(row["us_production"]),
+                    "us_exports": _num_or_none(row["us_exports"]),
+                    "ending_stocks": _num_or_none(row["ending_stocks"]),
+                    "total_domestic_use": _num_or_none(row["total_domestic_use"]),
+                    "stocks_to_use": _num_or_none(row["stocks_to_use"]),
+                },
+            )
+            n_updated += result.rowcount
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
+
+    missing = pivot[
+        ~pivot.apply(
+            lambda r: (r["commodity"], r["marketing_year"]) in existing_pairs, axis=1
+        )
+    ]
+    insert_rows = build_wasde_rows(missing)
+    n_inserted = upsert_wasde(insert_rows)
+
+    logger.info(
+        f"  Backfill: {n_updated} existing rows corrected in place, "
+        f"{n_inserted} missing (commodity, marketing_year) rows inserted"
+    )
+    return n_updated, n_inserted
+
+
+def _num_or_none(v):
+    return None if pd.isna(v) else float(v)
+
+
+def run(do_backfill: bool = False):
     """Main entry point — download PSD data, filter, compute, upsert."""
     start = datetime.utcnow()
 
     raw = fetch_psd_data()
     pivoted = filter_and_pivot(raw)
-    wasde_rows = build_wasde_rows(pivoted)
 
+    if do_backfill:
+        n_updated, n_inserted = backfill(pivoted)
+        log_ingest_summary(logger, "wasde_releases", n_updated + n_inserted, start)
+        return
+
+    wasde_rows = build_wasde_rows(pivoted)
     logger.info(f"  Prepared {len(wasde_rows)} WASDE rows for upsert")
     n = upsert_wasde(wasde_rows)
 
@@ -204,4 +349,12 @@ def run():
 
 
 if __name__ == "__main__":
-    run()
+    parser = argparse.ArgumentParser(description="Ingest USDA WASDE data from PSD.")
+    parser.add_argument(
+        "--backfill",
+        action="store_true",
+        help="Correct existing rows in place (units + STU definition) and "
+        "insert missing commodity/year pairs, instead of the normal upsert.",
+    )
+    args = parser.parse_args()
+    run(do_backfill=args.backfill)

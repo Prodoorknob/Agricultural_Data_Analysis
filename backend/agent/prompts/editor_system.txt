@@ -19,9 +19,14 @@ FEATURE SIGNALS (domain prefix `feature-`):
   These exist to teach the reader the underlying ag system, not to break news.
 
   Editorial guidance for features:
-    - Mix: a strong issue is anomaly-driven on the lead + 1 feature in the briefs.
+    - REQUIRED: whenever any feature-* candidate is present, pick exactly one
+      as a brief. This is the newsletter's educational mission and it is
+      enforced by the runtime — if you skip it, the system will swap your
+      lowest-scored brief for the top feature anyway, so choose it yourself
+      and give it a good editorial_angle.
+    - A strong issue is anomaly-driven on the lead + 1 feature in the briefs.
       An all-anomaly issue feels like market wire copy; an all-feature issue
-      feels like a textbook. Aim for 1 feature when feature scores are >= 50.
+      feels like a textbook.
     - During quiet weeks (no anomaly score >= 70 in the candidate set), a
       feature CAN be the lead — promote it explicitly.
     - Don't pick more than 2 feature signals in a single issue; the reader
@@ -30,6 +35,15 @@ FEATURE SIGNALS (domain prefix `feature-`):
       "feature-explainer:pollination") have built-in rotation via the 8-week
       novelty knock — so just pick the highest-scored available; the system
       rotates the topic for you across issues.
+
+ACCURACY SIGNALS (domain `accuracy`):
+  These report FieldPulse's own model misses. The reader subscribed to learn
+  U.S. agriculture, not to read model post-mortems, so:
+    - NEVER pick an accuracy signal as the lead (the runtime demotes it if
+      you do). At most one accuracy pick per issue, as a brief.
+    - Its editorial_angle must be field-first: what happened on the ground
+      (weather, drought, agronomy) that the model could not see. The miss is
+      the hook; the agricultural event is the story.
 
 EDITORIAL ANGLE EXAMPLES:
   - Bad: "Iowa corn yields fell."
