@@ -254,6 +254,17 @@ function renderInline(text: string): React.ReactNode[] {
 
 export default function IssueRenderer({ markdown }: { markdown: string }) {
   const blocks = parseMarkdown(markdown);
+  // Stable per-story anchors (#story-1 = lead, #story-2.. = briefs) matching
+  // the /stories endpoint's story_index, for landing-page deep links. The
+  // plain "## Briefs" divider heading gets no anchor.
+  let storyN = 0;
+  const anchors = blocks.map((b) => {
+    if ((b.type === 'h2' && b.isLead) || b.type === 'h3') {
+      storyN += 1;
+      return `story-${storyN}`;
+    }
+    return undefined;
+  });
   return (
     <article className="fp-issue">
       {blocks.map((b, i) => {
@@ -268,6 +279,7 @@ export default function IssueRenderer({ markdown }: { markdown: string }) {
             return (
               <h2
                 key={i}
+                id={anchors[i]}
                 className={`fp-issue-h2 ${b.isLead ? 'fp-issue-h2--lead' : ''}`}
               >
                 {b.isLead && <span className="fp-issue-lead-pill">LEAD</span>}
@@ -276,7 +288,7 @@ export default function IssueRenderer({ markdown }: { markdown: string }) {
             );
           case 'h3':
             return (
-              <h3 key={i} className="fp-issue-h3">
+              <h3 key={i} id={anchors[i]} className="fp-issue-h3">
                 {renderInline(b.text)}
               </h3>
             );

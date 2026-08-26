@@ -124,6 +124,21 @@ export async function fetchAllRuns(limit = 100): Promise<Run[]> {
   }
 }
 
+export async function fetchStories(limit = 60): Promise<Story[]> {
+  // Per-story index across published issues (educational vs performance
+  // feeds on the landing page). Degrades to [] like the other bridges.
+  try {
+    const res = await fetch(
+      `${backendBaseUrl()}/api/v1/agent/stories?limit=${limit}`,
+      { cache: 'no-store' }
+    );
+    if (!res.ok) return [];
+    return (await res.json()) as Story[];
+  } catch {
+    return [];
+  }
+}
+
 export async function fetchIssueMarkdown(
   slug: string,
   options: { draft?: boolean } = {}
@@ -210,6 +225,18 @@ export interface Run {
   duration_sec: number | null;
   approved_by: string | null;
   approved_at: string | null;
+}
+
+export interface Story {
+  run_id: number;
+  slug: string;
+  run_date: string;
+  role: 'lead' | 'brief';
+  signal_domain: string;
+  story_title: string | null;
+  headline: string | null;
+  story_index: number;
+  category: 'educational' | 'performance';
 }
 
 export function nextSessionExp(): number {

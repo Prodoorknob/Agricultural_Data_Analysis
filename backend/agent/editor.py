@@ -50,11 +50,16 @@ def pick_stories(
     mood: Mood,
     as_of_date: date,
     stats: CallStats | None = None,
+    extra_note: str | None = None,
 ) -> EditorPlan:
     """Run the editor step.
 
     Raises ValueError if the LLM picks an invalid signal_id, the briefs count
     is out of [2, 3], or the response can't be parsed.
+
+    extra_note: optional operator instruction appended to the user message,
+    used by special issues (e.g. the all-educational run) to relax standing
+    rules like the 2-feature cap for one issue.
     """
     if not candidates:
         raise ValueError("editor: no candidates to pick from")
@@ -62,6 +67,8 @@ def pick_stories(
     by_id = {s.id: s for s in candidates}
     prior_picks = _recent_picks_for_prompt(as_of_date)
     user_msg = _format_user(candidates, prior_picks, mood)
+    if extra_note:
+        user_msg += f"\n\nOPERATOR_NOTE (overrides standing rules for THIS issue only):\n{extra_note}"
 
     raw = call_json(
         system=load_prompt("editor_system"),

@@ -138,6 +138,48 @@ async def list_runs(
 
 
 # ---------------------------------------------------------------------------
+# Story index (read-only, no auth — powers the two-section /insights landing
+# page: educational feed = feature-* domains, performance feed = the rest).
+# ---------------------------------------------------------------------------
+
+
+@router.get("/stories")
+async def list_stories(
+    limit: int = Query(60, ge=1, le=300),
+    db: AsyncSession = Depends(get_db),
+):
+    """Per-story index across published issues, newest issue first.
+
+    story_index is the story's position within its issue (1 = lead), which
+    matches the reader's #story-N anchors. category is the single source of
+    truth for the landing page split.
+    """
+    sql = text(
+        """
+        SELECT p.run_id, r.slug, r.run_date, p.role, p.signal_domain,
+               p.story_title, p.headline,
+               ROW_NUMBER() OVER (PARTITION BY p.run_id ORDER BY p.id) AS story_index
+        FROM agent_picks p
+        JOIN agent_runs r ON r.id = p.run_id
+        WHERE r.status = 'published' AND r.slug IS NOT NULL
+        ORDER BY r.run_date DESC, p.id ASC
+        LIMIT :limit
+        """
+    )
+    rows = (await db.execute(sql, {"limit": limit})).mappings().all()
+    out = []
+    for r in rows:
+        d = dict(r)
+        d["category"] = (
+            "educational"
+            if str(d["signal_domain"] or "").startswith("feature-")
+            else "performance"
+        )
+        out.append(d)
+    return out
+
+
+# ---------------------------------------------------------------------------
 # Magic-link token validation (§9.3).
 # ---------------------------------------------------------------------------
 

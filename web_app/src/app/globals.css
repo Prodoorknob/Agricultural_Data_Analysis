@@ -410,6 +410,51 @@ a:focus-visible {
 }
 .fp-insights-row-slug { font-size: 16px; color: var(--text); font-weight: 500; }
 .fp-insights-empty { color: var(--text3); font-style: italic; }
+
+/* --- Landing page story feeds (educational vs performance) --- */
+.fp-feeds {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 40px;
+  margin-bottom: 56px;
+}
+@media (max-width: 719px) {
+  .fp-feeds { grid-template-columns: 1fr; gap: 48px; }
+}
+.fp-feed-heading {
+  font-family: var(--font-barlow), system-ui, sans-serif;
+  font-weight: 700; font-size: 13px; text-transform: uppercase;
+  letter-spacing: 0.12em; color: var(--text2);
+  margin: 0 0 6px; padding-bottom: 10px; border-bottom: 2px solid var(--border);
+}
+.fp-feed-dek { font-size: 13.5px; line-height: 1.5; color: var(--text3); margin: 10px 0 18px; }
+.fp-feed-list { list-style: none; padding: 0; margin: 0; }
+.fp-story-card { border-bottom: 1px solid var(--border); }
+.fp-story-card:last-child { border-bottom: none; }
+.fp-story-link {
+  display: block; padding: 14px 0; text-decoration: none; color: inherit;
+  transition: padding-left 0.15s ease;
+}
+.fp-story-link:hover { padding-left: 6px; }
+.fp-story-link:hover .fp-story-title { color: var(--field); }
+.fp-story-tags { display: flex; gap: 6px; margin-bottom: 6px; }
+.fp-story-tag {
+  font-family: var(--font-barlow), system-ui, sans-serif;
+  font-weight: 700; font-size: 10px; text-transform: uppercase;
+  letter-spacing: 0.1em; padding: 2px 7px; border-radius: 4px;
+}
+.fp-story-tag--edu { color: var(--field); background: var(--field-subtle); border: 1px solid var(--field); }
+.fp-story-tag--perf { color: var(--harvest); background: var(--harvest-subtle); border: 1px solid var(--harvest); }
+.fp-story-tag--lead { color: var(--text3); border: 1px solid var(--border); }
+.fp-story-title {
+  font-size: 15.5px; font-weight: 600; line-height: 1.35; color: var(--text);
+  transition: color 0.15s ease;
+}
+.fp-story-meta {
+  font-family: var(--font-jetbrains), monospace;
+  font-size: 11.5px; color: var(--text3); margin-top: 5px;
+}
+
+/* Deep-link anchors: clear the sticky header when jumping to #story-N. */
+.fp-issue-h2[id], .fp-issue-h3[id] { scroll-margin-top: 90px; }
 .fp-insights-nav { display: flex; align-items: baseline; gap: 16px; margin-bottom: 32px; padding-bottom: 16px; border-bottom: 1px solid var(--border); }
 .fp-insights-nav-back { color: var(--text2); text-decoration: none; font-size: 14px; }
 .fp-insights-nav-back:hover { color: var(--field); }

@@ -413,6 +413,9 @@ class AgentPick(Base):
     score: Mapped[float | None] = mapped_column(Numeric(5, 2), nullable=True)
     mood_boost: Mapped[float | None] = mapped_column(Numeric(5, 2), nullable=True)
     headline: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Writer's published section title (lead H2 / brief H3), filled at stage
+    # time by the publisher. Nullable: pre-2026-08 picks were backfilled.
+    story_title: Mapped[str | None] = mapped_column(String(300), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
 
 

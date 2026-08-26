@@ -52,7 +52,7 @@ function Chart({ spec }: { spec: ChartSpec }) {
   }
 }
 
-function renderBlock(b: Block, i: number): React.ReactNode {
+function renderBlock(b: Block, i: number, anchorId?: string): React.ReactNode {
   switch (b.kind) {
     case 'title':
       return (
@@ -68,14 +68,18 @@ function renderBlock(b: Block, i: number): React.ReactNode {
       );
     case 'section':
       return (
-        <h2 key={i} className={`fp-issue-h2 ${b.lead ? 'fp-issue-h2--lead' : ''}`}>
+        <h2
+          key={i}
+          id={anchorId}
+          className={`fp-issue-h2 ${b.lead ? 'fp-issue-h2--lead' : ''}`}
+        >
           {b.lead && <span className="fp-issue-lead-pill">LEAD</span>}
           {renderInline(b.text)}
         </h2>
       );
     case 'brief':
       return (
-        <h3 key={i} className="fp-issue-h3">
+        <h3 key={i} id={anchorId} className="fp-issue-h3">
           {renderInline(b.text)}
         </h3>
       );
@@ -141,5 +145,20 @@ function renderBlock(b: Block, i: number): React.ReactNode {
 }
 
 export default function ModelIssue({ spec }: { spec: IssueSpec }) {
-  return <article className="fp-issue">{spec.blocks.map(renderBlock)}</article>;
+  // Stable per-story anchors (#story-1 = lead, #story-2.. = briefs) so the
+  // /insights landing feeds can deep-link individual stories. Numbering
+  // matches agent_picks order (lead first), i.e. the /stories story_index.
+  let storyN = 0;
+  const anchors = spec.blocks.map((b) => {
+    if ((b.kind === 'section' && b.lead) || b.kind === 'brief') {
+      storyN += 1;
+      return `story-${storyN}`;
+    }
+    return undefined;
+  });
+  return (
+    <article className="fp-issue">
+      {spec.blocks.map((b, i) => renderBlock(b, i, anchors[i]))}
+    </article>
+  );
 }

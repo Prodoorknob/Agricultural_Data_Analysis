@@ -90,13 +90,19 @@ def stage_issue(
     stats: CallStats,
     duration_sec: int,
     spec: dict[str, Any] | None = None,
+    slug_override: str | None = None,
 ) -> StageResult:
     """Top-level entrypoint after fact-check passes.
 
     Decides auto-publish based on §9.1 trust streak, writes to S3, persists
     DB rows, generates magic-link token, fires Slack ping.
+
+    slug_override exists for special (off-cadence) issues, e.g. the one-time
+    educational run: a midweek as_of can share an ISO week with the coming
+    Sunday's cron run, and two runs must NEVER share a slug (the public
+    reader resolves slug -> run by run_date DESC).
     """
-    slug = issue_slug(as_of_date)
+    slug = slug_override or issue_slug(as_of_date)
     auto = should_auto_publish()
 
     # Render charts first so the markdown's {{chart_id}} placeholders can
@@ -114,8 +120,9 @@ def stage_issue(
         duration_sec=duration_sec,
     )
 
-    # Write related rows.
-    _insert_agent_picks(run_id, plan)
+    # Write related rows. Story titles come from the fact-checked markdown so
+    # the landing-page feeds show the writer's titles, not signal headlines.
+    _insert_agent_picks(run_id, plan, _extract_story_titles(draft.markdown))
     persist_mood(run_id, mood)
 
     # Upload markdown + charts to draft/ first.
@@ -371,9 +378,32 @@ def _insert_agent_run(
     return int(row.id)
 
 
-def _insert_agent_picks(run_id: int, plan: EditorPlan) -> None:
+def _extract_story_titles(markdown: str) -> list[str | None]:
+    """Written story titles in pick order: [lead H2, brief H3s...].
+
+    Reuses the composer's markdown parser (the Python mirror of
+    IssueRenderer.tsx) so the "Lead:" prefix strip and heading detection stay
+    in one place. Returns [] on any parse hiccup — titles are a nice-to-have
+    and must never fail a publish.
+    """
+    try:
+        from backend.agent.composer import parse_markdown_blocks
+
+        blocks = parse_markdown_blocks(markdown)
+        lead = [b["text"] for b in blocks if b["kind"] == "section" and b.get("lead")]
+        briefs = [b["text"] for b in blocks if b["kind"] == "brief"]
+        return [*lead[:1], *briefs]
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("story title extraction failed: %s", exc)
+        return []
+
+
+def _insert_agent_picks(
+    run_id: int, plan: EditorPlan, story_titles: list[str | None] | None = None
+) -> None:
+    titles = story_titles or []
     rows = []
-    for pick in plan.all_picks():
+    for i, pick in enumerate(plan.all_picks()):
         rows.append(
             {
                 "run_id": run_id,
@@ -384,16 +414,17 @@ def _insert_agent_picks(run_id: int, plan: EditorPlan) -> None:
                 "score": round(pick.signal.score, 2),
                 "mood_boost": round(pick.signal.mood_boost, 2),
                 "headline": pick.signal.headline,
+                "story_title": (titles[i][:300] if i < len(titles) and titles[i] else None),
             }
         )
     sql = text(
         """
         INSERT INTO agent_picks (
             run_id, role, signal_id, signal_domain, signal_scope,
-            score, mood_boost, headline
+            score, mood_boost, headline, story_title
         ) VALUES (
             :run_id, :role, :signal_id, :signal_domain, :signal_scope,
-            :score, :mood_boost, :headline
+            :score, :mood_boost, :headline, :story_title
         )
         """
     )

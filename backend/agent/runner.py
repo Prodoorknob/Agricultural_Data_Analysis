@@ -66,6 +66,8 @@ class StepCtx:
     """Mutable context passed between steps."""
 
     as_of: date
+    features_only: bool = False       # special all-educational issue
+    slug_override: str | None = None  # custom slug for off-cadence issues
     stats: CallStats = field(default_factory=CallStats)
     candidates: list = field(default_factory=list)
     mood: Mood | None = None
@@ -78,14 +80,21 @@ class StepCtx:
     started_at: float = field(default_factory=time.time)
 
 
-def run(as_of_date: date | None = None, *, dry_run: bool = False) -> int:
+def run(
+    as_of_date: date | None = None,
+    *,
+    dry_run: bool = False,
+    features_only: bool = False,
+    slug: str | None = None,
+) -> int:
     """Run a single weekly pass. Returns exit code (0 = success)."""
     _setup_logging()
     as_of = as_of_date or _last_sunday()
-    ctx = StepCtx(as_of=as_of)
+    ctx = StepCtx(as_of=as_of, features_only=features_only, slug_override=slug)
 
     logger.info(
-        "FieldPulse run starting (as_of=%s, dry_run=%s)", as_of, dry_run
+        "FieldPulse run starting (as_of=%s, dry_run=%s, features_only=%s, slug=%s)",
+        as_of, dry_run, features_only, slug,
     )
 
     if not dry_run and _run_already_completed(as_of):
@@ -134,7 +143,19 @@ def run(as_of_date: date | None = None, *, dry_run: bool = False) -> int:
 
 
 def _step_signal_board(ctx: StepCtx) -> None:
-    cands = build_candidates(ctx.as_of, top_n=20)
+    if ctx.features_only:
+        # Special educational issue: only feature-* candidates on the menu.
+        # Widen the pre-filter pool since features usually score mid-pack.
+        cands = [
+            s for s in build_candidates(ctx.as_of, top_n=60)
+            if s.domain.startswith("feature-")
+        ]
+        if len(cands) < 4:
+            raise RuntimeError(
+                f"features-only run needs >= 4 feature candidates, got {len(cands)}"
+            )
+    else:
+        cands = build_candidates(ctx.as_of, top_n=20)
     if not cands:
         raise RuntimeError("signal_board produced 0 candidates")
     ctx.candidates = cands
@@ -152,8 +173,18 @@ def _step_mood(ctx: StepCtx) -> None:
 def _step_editor(ctx: StepCtx) -> None:
     if ctx.mood is None:
         raise RuntimeError("editor: mood missing")
+    extra_note = None
+    if ctx.features_only:
+        extra_note = (
+            "This is a one-time ALL-EDUCATIONAL special issue. Every candidate "
+            "is a feature-* signal; pick the lead and briefs entirely from "
+            "them (the 'max 2 features per issue' rule does NOT apply this "
+            "week). Choose a spread of subtypes (explainer / region / trend) "
+            "so the issue teaches different layers of the U.S. ag system."
+        )
     ctx.plan = pick_stories(
-        ctx.candidates, mood=ctx.mood, as_of_date=ctx.as_of, stats=ctx.stats
+        ctx.candidates, mood=ctx.mood, as_of_date=ctx.as_of, stats=ctx.stats,
+        extra_note=extra_note,
     )
 
 
@@ -321,6 +352,7 @@ def _step_publish(ctx: StepCtx, *, dry_run: bool) -> None:
         stats=ctx.stats,
         duration_sec=duration,
         spec=ctx.composed.spec if ctx.composed else None,
+        slug_override=ctx.slug_override,
     )
 
 
@@ -430,8 +462,24 @@ def main() -> int:
         action="store_true",
         help="Run all steps but do not write to S3, DB, or Slack.",
     )
+    parser.add_argument(
+        "--features-only",
+        action="store_true",
+        help="Special issue: restrict candidates to feature-* (educational) signals.",
+    )
+    parser.add_argument(
+        "--slug",
+        default=None,
+        help="Override the issue slug (required for off-cadence specials that "
+        "would otherwise collide with the weekly ISO-week slug).",
+    )
     args = parser.parse_args()
-    return run(as_of_date=args.as_of, dry_run=args.dry_run)
+    return run(
+        as_of_date=args.as_of,
+        dry_run=args.dry_run,
+        features_only=args.features_only,
+        slug=args.slug,
+    )
 
 
 if __name__ == "__main__":
