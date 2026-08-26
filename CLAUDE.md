@@ -602,6 +602,16 @@ All three fire off annual backfills that refresh once a year but were re-firing 
 
 **Trust-streak status checked 2026-08-26:** force_manual=true, auto_publish=false, w32 was rejected (streak broken), w33/w34 sit in draft. No auto-publish risk while these fixes bed in.
 
+### Insights landing page: two-section split (2026-08-26)
+
+`/insights` redesigned from a flat issue list into two story-level feeds. The division lives at the STORY level (every issue mixes both kinds by design): educational = picks with `signal_domain` starting `feature-`, performance = everything else, and `accuracy` post-mortems get category `model` which neither feed renders (still reachable through the issue itself).
+
+- **Migration 014**: `agent_picks.story_title` (writer's published section title). Publisher fills it at stage time via `_extract_story_titles` (reuses `composer.parse_markdown_blocks`). `backend/agent/backfill_story_titles.py` backfilled 32 picks across the 8 pre-existing runs from S3 markdown.
+- **`GET /api/v1/agent/stories`**: per-story index over published runs. `story_index` (1 = lead) matches the readers' `#story-N` anchors; `category` is computed server-side.
+- **Frontend**: `insights/page.tsx` renders "This week in the field" (performance) + "Learn U.S. agriculture" (educational) card feeds above the retained All-issues list; cards deep-link to `/insights/{slug}#story-N`. `IssueRenderer` + `ModelIssue` emit stable `#story-N` ids (lead H2 + brief H3s, "## Briefs" divider skipped). `ScrollToHash` client component handles the jump because the issue body streams in after the browser's single native anchor attempt (and uses `behavior: 'instant'` since the global `scroll-behavior: smooth` stalls in background tabs). Date-only `run_date` strings render anchored to noon to stop the off-by-one-day TZ shift.
+- **Special issues**: runner gained `--features-only` (candidate menu restricted to feature-* signals; editor receives an operator note lifting the 2-feature cap) and `--slug` (REQUIRED for off-cadence runs: a midweek as_of shares its ISO week with the coming Sunday, and two runs must never share a slug). One-time educational backfill issue run 2026-08-26 as `fieldpulse-edu-2026-01` (run_date 2026-08-26) through the normal draft + Slack-approval flow.
+- **Dev note**: `web_app/.env.local` now points BACKEND_BASE_URL at `https://agri-intel.rvedire.com` (backup in `.env.local.bak`) since no backend runs locally anymore.
+
 ### Compute migration: EC2 → Victus (2026-07-10)
 
 EC2 (t3.small) OS-hung from an OOM since 2026-06-15; compute moved to the self-hosted "Victus" box (Ubuntu, 14GB RAM, Tailscale host `server-local-ubuntu` / 100.75.64.59, project user `doorknob`). RDS + S3 stay in AWS. RDS reachable from Victus under the existing security-group rule (same home egress IP as the dev PC).
