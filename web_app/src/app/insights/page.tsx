@@ -35,7 +35,10 @@ function domainLabel(domain: string): string {
 }
 
 function fmtDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('en-US', {
+  // run_date is a date-only string; anchor it to noon so the rendered day
+  // can't shift across timezones (bare YYYY-MM-DD parses as UTC midnight).
+  const d = /^\d{4}-\d{2}-\d{2}$/.test(iso) ? new Date(`${iso}T12:00:00`) : new Date(iso);
+  return d.toLocaleDateString('en-US', {
     year: 'numeric',
     month: 'short',
     day: 'numeric',

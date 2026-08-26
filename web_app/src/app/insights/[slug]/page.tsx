@@ -3,6 +3,7 @@ import { fetchIssueMarkdown, fetchIssueSpec, fetchRunBySlug } from '@/lib/insigh
 import IssueRenderer from '@/components/insights/IssueRenderer';
 import IssueMeta from '@/components/insights/IssueMeta';
 import ModelIssue from '@/components/insights/model/ModelIssue';
+import ScrollToHash from '@/components/insights/ScrollToHash';
 
 export const dynamic = 'force-dynamic';
 
@@ -49,6 +50,7 @@ export default async function IssuePage({ params }: Params) {
         </a>
         <span className="fp-insights-nav-slug">{slug}</span>
       </nav>
+      <ScrollToHash />
       {spec ? <ModelIssue spec={spec} /> : <IssueRenderer markdown={rewritten} />}
       <IssueMeta
         run_date={run.run_date}
