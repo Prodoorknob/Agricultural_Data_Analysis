@@ -339,7 +339,11 @@ def call_with_tools(
                     output = handler(**tool_input)
                     is_error = False
                 except Exception as exc:  # noqa: BLE001
-                    logger.exception("tool %s failed", name)
+                    logger.exception(
+                        "tool %s failed; input=%s",
+                        name,
+                        json.dumps(tool_input, default=str)[:600],
+                    )
                     output = {"error": f"{type(exc).__name__}: {exc}"}
                     is_error = True
             if stats is not None:

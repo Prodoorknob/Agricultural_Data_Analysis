@@ -55,6 +55,61 @@ _AS_OF_TABLE_COLUMNS: dict[str, str] = {
 _ALLOWED_TABLES = set(_AS_OF_TABLE_COLUMNS.keys())
 
 
+# Granularity / naming gotchas the column list alone can't convey. Keyed by
+# table name; rendered under the table's column list in build_schema_doc().
+_TABLE_NOTES: dict[str, str] = {
+    "drought_index": (
+        "STATE-year granularity: one row per (state_fips, year), no county "
+        "fips and no weekly rows. For county-week drought use get_weather."
+    ),
+    "futures_daily": "price column is `settlement`; contract_month is 'YYYY-MM'.",
+    "dxy_daily": "index value column is `dxy`.",
+    "wasde_releases": (
+        "one row per (release_date, commodity, marketing_year). There are no "
+        "prior-release or delta columns; to get month-over-month change, pull "
+        "two release_dates and diff them yourself."
+    ),
+    "export_commitments": (
+        "national weekly snapshots keyed by as_of_date; values in metric tons "
+        "(_mt suffix). Commodity column is `commodity`, not crop."
+    ),
+    "yield_accuracy": (
+        "crop column is `crop` (not commodity); county key is 5-digit `fips`. "
+        "No state or county-name columns — derive state via SUBSTRING(fips, 1, 2)."
+    ),
+    "yield_forecasts": "crop column is `crop` (not commodity); county key is 5-digit `fips`.",
+    "feature_weekly": "county-week weather features; county key is 5-digit `fips`.",
+    "acreage_forecasts": "state_fips '00' is the national rollup; acre values are raw acres.",
+    "acreage_accuracy": "state_fips '00' is the national rollup; acre values are raw acres.",
+}
+
+
+def build_schema_doc() -> str:
+    """Render the allowlisted tables' real columns from ORM metadata.
+
+    Generated (not hand-written) so it cannot drift from the actual schema.
+    Injected into the researcher system prompt — the w28-w34 runs showed the
+    LLM inventing column names when given only table names.
+    """
+    from backend.database import Base
+    from backend.models import db_tables  # noqa: F401  (registers tables on Base.metadata)
+
+    lines = [
+        "TABLE SCHEMAS — these are the ONLY tables and columns that exist. "
+        "Never reference a column that is not listed here."
+    ]
+    for name in sorted(_ALLOWED_TABLES):
+        table = Base.metadata.tables.get(name)
+        if table is None:
+            continue
+        cols = ", ".join(c.name for c in table.columns if c.name != "id")
+        lines.append(f"- {name}({cols})")
+        note = _TABLE_NOTES.get(name)
+        if note:
+            lines.append(f"    note: {note}")
+    return "\n".join(lines)
+
+
 class SqlValidationError(ValueError):
     pass
 
@@ -438,6 +493,8 @@ def build_tool_specs() -> list[dict[str, Any]]:
             "description": (
                 "Read-only SELECT against the analytics tables. "
                 f"Allowed tables: {sorted(_ALLOWED_TABLES)}. "
+                "Use ONLY the columns listed under TABLE SCHEMAS in the "
+                "system prompt — unknown columns make the query fail. "
                 "INSERT/UPDATE/DELETE/DDL are rejected. "
                 "Time-bound tables get an implicit `<= as_of` filter so the "
                 "query returns only data that was knowable on the run date. "

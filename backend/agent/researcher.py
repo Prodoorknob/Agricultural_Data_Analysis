@@ -16,7 +16,7 @@ from typing import Any
 from backend.agent.editor import EditorPlan, Pick
 from backend.agent.llm import CallStats, call_with_tools, load_prompt
 from backend.agent.mood import Mood
-from backend.agent.tools import build_tool_handlers, build_tool_specs
+from backend.agent.tools import build_schema_doc, build_tool_handlers, build_tool_specs
 from backend.config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -64,6 +64,11 @@ def research(
     tool_specs = build_tool_specs()
     tool_handlers = build_tool_handlers(as_of_date)
     system_prompt = load_prompt("researcher_system")
+    schema_doc = build_schema_doc()
+    if "{{TABLE_SCHEMAS}}" in system_prompt:
+        system_prompt = system_prompt.replace("{{TABLE_SCHEMAS}}", schema_doc)
+    else:
+        system_prompt = f"{system_prompt}\n\n{schema_doc}\n"
 
     used = 0
     dossiers: list[StoryDossier] = []
