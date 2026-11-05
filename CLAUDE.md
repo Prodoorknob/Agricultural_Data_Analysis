@@ -9,13 +9,14 @@ Interactive dashboard for exploring long-term trends in U.S. agriculture using U
 ```
 Next.js Frontend (React 19, Recharts, Deck.gl, MapLibre)
          |
-    S3 (primary) / Local API (fallback) / Athena (advanced queries)
+    S3 public-read parquet (primary) / Next.js /api/data proxy (fallback)
          |
-Python Pipeline (EC2 cron) -> USDA API -> Parquet -> S3
+Python Pipeline (Victus cron) -> USDA API -> Parquet -> S3
          |
-FastAPI Backend (EC2, port 8000) -> PostgreSQL (RDS)   [DEPLOYED]
+FastAPI Backend (Victus, port 8001) -> PostgreSQL 17 (Victus, local)   [DEPLOYED]
          |
-Production: Vercel (frontend) + https://agri-intel.rvedire.com (API)
+Production: Vercel (frontend) + https://agri-intel.rvedire.com (API, via Cloudflare Tunnel)
+S3 is the ONLY remaining AWS service (since 2026-11-05).
 ```
 
 ## Tech Stack
@@ -24,16 +25,15 @@ Production: Vercel (frontend) + https://agri-intel.rvedire.com (API)
 - Next.js 16, React 19, TypeScript 5, TailwindCSS 4
 - Recharts 3.7 (charts), Deck.gl 9.2 + MapLibre GL 5.18 (maps)
 - hyparquet 1.25 (browser-side parquet reading)
-- @aws-sdk/client-athena (Athena queries)
 
 ### Pipeline (`pipeline/`)
 - Python 3, pandas, pyarrow, boto3, requests, numpy
-- Runs on EC2 via cron (15th of month, 6 AM)
+- Runs on Victus via cron (15th of month, 6 AM CT)
 
 ### Backend (`backend/`) — IN PROGRESS
 - FastAPI + Uvicorn
 - SQLAlchemy 2.0 (async, asyncpg)
-- PostgreSQL on RDS (us-east-2)
+- PostgreSQL 17 on Victus (self-hosted, migrated off RDS 2026-11-05)
 - LightGBM, statsmodels, scikit-learn, SHAP
 - Alembic for migrations
 
@@ -49,8 +49,7 @@ Agricultural_Data_Analysis/
 │       ├── app/                 # Pages + API routes
 │       │   ├── page.tsx         # Main dashboard (has ViewMode tabs)
 │       │   └── api/
-│       │       ├── data/route.ts       # Parquet proxy (S3 or local)
-│       │       └── athena/route.ts     # Athena query endpoint
+│       │       └── data/route.ts       # Parquet proxy (S3 or local)
 │       ├── components/          # Dashboard views
 │       │   ├── CropsDashboard.tsx
 │       │   ├── EconomicsDashboard.tsx
@@ -59,7 +58,6 @@ Agricultural_Data_Analysis/
 │       │   ├── AnimalsDashboard.tsx
 │       │   ├── USMap.tsx
 │       │   └── ...
-│       ├── hooks/useAthenaQuery.ts
 │       ├── types/agricultural-data.ts
 │       └── utils/
 │           ├── design.ts        # Design tokens (palette, chart colors)
@@ -70,7 +68,7 @@ Agricultural_Data_Analysis/
 │   ├── upload_to_s3.py          # Dual-layout S3 upload
 │   ├── validate_data.py         # Data quality checks
 │   ├── incremental_check.py     # New data detection
-│   ├── cron_runner.sh           # EC2 orchestrator
+│   ├── cron_runner.sh           # Victus cron orchestrator (notify() -> Slack + healthchecks.io)
 │   └── requirements.txt
 ├── backend/                     # FastAPI prediction service [IN PROGRESS]
 │   ├── main.py                  # App entry, CORS, health
@@ -87,15 +85,14 @@ Agricultural_Data_Analysis/
     └── planted-acreage-tech-spec.md   # Acreage prediction spec
 ```
 
-## AWS Infrastructure
+## Infrastructure
 
-| Service | Details |
+| Where | Details |
 |---------|---------|
-| S3 | `usda-analysis-datasets` (us-east-2) — parquet files, model artifacts |
-| EC2 | Pipeline cron + FastAPI backend (same instance) |
-| Athena | Database `usda_agricultural`, table `quickstats_data`, workgroup `usda-dashboard` |
-| RDS | PostgreSQL (db.t4g.micro, us-east-2) — `ag-dashboard` instance, database `ag_dashboard`, user `ag_app`, **Publicly Accessible = Yes** (local dev access via security group IP whitelist) |
-| SNS | `arn:aws:sns:us-east-2:294733692749:usda-pipeline-alerts` |
+| S3 (AWS, us-east-2) | `usda-analysis-datasets`: public-read parquet/JSON the browser reads directly, model artifacts, newsletters, aquiferwatch (other project). `ag-dashboard-db-backups-294733692749`: PRIVATE, nightly `daily/` dumps (60-day expiry) + `rds-final/` long-term copy. **Only AWS service still in use.** |
+| Victus (self-hosted) | Tailscale `server-local-ubuntu` / 100.75.64.59. FastAPI `ag-prediction` (port 8001), all crons (user `doorknob`, TZ=America/Chicago), PostgreSQL 17 (`ag_dashboard`, role `ag_app`, listens on localhost + tailnet `100.64.0.0/10` only), nightly backup `/usr/local/bin/ag-db-backup.sh` (root cron 03:30, local 14 days in `/var/backups/ag_dashboard`). |
+| IAM | `victus-ag-service` (inline policy `ag-s3`: data bucket RW + backup bucket put/get/list). Root has NO access keys. |
+| Retired 2026-11-05 | EC2 (zombie t3.small), RDS `ag-dashboard`, Athena + Glue, SNS `usda-pipeline-alerts`, SSM `/usda/quickstats-api-key`, ECR `usda-dashboard`. See `docs/aws-to-victus-migration-roadmap.md`. |
 
 ## Environment Variables
 
@@ -105,7 +102,12 @@ QUICKSTATS_API_KEY=...     # USDA QuickStats API
 NOAA_API_KEY=...           # NOAA weather data
 
 # Prediction modules (added to .env)
-DATABASE_URL=postgresql+asyncpg://ag_app:PASSWORD@ag-dashboard.cvuu6ce8odqc.us-east-2.rds.amazonaws.com:5432/ag_dashboard
+DATABASE_URL=postgresql+asyncpg://ag_app:PASSWORD@127.0.0.1:5432/ag_dashboard      # on Victus
+# DATABASE_URL=postgresql+asyncpg://ag_app:PASSWORD@100.75.64.59:5432/ag_dashboard  # dev PC, over Tailscale (ProtonVPN blocks it)
+# Alerting (pipeline/cron_runner.sh notify()):
+# SLACK_CHANNEL_ALERTS=C...   optional, falls back to SLACK_CHANNEL_FIELDPULSE
+# NOTIFY_ON_SUCCESS=1         optional, post successes too (default failures only)
+# HC_PING_URL=https://hc-ping.com/<ping-key>   healthchecks.io dead-man pings, one check per cron mode slug
 # NASDAQ_DL_API_KEY — no longer needed (CHRIS/CME retired, switched to Yahoo Finance)
 FRED_API_KEY=...           # FRED API (DXY index)
 ```
@@ -114,10 +116,9 @@ FRED_API_KEY=...           # FRED API (DXY index)
 
 1. **Pipeline** fetches from USDA QuickStats API monthly
 2. Data cleaned, partitioned by state into parquet files
-3. Uploaded to S3 in two layouts: browser-friendly + Athena-optimized
+3. Uploaded to S3 in two layouts: browser-friendly + Hive-partitioned (`athena_optimized*`, no longer queried since Athena was retired; kept by `upload_to_s3.py`)
 4. **Frontend** reads parquet directly from S3 (or via API proxy fallback)
-5. **Athena** available for complex SQL queries over the same S3 data
-6. **Prediction module** (in progress): FastAPI reads from RDS, serves forecasts to frontend
+5. **Prediction module**: FastAPI on Victus reads from local Postgres, serves forecasts to frontend
 
 ## Development
 
@@ -626,3 +627,17 @@ EC2 (t3.small) OS-hung from an OOM since 2026-06-15; compute moved to the self-h
   - AWS creds: IAM user `victus-ag-service` with scoped inline policy (S3 `usda-analysis-datasets` + `sns:Publish` on the alerts topic), installed at `/home/doorknob/.aws/credentials`. S3 read/write verified via boto3.
   - Sunday 7/12 cron fired on schedule but failed at publisher (creds didn't exist yet). Deleted the failed run row + children, reran `--weekly-fieldpulse`: run id 10, slug `fieldpulse-2026-w28` (July WASDE lead), status `draft`, $0.64 / 751s, S3 + Slack magic link confirmed. Trust streak 1/6.
   - Watch item: two transient `tool query_sql failed` errors in the w28 researcher step (retried successfully). Investigate if it recurs.
+
+### AWS exit: everything except S3 moved to Victus (2026-11-05)
+
+Audit found Victus had been offline ~30 days (Tailscale last seen ~2026-10-06; RDS saw 0 connections from late Sep after the home IP rotated out of the RDS allowlist; nothing alerted because alerts were sent from the dead box). User relocated Victus to a monitorable spot and asked to move everything but S3 (S3 kept on purpose: tiny cost + keeps the AWS account active). Full inventory + roadmap: `docs/aws-to-victus-migration-roadmap.md`.
+
+**Done:**
+- **Postgres on Victus.** PGDG `postgresql-17`, cluster `17/main`. `pg_dump -Fc` from RDS (crons paused, API stopped) -> `pg_restore`; all 24 public tables matched row-for-row (yield_accuracy 240,440, yield_forecasts 119,190, futures_daily 19,649...), alembic `014 (head)`. Victus `.env` `DATABASE_URL` -> `127.0.0.1`; dev PC `.env` -> `100.75.64.59` over Tailscale. **New `ag_app` password** (not the RDS one, which leaked into a session log); stored root-only at `/root/.ag_app_local_pw`. Victus `.env` backup at `/root/victus.env.bak.20261105`, dev PC's at `~/.ag-env-backups/`.
+- **Backups.** `/usr/local/bin/ag-db-backup.sh`, root cron `30 3 * * *`: local dump (14 days) + upload via backend-venv boto3 to the private bucket (Victus has no AWS CLI). Restore tested into a scratch DB. Log `/var/log/ag-db-backup.log`.
+- **SNS -> `notify()`** in `pipeline/cron_runner.sh` (all 22 publish blocks). Slack on failure (and success when `NOTIFY_ON_SUCCESS=1`); optional `HC_PING_URL` healthchecks.io ping per mode slug (`<base>/<mode>` and `<base>/<mode>/fail`), which is the off-box dead-man alert for this exact failure mode. FieldPulse mode now also notifies on success so its check gets pinged.
+- **SSM fallback removed** from `pipeline/quickstats_ingest.py::get_api_key()`; it now accepts `QUICKSTATS_API_KEY` (the name `.env` actually uses) and reads `.env` directly. The monthly NASS cron on Victus had been silently hitting SSM with no permission.
+- **Athena removed from the frontend**: `app/api/athena/**`, `utils/athenaClient.ts`, `hooks/useAthenaQuery.ts`, the 3 caller-less Athena fetchers in `serviceData.ts`, `@aws-sdk/client-athena`. About page copy updated. `npm run build` clean.
+- **AWS deleted:** ECR repo, both root access keys, SNS topic, SSM parameter, Athena workgroup `usda-dashboard` + Glue `usda_agricultural`, `athena-results/`. RDS SG allowlist updated to the new home IP `136.52.223.0/32` (needed for the dump). Zombie EC2: final EBS snapshot `snap-0cc027bef2af87b6a`, then terminate + release EIP. Done: EC2 terminated (volume auto-deleted), EIP released, `EC2_USDA` role + instance profile, both `USDA-*` policies, and SG `launch-wizard-2` deleted.
+- **RDS + leftovers gone (2026-11-05):** Raj deleted RDS `ag-dashboard` in the console (final snapshot `ag-dashboard-final-20261105`); then via CLI: orphaned RDS ENI, SGs `rds-ec2-1`, `ec2-rds-1`, `launch-wizard-1`, log group `RDSOSMetrics`, role `rds-monitoring-role`. Only `default` SG remains. **Around 2026-11-19:** delete snapshots `ag-dashboard-final-20261105` and `snap-0cc027bef2af87b6a`.
+- `victus-ag-service` inline policy replaced: `ag-s3-sns` -> `ag-s3`.

@@ -222,16 +222,16 @@ export default function AboutPage() {
       <section className="mb-8">
         <SectionHeading>Pipeline</SectionHeading>
         <p className="mt-2 text-[14px] leading-[1.6]" style={{ color: 'var(--text2)' }}>
-          A Python ingest (EC2 cron, 15th of each month) pulls NASS QuickStats
+          A Python ingest (cron on a self-hosted server, 15th of each month) pulls NASS QuickStats
           by source, aggregation level, and stat-category chunks, applies a
           tier-aware canonical aggregation (SURVEY &gt; CENSUS &gt; DERIVED; dedup
           on (state, year, commodity, stat_cat, unit)), and writes
-          state-partitioned Parquet files to S3 in two layouts: browser-friendly
-          for the dashboard and Athena-optimized for ad-hoc SQL. Market data
+          state-partitioned Parquet files to S3, which the dashboard reads
+          directly in the browser. Market data
           (futures via Yahoo, DXY via FRED) refreshes on weekdays; WASDE + ERS
           production costs on monthly / annual cadences. Structured data
           (training labels, model predictions, walk-forward accuracy) lives in
-          PostgreSQL on RDS; heavy raw data stays on S3.
+          PostgreSQL on the same self-hosted server; heavy raw data stays on S3.
         </p>
       </section>
 

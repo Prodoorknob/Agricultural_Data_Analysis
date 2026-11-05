@@ -19,7 +19,7 @@ Usage:
     python quickstats_ingest.py --dry-run
 
 Environment Variables:
-    USDA_QUICKSTATS_API_KEY  - API key (or fetched from AWS SSM)
+    USDA_QUICKSTATS_API_KEY or QUICKSTATS_API_KEY - API key (env or project .env)
     AWS_REGION               - AWS region (default: us-east-2)
 """
 
@@ -248,24 +248,34 @@ COUNTY_SKIP_STATES: dict[str, set[str]] = {
 # ---------------------------------------------------------------------------
 # API Key Management
 # ---------------------------------------------------------------------------
+_API_KEY_NAMES = ("USDA_QUICKSTATS_API_KEY", "QUICKSTATS_API_KEY")
+
+
 def get_api_key() -> str:
-    """Get the QuickStats API key from env var or AWS SSM."""
-    key = os.environ.get("USDA_QUICKSTATS_API_KEY")
-    if key:
-        return key
+    """Get the QuickStats API key from the environment or the project .env.
 
-    # Try AWS SSM Parameter Store
+    Accepts either USDA_QUICKSTATS_API_KEY or QUICKSTATS_API_KEY (the name the
+    project .env uses). The AWS SSM fallback was retired 2026-11 when compute
+    moved fully to Victus.
+    """
+    for name in _API_KEY_NAMES:
+        key = os.environ.get(name)
+        if key:
+            return key
+
+    env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".env")
     try:
-        import boto3
-
-        ssm = boto3.client("ssm", region_name=os.environ.get("AWS_REGION", "us-east-2"))
-        response = ssm.get_parameter(Name="/usda/quickstats-api-key", WithDecryption=True)
-        return response["Parameter"]["Value"]
-    except Exception as e:
-        logger.error(f"Could not retrieve API key from SSM: {e}")
+        with open(env_path, encoding="utf-8") as fh:
+            for line in fh:
+                name, _, value = line.strip().partition("=")
+                if name in _API_KEY_NAMES and value.strip().strip("\"'"):
+                    return value.strip().strip("\"'")
+    except OSError:
+        pass
 
     raise ValueError(
-        "No API key found. Set USDA_QUICKSTATS_API_KEY env var or store in AWS SSM at /usda/quickstats-api-key"
+        "No API key found. Set USDA_QUICKSTATS_API_KEY or QUICKSTATS_API_KEY "
+        "in the environment or the project .env"
     )
 
 

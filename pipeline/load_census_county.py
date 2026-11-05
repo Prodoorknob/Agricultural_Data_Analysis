@@ -25,7 +25,7 @@ Output:
     pipeline/output/athena_optimized/state_alpha={STATE}/data.parquet (updated)
 
 Environment Variables:
-    USDA_QUICKSTATS_API_KEY  - API key (or fetched from AWS SSM)
+    USDA_QUICKSTATS_API_KEY or QUICKSTATS_API_KEY - API key (env or project .env)
     AWS_REGION               - AWS region (default: us-east-2)
 """
 

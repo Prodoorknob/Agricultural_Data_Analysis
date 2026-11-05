@@ -9,7 +9,6 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "@aws-sdk/client-athena": "^3.500.0",
     "@deck.gl/aggregation-layers": "^9.2.6",
     "@deck.gl/layers": "^9.2.6",
     "@deck.gl/react": "^9.2.6",

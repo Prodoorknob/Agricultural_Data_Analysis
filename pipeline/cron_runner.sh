@@ -1,7 +1,7 @@
 #!/bin/bash
 # cron_runner.sh - Orchestration script for USDA data pipelines
 #
-# This script is designed to be run via cron on an EC2 instance.
+# This script runs via cron on the self-hosted Victus box (moved off EC2 2026-07).
 #
 # IMPORTANT: USDA publishes on Central Time. Set the crontab's TZ so the
 # times below fire in the right timezone regardless of the OS default:
@@ -44,7 +44,8 @@
 #   2. Run incremental_check.py to detect new data
 #   3. If new data found, run quickstats_ingest.py
 #   4. Upload results to S3 via upload_to_s3.py
-#   5. Send SNS notification on success or failure
+#   5. notify(): Slack on failure (and on success if NOTIFY_ON_SUCCESS=1),
+#      plus an optional healthchecks.io ping (HC_PING_URL) for dead-man alerting
 
 set -euo pipefail
 
@@ -71,8 +72,6 @@ BACKEND_DIR="${PROJECT_ROOT}/backend"
 VENV_PATH="${PROJECT_ROOT}/.venv/bin/activate"
 BACKEND_VENV_PATH="${BACKEND_DIR}/venv/bin/activate"
 LOG_DIR="${PIPELINE_DIR}/logs"
-SNS_TOPIC_ARN="arn:aws:sns:us-east-2:294733692749:usda-pipeline-alerts"
-AWS_REGION="us-east-2"
 RUN_MODE="${1:---nass}"  # default to NASS pipeline
 
 # ---------------------------------------------------------------------------
@@ -98,6 +97,57 @@ else
 fi
 
 cd "${PIPELINE_DIR}"
+
+# ---------------------------------------------------------------------------
+# Helper: notify "<subject>" "<message>"
+# Replaces the retired AWS SNS topic (2026-11). Reads from the project .env:
+#   SLACK_BOT_TOKEN + SLACK_CHANNEL_ALERTS (falls back to SLACK_CHANNEL_FIELDPULSE)
+#   NOTIFY_ON_SUCCESS=1  also post success messages (default: failures only)
+#   HC_PING_URL          healthchecks.io ping base, e.g. https://hc-ping.com/<ping-key>
+#                        pings <base>/<mode> on success, <base>/<mode>/fail on failure
+#                        (?create=1 auto-creates a check per mode on first ping)
+# Never fails the pipeline.
+# ---------------------------------------------------------------------------
+_env_get() {
+    # Missing key -> empty string. Must never return non-zero: the script runs
+    # under `set -euo pipefail`, so a failed grep would abort the whole cron run.
+    { grep -E "^$1=" "${PROJECT_ROOT}/.env" 2>/dev/null || true; } | head -1 | cut -d= -f2- | tr -d "\"'\r"
+    return 0
+}
+notify() {
+    local subject="$1" message="$2" status="ok"
+    [[ "${subject}" == *FAIL* ]] && status="fail"
+    local slug="${RUN_MODE#--}"
+    local hc; hc="$(_env_get HC_PING_URL)"
+    if [ -n "${hc}" ]; then
+        if [ "${status}" = "fail" ]; then
+            curl -fsS -m 10 --retry 3 "${hc}/${slug}/fail?create=1" --data-raw "${subject}: ${message}" >/dev/null 2>&1 || true
+        else
+            curl -fsS -m 10 --retry 3 "${hc}/${slug}?create=1" >/dev/null 2>&1 || true
+        fi
+    fi
+    if [ "${status}" = "ok" ] && [ "$(_env_get NOTIFY_ON_SUCCESS)" != "1" ]; then
+        return 0
+    fi
+    local token channel
+    token="$(_env_get SLACK_BOT_TOKEN)"
+    channel="$(_env_get SLACK_CHANNEL_ALERTS)"; [ -z "${channel}" ] && channel="$(_env_get SLACK_CHANNEL_FIELDPULSE)"
+    if [ -z "${token}" ] || [ -z "${channel}" ]; then
+        echo "notify: no Slack config, skipping (${subject})"
+        return 0
+    fi
+    local icon=":white_check_mark:"; [ "${status}" = "fail" ] && icon=":rotating_light:"
+    local payload
+    payload="$(python3 -c 'import json,sys; print(json.dumps({"channel": sys.argv[1], "text": sys.argv[2] + " *" + sys.argv[3] + "*\n" + sys.argv[4] + "\n_host: " + sys.argv[5] + "_"}))' \
+        "${channel}" "${icon}" "${subject}" "${message}" "$(hostname)")"
+    # Slack returns HTTP 200 with {"ok":false,...} on auth/channel errors, so check the body.
+    local resp
+    resp="$(curl -sS -m 15 -X POST https://slack.com/api/chat.postMessage \
+        -H "Authorization: Bearer ${token}" -H "Content-Type: application/json; charset=utf-8" \
+        --data "${payload}" 2>&1 || true)"
+    [[ "${resp}" == *'"ok":true'* ]] || echo "notify: Slack post failed (${subject}): ${resp:0:200}"
+    return 0
+}
 
 # ---------------------------------------------------------------------------
 # Helper: activate backend venv for prediction ETL scripts
@@ -128,20 +178,12 @@ if [ "${RUN_MODE}" = "--daily" ]; then
 
     if [ ${FUTURES_EXIT} -ne 0 ] || [ ${FRED_EXIT} -ne 0 ]; then
         echo "Daily ETL failed (futures=${FUTURES_EXIT}, fred=${FRED_EXIT})"
-        aws sns publish \
-            --topic-arn "${SNS_TOPIC_ARN}" \
-            --subject "Price ETL: Daily Ingest FAILED" \
-            --message "Daily market data ingest failed at $(date). futures_exit=${FUTURES_EXIT}, fred_exit=${FRED_EXIT}. See log: ${LOGFILE}" \
-            --region "${AWS_REGION}" 2>/dev/null || true
+        notify "Price ETL: Daily Ingest FAILED" "Daily market data ingest failed at $(date). futures_exit=${FUTURES_EXIT}, fred_exit=${FRED_EXIT}. See log: ${LOGFILE}"
         exit 1
     fi
 
     echo "Daily market data ingest completed successfully at $(date)"
-    aws sns publish \
-        --topic-arn "${SNS_TOPIC_ARN}" \
-        --subject "Price ETL: Daily Ingest SUCCESS" \
-        --message "Daily futures + DXY ingest completed at $(date)." \
-        --region "${AWS_REGION}" 2>/dev/null || true
+    notify "Price ETL: Daily Ingest SUCCESS" "Daily futures + DXY ingest completed at $(date)."
     exit 0
 fi
 
@@ -160,11 +202,7 @@ if [ "${RUN_MODE}" = "--monthly-wasde" ]; then
 
     if [ ${WASDE_EXIT} -ne 0 ]; then
         echo "WASDE ingest failed with exit code ${WASDE_EXIT}"
-        aws sns publish \
-            --topic-arn "${SNS_TOPIC_ARN}" \
-            --subject "Price ETL: WASDE Ingest FAILED" \
-            --message "WASDE ingest failed at $(date) with exit code ${WASDE_EXIT}. See log: ${LOGFILE}" \
-            --region "${AWS_REGION}" 2>/dev/null || true
+        notify "Price ETL: WASDE Ingest FAILED" "WASDE ingest failed at $(date) with exit code ${WASDE_EXIT}. See log: ${LOGFILE}"
         exit 1
     fi
 
@@ -177,22 +215,14 @@ if [ "${RUN_MODE}" = "--monthly-wasde" ]; then
 
     if [ ${INFERENCE_EXIT} -ne 0 ]; then
         echo "WARNING: Inference failed (exit=${INFERENCE_EXIT}), WASDE ingest was successful"
-        aws sns publish \
-            --topic-arn "${SNS_TOPIC_ARN}" \
-            --subject "Price ETL: Inference FAILED (WASDE OK)" \
-            --message "WASDE ingest succeeded but inference failed at $(date). exit=${INFERENCE_EXIT}. See log: ${LOGFILE}" \
-            --region "${AWS_REGION}" 2>/dev/null || true
+        notify "Price ETL: Inference FAILED (WASDE OK)" "WASDE ingest succeeded but inference failed at $(date). exit=${INFERENCE_EXIT}. See log: ${LOGFILE}"
     fi
 
     # Restart FastAPI to reload any new model artifacts
     sudo systemctl restart ag-prediction 2>/dev/null || true
 
     echo "Monthly WASDE ingest + inference completed at $(date)"
-    aws sns publish \
-        --topic-arn "${SNS_TOPIC_ARN}" \
-        --subject "Price ETL: WASDE Ingest SUCCESS" \
-        --message "WASDE supply/demand ingest completed at $(date)." \
-        --region "${AWS_REGION}" 2>/dev/null || true
+    notify "Price ETL: WASDE Ingest SUCCESS" "WASDE supply/demand ingest completed at $(date)."
     exit 0
 fi
 
@@ -211,20 +241,12 @@ if [ "${RUN_MODE}" = "--annual-ers" ]; then
 
     if [ ${ERS_EXIT} -ne 0 ]; then
         echo "ERS costs load failed with exit code ${ERS_EXIT}"
-        aws sns publish \
-            --topic-arn "${SNS_TOPIC_ARN}" \
-            --subject "Price ETL: ERS Costs FAILED" \
-            --message "ERS production costs load failed at $(date). See log: ${LOGFILE}" \
-            --region "${AWS_REGION}" 2>/dev/null || true
+        notify "Price ETL: ERS Costs FAILED" "ERS production costs load failed at $(date). See log: ${LOGFILE}"
         exit 1
     fi
 
     echo "Annual ERS costs load completed successfully at $(date)"
-    aws sns publish \
-        --topic-arn "${SNS_TOPIC_ARN}" \
-        --subject "Price ETL: ERS Costs SUCCESS" \
-        --message "ERS production costs updated at $(date)." \
-        --region "${AWS_REGION}" 2>/dev/null || true
+    notify "Price ETL: ERS Costs SUCCESS" "ERS production costs updated at $(date)."
     exit 0
 fi
 
@@ -242,11 +264,7 @@ if [ "${RUN_MODE}" = "--quarterly-fertilizer" ]; then
     set -e
 
     if [ ${FERT_EXIT} -ne 0 ]; then
-        aws sns publish \
-            --topic-arn "${SNS_TOPIC_ARN}" \
-            --subject "Acreage ETL: Fertilizer FAILED" \
-            --message "Fertilizer price ingest failed at $(date). See log: ${LOGFILE}" \
-            --region "${AWS_REGION}" 2>/dev/null || true
+        notify "Acreage ETL: Fertilizer FAILED" "Fertilizer price ingest failed at $(date). See log: ${LOGFILE}"
         exit 1
     fi
 
@@ -268,11 +286,7 @@ if [ "${RUN_MODE}" = "--annual-acreage" ]; then
     set -e
 
     if [ ${ACREAGE_EXIT} -ne 0 ]; then
-        aws sns publish \
-            --topic-arn "${SNS_TOPIC_ARN}" \
-            --subject "Acreage Inference: FAILED" \
-            --message "Acreage inference failed at $(date). See log: ${LOGFILE}" \
-            --region "${AWS_REGION}" 2>/dev/null || true
+        notify "Acreage Inference: FAILED" "Acreage inference failed at $(date). See log: ${LOGFILE}"
         exit 1
     fi
 
@@ -280,11 +294,7 @@ if [ "${RUN_MODE}" = "--annual-acreage" ]; then
     sudo systemctl restart ag-prediction 2>/dev/null || true
 
     echo "Annual acreage inference completed at $(date)"
-    aws sns publish \
-        --topic-arn "${SNS_TOPIC_ARN}" \
-        --subject "Acreage Inference: SUCCESS" \
-        --message "Acreage forecasts updated at $(date)." \
-        --region "${AWS_REGION}" 2>/dev/null || true
+    notify "Acreage Inference: SUCCESS" "Acreage forecasts updated at $(date)."
     exit 0
 fi
 
@@ -302,11 +312,7 @@ if [ "${RUN_MODE}" = "--weekly-drought" ]; then
     set -e
 
     if [ ${DSCI_EXIT} -ne 0 ]; then
-        aws sns publish \
-            --topic-arn "${SNS_TOPIC_ARN}" \
-            --subject "Acreage ETL: Drought DSCI FAILED" \
-            --message "Drought DSCI ingest failed at $(date). See log: ${LOGFILE}" \
-            --region "${AWS_REGION}" 2>/dev/null || true
+        notify "Acreage ETL: Drought DSCI FAILED" "Drought DSCI ingest failed at $(date). See log: ${LOGFILE}"
         exit 1
     fi
 
@@ -328,11 +334,7 @@ if [ "${RUN_MODE}" = "--annual-rma" ]; then
     set -e
 
     if [ ${RMA_EXIT} -ne 0 ]; then
-        aws sns publish \
-            --topic-arn "${SNS_TOPIC_ARN}" \
-            --subject "Acreage ETL: RMA FAILED" \
-            --message "RMA insured acres ingest failed at $(date). See log: ${LOGFILE}" \
-            --region "${AWS_REGION}" 2>/dev/null || true
+        notify "Acreage ETL: RMA FAILED" "RMA insured acres ingest failed at $(date). See log: ${LOGFILE}"
         exit 1
     fi
 
@@ -354,11 +356,7 @@ if [ "${RUN_MODE}" = "--annual-crp" ]; then
     set -e
 
     if [ ${CRP_EXIT} -ne 0 ]; then
-        aws sns publish \
-            --topic-arn "${SNS_TOPIC_ARN}" \
-            --subject "Acreage ETL: CRP FAILED" \
-            --message "CRP enrollment ingest failed at $(date). See log: ${LOGFILE}" \
-            --region "${AWS_REGION}" 2>/dev/null || true
+        notify "Acreage ETL: CRP FAILED" "CRP enrollment ingest failed at $(date). See log: ${LOGFILE}"
         exit 1
     fi
 
@@ -380,11 +378,7 @@ if [ "${RUN_MODE}" = "--weekly-exports" ]; then
     set -e
 
     if [ ${EXPORTS_EXIT} -ne 0 ]; then
-        aws sns publish \
-            --topic-arn "${SNS_TOPIC_ARN}" \
-            --subject "Acreage ETL: Export Sales FAILED" \
-            --message "FAS export sales ingest failed at $(date). See log: ${LOGFILE}" \
-            --region "${AWS_REGION}" 2>/dev/null || true
+        notify "Acreage ETL: Export Sales FAILED" "FAS export sales ingest failed at $(date). See log: ${LOGFILE}"
         exit 1
     fi
 
@@ -407,17 +401,14 @@ if [ "${RUN_MODE}" = "--weekly-fieldpulse" ]; then
 
     if [ ${AGENT_EXIT} -ne 0 ]; then
         # The runner already fired Slack + email failure alerts via notify.py.
-        # This SNS is the operational fallback in case Slack credentials are
-        # busted at the same time the agent is.
-        aws sns publish \
-            --topic-arn "${SNS_TOPIC_ARN}" \
-            --subject "FieldPulse Weekly: agent run FAILED" \
-            --message "Agent runner exited ${AGENT_EXIT} at $(date). See log: ${LOGFILE}" \
-            --region "${AWS_REGION}" 2>/dev/null || true
+        # This notify() is the operational fallback (and the healthchecks.io
+        # failure ping) in case the agent's own alerting is broken too.
+        notify "FieldPulse Weekly: agent run FAILED" "Agent runner exited ${AGENT_EXIT} at $(date). See log: ${LOGFILE}"
         exit 1
     fi
 
     echo "FieldPulse Weekly run completed at $(date)"
+    notify "FieldPulse Weekly: run SUCCESS" "Agent run completed at $(date)."
     exit 0
 fi
 
@@ -501,17 +492,9 @@ if [ "${RUN_MODE}" = "--weekly-yield" ]; then
     sudo systemctl restart ag-prediction 2>/dev/null || true
 
     if [ ${FAILED} -ne 0 ]; then
-        aws sns publish \
-            --topic-arn "${SNS_TOPIC_ARN}" \
-            --subject "Yield Pipeline: Partial FAILURE" \
-            --message "Weekly yield pipeline completed with errors at $(date). GHCN=${GHCN_EXIT} Drought=${DROUGHT_EXIT} StormEvents=${SE_EXIT} HURDAT=${HURDAT_EXIT} Inference=${INFERENCE_EXIT}. See log: ${LOGFILE}" \
-            --region "${AWS_REGION}" 2>/dev/null || true
+        notify "Yield Pipeline: Partial FAILURE" "Weekly yield pipeline completed with errors at $(date). GHCN=${GHCN_EXIT} Drought=${DROUGHT_EXIT} StormEvents=${SE_EXIT} HURDAT=${HURDAT_EXIT} Inference=${INFERENCE_EXIT}. See log: ${LOGFILE}"
     else
-        aws sns publish \
-            --topic-arn "${SNS_TOPIC_ARN}" \
-            --subject "Yield Pipeline: SUCCESS" \
-            --message "Weekly yield pipeline completed successfully at $(date)." \
-            --region "${AWS_REGION}" 2>/dev/null || true
+        notify "Yield Pipeline: SUCCESS" "Weekly yield pipeline completed successfully at $(date)."
     fi
 
     echo "Weekly yield pipeline completed at $(date)"
@@ -537,21 +520,13 @@ if [ ${CHECK_EXIT} -eq 0 ]; then
     echo "No new data detected. Exiting."
 
     # Optional: send "no update needed" notification
-    aws sns publish \
-        --topic-arn "${SNS_TOPIC_ARN}" \
-        --subject "USDA Pipeline: No Update Needed" \
-        --message "Incremental check completed at $(date). No new data detected." \
-        --region "${AWS_REGION}" 2>/dev/null || true
+    notify "USDA Pipeline: No Update Needed" "Incremental check completed at $(date). No new data detected."
 
     exit 0
 elif [ ${CHECK_EXIT} -eq 2 ]; then
     echo "Error during incremental check. Sending alert..."
 
-    aws sns publish \
-        --topic-arn "${SNS_TOPIC_ARN}" \
-        --subject "USDA Pipeline: Check FAILED" \
-        --message "Incremental check failed at $(date). See log: ${LOGFILE}" \
-        --region "${AWS_REGION}" 2>/dev/null || true
+    notify "USDA Pipeline: Check FAILED" "Incremental check failed at $(date). See log: ${LOGFILE}"
 
     exit 1
 fi
@@ -573,11 +548,7 @@ set -e
 if [ ${INGEST_EXIT} -ne 0 ]; then
     echo "Ingestion failed with exit code ${INGEST_EXIT}"
 
-    aws sns publish \
-        --topic-arn "${SNS_TOPIC_ARN}" \
-        --subject "USDA Pipeline: Ingestion FAILED" \
-        --message "Ingestion failed at $(date) with exit code ${INGEST_EXIT}. See log: ${LOGFILE}" \
-        --region "${AWS_REGION}" 2>/dev/null || true
+    notify "USDA Pipeline: Ingestion FAILED" "Ingestion failed at $(date) with exit code ${INGEST_EXIT}. See log: ${LOGFILE}"
 
     exit 1
 fi
@@ -598,11 +569,7 @@ set -e
 if [ ${UPLOAD_EXIT} -ne 0 ]; then
     echo "S3 upload failed with exit code ${UPLOAD_EXIT}"
 
-    aws sns publish \
-        --topic-arn "${SNS_TOPIC_ARN}" \
-        --subject "USDA Pipeline: Upload FAILED" \
-        --message "S3 upload failed at $(date) with exit code ${UPLOAD_EXIT}. Data was ingested but NOT uploaded. See log: ${LOGFILE}" \
-        --region "${AWS_REGION}" 2>/dev/null || true
+    notify "USDA Pipeline: Upload FAILED" "S3 upload failed at $(date) with exit code ${UPLOAD_EXIT}. Data was ingested but NOT uploaded. See log: ${LOGFILE}"
 
     exit 1
 fi
@@ -615,10 +582,6 @@ echo "=============================================="
 echo "Pipeline completed successfully at $(date)"
 echo "=============================================="
 
-aws sns publish \
-    --topic-arn "${SNS_TOPIC_ARN}" \
-    --subject "USDA Pipeline: SUCCESS" \
-    --message "Pipeline completed successfully at $(date). Data has been updated in S3. See log: ${LOGFILE}" \
-    --region "${AWS_REGION}" 2>/dev/null || true
+notify "USDA Pipeline: SUCCESS" "Pipeline completed successfully at $(date). Data has been updated in S3. See log: ${LOGFILE}"
 
 exit 0
